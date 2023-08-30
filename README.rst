@@ -1,4 +1,4 @@
-.. figure:: https://gitee.com/roger_lee/images/raw/master/cigsegy/assets/logo.svg
+.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/logo.svg
     :alt: logo
 
 

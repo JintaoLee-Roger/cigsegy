@@ -112,7 +112,7 @@ you can ignore header by specify the shape by using ``cigsegy.fromfile_ignore_he
 
 Use plot tools you will see like:
 
-.. figure:: https://gitee.com/roger_lee/images/raw/master/cigsegy/assets/rogan3d.png
+.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/rogan3d.png
     :alt: rogan3d
     :align: center
 
@@ -209,7 +209,7 @@ Use ``Pysegy`` class to read arbitrary sub-volumes, slices, traces.
 
 Plot the slices, you will see:
 
-.. figure:: https://gitee.com/roger_lee/images/raw/master/cigsegy/assets/slice.png
+.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/slice.png
     :alt: slices
     :align: center
 
@@ -259,7 +259,7 @@ Use ``cigsegy.plot.plot_region`` to plot the region where the segy file was loca
 
 You will see:
 
-.. figure:: https://gitee.com/roger_lee/images/raw/master/cigsegy/assets/rogan.png
+.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/rogan.png
     :alt: rogan
     :align: center
 
@@ -274,6 +274,6 @@ If you want to plot the region in CDP X and CDP Y axis, set ``mode='cdpxy'``, an
     >>> cigsegy.plot.plot_region('rogan.sgy', mode='cdpxy', loc=[9, 21, 2, 1], cdpxy_loc=[73, 7])
 
 
-.. figure:: https://gitee.com/roger_lee/images/raw/master/cigsegy/assets/roganxy.png
+.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/roganxy.png
     :alt: roganxy
     :align: center

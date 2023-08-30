@@ -16,7 +16,7 @@ document is used as a synonym for the term CMP (common midpoint).
 
 The differences between several gathers are shown in the following figure.
 
-.. figure:: https://gitee.com/roger_lee/images/raw/master/cigsegy/assets/gather.png 
+.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/gather.png 
     :alt: gather
     :align: center
 

@@ -165,7 +165,7 @@ Use ``cigsegy.plot.plot_trace_keys`` to plot the keys change along trace numbers
     >>> cigsegy.plot.plot_trace_keys('rogan.sgy', keyloc=21, beg=0, end=1000)
 
 
-.. figure:: https://gitee.com/roger_lee/images/raw/master/cigsegy/assets/ptk.png
+.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/ptk.png
     :alt: plot_trace_keys
     :align: center
 
@@ -177,7 +177,7 @@ Use ``cigsegy.plot.plot_trace_ix`` to plot the inline and crossline.
     >>> cigsegy.plot.plot_trace_ix('rogan.sgy', iline=9, xline=21, beg=1000, end=2000, figsize=(8, 4))
 
 
-.. figure:: https://gitee.com/roger_lee/images/raw/master/cigsegy/assets/ptix.png
+.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/ptix.png
     :alt: plot_trace_keys
     :align: center
 
@@ -189,6 +189,6 @@ Use ``cigsegy.plot.plot_trace_ixo`` to plot the inline, crossline and offset
     >>> cigsegy.plot.plot_trace_ixo('3Dgather.sgy', iline=5, xline=9, offset=37, beg=1000, end=1100, figsize=(10, 4))
 
 
-.. figure:: https://gitee.com/roger_lee/images/raw/master/cigsegy/assets/ptixo.png
+.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/ptixo.png
     :alt: plot_trace_keys
     :align: center

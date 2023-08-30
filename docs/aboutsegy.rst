@@ -35,7 +35,7 @@ The marjor versions include:
 
 All version compression (click `here <https://wiki.seg.org/w/images/4/42/SEG-Y_bytestream_all_revisions.pdf>`_ for source pdf version):
 
-.. figure:: https://gitee.com/roger_lee/images/raw/master/cigsegy/assets/comparison.png
+.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/comparison.png
     :alt: segy comparison
     :align: center
 
