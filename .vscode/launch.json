@@ -1,0 +1,56 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "C/C++: clang++ build and debug active file",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/test/test",
+            // "program": "${workspaceFolder}/build/tools/SEGYRead",
+            // "args": [
+            //     "-m",
+            //     "-z",
+            //     "9",
+            //     "-c",
+            //     "21",
+            //     // "--istep",
+            //     // "2",
+            //     "/Volumes/jryang/tahebeidata/TaHeBei.sgy"
+            //     // "${workspaceFolder}/BO_WAKA3D-PR3988-FS_3D_Final_Stack.sgy"
+            // ],
+            // "program": "${workspaceFolder}/build/tools/SEGYCreate",
+            // "args": [
+            //     "-d",
+            //     "462,951,651",
+            //     "--min-inline",
+            //     "101",
+            //     "--min-crossline",
+            //     "1011",
+            //     "--start-time",
+            //     "51",
+            //     "-f",
+            //     "1",
+            //     "--dt",
+            //     "8000",
+            //     "--dx",
+            //     "100",
+            //     "--dy",
+            //     "50",
+            //     "-o",
+            //     "ftest.segy",
+            //     // "/Users/lijintao/work/mygit/pyseisview/data/f350x501x399.segy"
+            //     // "${workspaceFolder}/BO_WAKA3D-PR3988-FS_3D_Final_Stack.sgy"
+            //     "${workspaceFolder}/Dist/python/f3_h462x951x651.dat"
+            // ],
+            // "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            // "environment": [],
+            // "externalConsole": false,
+            // "MIMode": "lldb",
+            "preLaunchTask": "C/C++: clang++ build active file"
+        }
+    ]
+}

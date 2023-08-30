@@ -1,0 +1,5 @@
+breathe==4.35.0
+furo==2023.7.26
+sphinx==6.2.1
+numpy==1.23.4
+matplotlib==3.6.2
