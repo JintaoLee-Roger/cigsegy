@@ -9,6 +9,7 @@
 
 #ifndef CIG_SEGY_H
 #define CIG_SEGY_H
+#define FMT_HEADER_ONLY
 
 #include <stdexcept>
 #include <vector>
