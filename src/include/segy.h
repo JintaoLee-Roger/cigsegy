@@ -14,9 +14,9 @@
 #include <stdexcept>
 #include <vector>
 // #include <omp.h>
-
 #include "mio.hpp"
 #include "utils.h"
+#include <fmt/format.h>
 
 namespace segy {
 
@@ -232,6 +232,55 @@ void load_prestack3D(float *dst, const std::string &segy_name, int sizeX,
                      int inline_step, int crossline_step, int offset_step,
                      int inline_field, int crossline_field, int offset_field,
                      float fill);
+
+template <typename T>
+void modify_bin_key(const std::string &segy_name, int loc, T value) {
+  std::error_code error;
+  mio::mmap_sink rw_mmap = mio::make_mmap_sink(segy_name, error);
+  if (error) {
+    throw std::runtime_error("mmap fail when write data");
+  }
+
+  T *data =
+      reinterpret_cast<T *>(rw_mmap.data() + kTextualHeaderSize + loc - 1);
+  *data = swap_endian(value);
+  rw_mmap.unmap();
+}
+
+template <typename T>
+void modify_trace_key(const std::string &segy_name, int loc, T value, int idx) {
+  SegyIO segy_data(segy_name);
+  int sizeX = segy_data.get_metaInfo().sizeX;
+  int tracecount = segy_data.trace_count();
+  int tracesize = sizeX * sizeof(float) + kTraceHeaderSize;
+  segy_data.close_file();
+  if (idx >= tracecount) {
+    throw std::runtime_error(
+        fmt::format("trace index out of range. (index={}, trace_count={})", idx,
+                    tracecount));
+  }
+
+  std::error_code error;
+  mio::mmap_sink rw_mmap = mio::make_mmap_sink(segy_name, error);
+  if (error) {
+    throw std::runtime_error("mmap fail when write data");
+  }
+
+  if (idx >= 0) {
+    T *data =
+        reinterpret_cast<T *>(rw_mmap.data() + kTextualHeaderSize +
+                              kBinaryHeaderSize + idx * tracesize + loc - 1);
+    *data = swap_endian(value);
+  } else {
+    for (int i = 0; i < tracecount; i++) {
+      T *data =
+          reinterpret_cast<T *>(rw_mmap.data() + kTextualHeaderSize +
+                                kBinaryHeaderSize + i * tracesize + loc - 1);
+      *data = swap_endian(value);
+    }
+  }
+  rw_mmap.unmap();
+}
 
 } // namespace segy
 

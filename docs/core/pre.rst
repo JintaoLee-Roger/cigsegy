@@ -3,7 +3,7 @@ Read Prestack data
 
 
 .. note::
-    cigsegy-**v1.1.6** doesn't support read a **unsorted** prestack gather in a convenient
+    cigsegy-**v1.1.7** doesn't support read a **unsorted** prestack gather in a convenient
     way. Prestack seismic gather will be supported in the next version of cigsegy.
     
     However, this **doesn't** mean that you cannot use cigsegy to read the **unsorted** prestack data.

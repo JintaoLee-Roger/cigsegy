@@ -17,7 +17,7 @@ DIR = Path(__file__).parent.resolve()
 project = 'cigsegy'
 copyright = '2023, Roger Lee'
 author = 'Roger Lee'
-version = 'v1.1.6'
+version = 'v1.1.7'
 language = 'en'
 
 # -- General configuration ---------------------------------------------------

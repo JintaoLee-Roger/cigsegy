@@ -739,20 +739,71 @@ def create_by_sharing_header(segy_name: str,
 
 
 def _load_prestack3D(segy_name: str,
-                    shape: Union[List, Tuple],
-                    min_iline: int,
-                    max_iline: int,
-                    min_xline: int,
-                    max_xline: int,
-                    min_offset: int,
-                    max_offset: int,
-                    istep: int,
-                    xstep: int,
-                    ostep: int,
-                    iline: int,
-                    xline: int,
-                    offset: int = 37,
-                    fill: float = 0):
+                     shape: Union[List, Tuple],
+                     min_iline: int,
+                     max_iline: int,
+                     min_xline: int,
+                     max_xline: int,
+                     min_offset: int,
+                     max_offset: int,
+                     istep: int,
+                     xstep: int,
+                     ostep: int,
+                     iline: int,
+                     xline: int,
+                     offset: int = 37,
+                     fill: float = 0):
     """
     Load 3D prestack data (4D array)
+    """
+
+
+def modify_bin_key(segy_name: str,
+                   loc: int,
+                   value: Union[float, int],
+                   force: bool = False,
+                   type: str = None) -> None:
+    """
+    modify the value of the binary header key.
+
+    Parameters
+    -----------
+    segy_name : str
+        segy file name
+    loc : int
+        location of the binary key
+    value : float or int
+        assigned value to the key
+    force : bool
+        force to write
+    type : str
+        value type of the assigned value when force is True, can be
+        one of {'int8', 'int16', 'int32', 'int64', 'float32', 'float64'}
+    """
+
+
+def modify_trace_key(segy_name: str,
+                     loc: int,
+                     value: Union[float, int],
+                     idx: int,
+                     force: bool = False,
+                     type: str = None) -> None:
+    """
+    modify the value of the trace header key.
+
+    Parameters
+    -----------
+    segy_name : str
+        segy file name
+    loc : int
+        location of the binary key
+    value : float or int
+        assigned value to the key
+    idx : int
+        trace index, if idx < 0, assign the value for all traces.
+    force : bool
+        force to write
+    type : str
+        value type of the assigned value when force is True, can be
+        one of {'int8', 'int16', 'int32', 'int64', 'float32', 'float64'}
     """

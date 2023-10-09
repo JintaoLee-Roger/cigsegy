@@ -13,7 +13,7 @@ except ImportError:
 
 setup(
     name='cigsegy',
-    version='1.1.6',
+    version='1.1.7',
     description=
     'A tool for segy-format file reading and segy-format creating from binary file',
     author='roger',

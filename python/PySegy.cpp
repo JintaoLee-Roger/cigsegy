@@ -343,6 +343,129 @@ py::array_t<float> _load_prestack3D(const std::string &segy_name,
   return out;
 }
 
+void modify_bin_key(const std::string &segy_name, int loc, py::object value,
+                    bool force = false, const std::string &type = "type") {
+  if (!py::isinstance<py::int_>(value) && !py::isinstance<py::float_>(value)) {
+    throw std::runtime_error("Only support int and float");
+  }
+  auto it = segy::kBinaryHeaderHelp.find(loc);
+  if (it != segy::kBinaryHeaderHelp.end()) {
+    int len = it->second.second;
+    if (len == 1) {
+      uint8_t v = value.cast<uint8_t>();
+      segy::modify_bin_key<uint8_t>(segy_name, loc, v);
+    } else if (len == 2) {
+      int16_t v = value.cast<int16_t>();
+      segy::modify_bin_key<int16_t>(segy_name, loc, v);
+    } else if (len == 4) {
+      int32_t v = value.cast<int32_t>();
+      segy::modify_bin_key<int32_t>(segy_name, loc, v);
+    } else if (len == 5) {
+      float v = value.cast<float>();
+      segy::modify_bin_key<float>(segy_name, loc, v);
+    } else if (len == 8) {
+      int64_t v = value.cast<int64_t>();
+      segy::modify_bin_key<int64_t>(segy_name, loc, v);
+    } else if (len == 9) {
+      double v = value.cast<double>();
+      segy::modify_bin_key<double>(segy_name, loc, v);
+    } else {
+      throw std::runtime_error(
+          fmt::format("In standard segy file, loc: {} is not assigned", loc));
+    }
+  } else if (force) {
+    if (type == "int8") {
+      uint8_t v = value.cast<uint8_t>();
+      segy::modify_bin_key<uint8_t>(segy_name, loc, v);
+    } else if (type == "int16") {
+      int16_t v = value.cast<int16_t>();
+      segy::modify_bin_key<int16_t>(segy_name, loc, v);
+    } else if (type == "int32") {
+      int32_t v = value.cast<int32_t>();
+      segy::modify_bin_key<int32_t>(segy_name, loc, v);
+    } else if (type == "float32") {
+      float v = value.cast<float>();
+      segy::modify_bin_key<float>(segy_name, loc, v);
+    } else if (type == "int64") {
+      int64_t v = value.cast<int64_t>();
+      segy::modify_bin_key<int64_t>(segy_name, loc, v);
+    } else if (type == "float64") {
+      double v = value.cast<double>();
+      segy::modify_bin_key<double>(segy_name, loc, v);
+    } else {
+      throw std::runtime_error("only support one of {'int8', 'int16', 'int32', "
+                               "'float', 'int64', 'float64'}");
+    }
+  } else {
+    throw std::runtime_error(
+        fmt::format("Invalid location: {}, if you want to "
+                    "force it, set `force` and `type` parameter.",
+                    loc));
+  }
+}
+
+void modify_trace_key(const std::string &segy_name, int loc, py::object value,
+                      int idx, bool force = false,
+                      const std::string &type = "type") {
+  if (!py::isinstance<py::int_>(value) && !py::isinstance<py::float_>(value)) {
+    throw std::runtime_error("Only support int and float");
+  }
+  auto it = segy::kTraceHeaderHelp.find(loc);
+  if (it != segy::kTraceHeaderHelp.end()) {
+    int len = it->second.second;
+    if (len == 1) {
+      uint8_t v = value.cast<uint8_t>();
+      segy::modify_trace_key<uint8_t>(segy_name, loc, v, idx);
+    } else if (len == 2) {
+      int16_t v = value.cast<int16_t>();
+      segy::modify_trace_key<int16_t>(segy_name, loc, v, idx);
+    } else if (len == 4) {
+      int32_t v = value.cast<int32_t>();
+      segy::modify_trace_key<int32_t>(segy_name, loc, v, idx);
+    } else if (len == 5) {
+      float v = value.cast<float>();
+      segy::modify_trace_key<float>(segy_name, loc, v, idx);
+    } else if (len == 8) {
+      int64_t v = value.cast<int64_t>();
+      segy::modify_trace_key<int64_t>(segy_name, loc, v, idx);
+    } else if (len == 9) {
+      double v = value.cast<double>();
+      segy::modify_trace_key<double>(segy_name, loc, v, idx);
+    } else {
+      throw std::runtime_error(
+          fmt::format("In standard segy file, loc: {} is not assigned", loc));
+    }
+  } else if (force) {
+    if (type == "int8") {
+      uint8_t v = value.cast<uint8_t>();
+      segy::modify_trace_key<uint8_t>(segy_name, loc, v, idx);
+    } else if (type == "int16") {
+      int16_t v = value.cast<int16_t>();
+      segy::modify_trace_key<int16_t>(segy_name, loc, v, idx);
+    } else if (type == "int32") {
+      int32_t v = value.cast<int32_t>();
+      segy::modify_trace_key<int32_t>(segy_name, loc, v, idx);
+    } else if (type == "float32") {
+      float v = value.cast<float>();
+      segy::modify_trace_key<float>(segy_name, loc, v, idx);
+    } else if (type == "int64") {
+      int64_t v = value.cast<int64_t>();
+      segy::modify_trace_key<int64_t>(segy_name, loc, v, idx);
+    } else if (type == "float64") {
+      double v = value.cast<double>();
+      segy::modify_trace_key<double>(segy_name, loc, v, idx);
+    } else {
+      throw std::runtime_error("only support one of {'int8', 'int16', 'int32', "
+                               "'float', 'int64', 'float64'}");
+    }
+  } else {
+    throw std::runtime_error(
+        fmt::format("Invalid location: {}, if you want to "
+                    "force it, set `force` and `type` parameter.",
+                    loc));
+  }
+}
+
 template <typename... Args>
 using overload_cast_ = pybind11::detail::overload_cast_impl<Args...>;
 
@@ -480,6 +603,13 @@ PYBIND11_MODULE(cigsegy, m) {
         py::arg("min_offset"), py::arg("max_offset"), py::arg("istep"),
         py::arg("xstep"), py::arg("ostep"), py::arg("iline"), py::arg("xline"),
         py::arg("offset") = 37, py::arg("fill") = 0);
+
+  m.def("modify_bin_key", &modify_bin_key, "modify value of the binary key",
+        py::arg("segy_name"), py::arg("loc"), py::arg("value"),
+        py::arg("force") = false, py::arg("type") = "type");
+  m.def("modify_trace_key", &modify_trace_key, "modify value of the trace key",
+        py::arg("segy_name"), py::arg("loc"), py::arg("value"), py::arg("idx"),
+        py::arg("force") = false, py::arg("type") = "type");
 
   m.attr("kBinaryHeaderHelp") =
       py::cast(&segy::kBinaryHeaderHelp, py::return_value_policy::reference);

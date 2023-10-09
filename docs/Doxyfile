@@ -2,7 +2,7 @@
 PROJECT_NAME            = "cigsegy"
 
 # 文档版本号，可对应于项目版本号，譬如 svn、cvs 所生成的项目版本号
-PROJECT_NUMBER          = "1.1.6"
+PROJECT_NUMBER          = "1.1.7"
 
 # 程序文档输出目录
 OUTPUT_DIRECTORY        =  "_doxygenxml"

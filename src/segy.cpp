@@ -13,7 +13,6 @@
 #include <cstring>
 #include <numeric>
 #include <vector>
-#include <fmt/format.h>
 #include <fstream>
 #include <stdexcept>
 
