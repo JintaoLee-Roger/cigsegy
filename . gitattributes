@@ -1,0 +1,4 @@
+*.pyi linguist-language=python
+*.cpp linguist-language=python 
+*.rst linguist-language=python 
+*.h   linguist-language=python
