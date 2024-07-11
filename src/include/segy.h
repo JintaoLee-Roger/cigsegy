@@ -54,6 +54,7 @@ struct MetaInfo {
   int crossline_step = 1;
 
   int trace_sorting_code;
+  int esize=4;
 };
 
 struct LineInfo {
@@ -100,7 +101,6 @@ public:
   MetaInfo get_metaInfo();
 
   inline std::vector<LineInfo> line_info() { return m_lineInfo; }
-  inline bool is_crossline_fast_order() { return is_crossline_fast; }
 
   // read segy
   void setInlineLocation(int loc);
@@ -136,6 +136,7 @@ public:
   void read(float *dst, int startX, int endX, int startY, int endY, int startZ,
             int endZ);
   void read(float *dst);
+  void read(float *dst, int sizeY, int sizeZ, int minY, int minZ);
   void read_inline_slice(float *dst, int iZ);
   void read_cross_slice(float *dst, int iY);
   void read_time_slice(float *dst, int iX);
@@ -165,7 +166,6 @@ public:
 private:
   bool isReadSegy;
   bool isScan = false;
-  bool is_crossline_fast = true;
   mio::mmap_source m_source;
   mio::mmap_sink m_sink;
   std::vector<LineInfo> m_lineInfo;
@@ -173,7 +173,6 @@ private:
 
   void scanBinaryHeader();
   void initMetaInfo();
-  void check_order();
   void initTraceHeader(TraceHeader *trace_header);
   void write_textual_header(
       char *dst, const std::string &segy_out_name,
@@ -185,7 +184,7 @@ private:
   inline void _get_TraceInfo(uint64_t n, TraceInfo &tmetaInfo) {
     const char *field =
         m_source.data() + kTextualHeaderSize + kBinaryHeaderSize +
-        n * (kTraceHeaderSize + m_metaInfo.sizeX * sizeof(float));
+        n * (kTraceHeaderSize + m_metaInfo.sizeX * m_metaInfo.esize);
     tmetaInfo.inline_num =
         swap_endian<int32_t>(field + m_metaInfo.inline_field - 1);
     tmetaInfo.crossline_num =
@@ -251,8 +250,9 @@ template <typename T>
 void modify_trace_key(const std::string &segy_name, int loc, T value, int idx) {
   SegyIO segy_data(segy_name);
   int sizeX = segy_data.get_metaInfo().sizeX;
+  int esize = segy_data.get_metaInfo().esize;
   int tracecount = segy_data.trace_count();
-  int tracesize = sizeX * sizeof(float) + kTraceHeaderSize;
+  int tracesize = sizeX * esize + kTraceHeaderSize;
   segy_data.close_file();
   if (idx >= tracecount) {
     throw std::runtime_error(

@@ -12,7 +12,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   #   fi
   # done
   
-  cp -r /share/thridpart/fmt_2_24/* /usr/local/
+  cp -r /share/thridpart/fmt_8/* /usr/local/
   rm -rf /share/build
   mkdir /share/build
   rm -rf /share/wheels
@@ -23,7 +23,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   do
     version="${cpyroot#/opt/_internal/cpython-}"
     version_min="${version%.*}"
-    if [ "$version_min" != "3.5" ] ; then
+    if [ "$version_min" != "3.13" ] ; then
       cpy=$cpyroot/bin/python3
       cpylib=$cpyroot/lib
       pypi=$cpyroot/bin/pip3
@@ -36,7 +36,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
       $pypi wheel .
       whl=`ls *.whl`
       prefix="${whl%linux_x86_64.whl}"
-      cp $whl /share/wheels/${prefix}manylinux_2_24_x86_64.whl
+      cp $whl /share/wheels/${prefix}manylinux2014_x86_64.whl
       # auditwheel repair $whl -w /share/wheelhouse/
       cd /share/build
       rm CMakeCache.txt
@@ -59,6 +59,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   rm -rf /share/thridpart/cigsegy/dist
   rm -rf /share/thridpart/cigsegy/src
   rm -rf /share/thridpart/cigsegy/python
+  rm /share/thridpart/cigsegy/setup.py
   
   cp -r /share/src /share/thridpart/cigsegy/
   cp -r /share/python /share/thridpart/cigsegy/
@@ -67,7 +68,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   sed -i "s/fmt_root = ''/fmt_root = '.'/" /share/thridpart/cigsegy/setup.py
   
   cd /share/thridpart/cigsegy/
-  python=/opt/_internal/cpython-3.9.15/bin/python3
+  python=/opt/_internal/cpython-3.11.9/bin/python3
   ${python} setup.py sdist
   mv /share/thridpart/cigsegy/dist/*.tar.gz /share/wheels/
 

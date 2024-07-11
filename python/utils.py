@@ -250,16 +250,16 @@ def eval_istep(segy: Pysegy, iline: int) -> int:
     List
         possible result
     """
-    i0 = get_trace_keys(segy, iline, 0)
+    i0 = get_trace_keys(segy, iline, 0, force=4)
     x1 = 1
-    while get_trace_keys(segy, iline, x1) == i0:
+    while get_trace_keys(segy, iline, x1, force=4) == i0:
         x1 += 1
-    i1 = get_trace_keys(segy, iline, x1)
+    i1 = get_trace_keys(segy, iline, x1, force=4)
 
     x2 = x1 + 1
-    while get_trace_keys(segy, iline, x2) == i1:
+    while get_trace_keys(segy, iline, x2, force=4) == i1:
         x2 += 1
-    i2 = get_trace_keys(segy, iline, x2)
+    i2 = get_trace_keys(segy, iline, x2, force=4)
 
     if i2 - i1 != i1 - i0:
         return 0
@@ -441,8 +441,15 @@ def metainfo_to_dict(metainfo: MetaInfo, apply_scalar: bool = False) -> Dict:
     out['dt'] = metainfo.sample_interval
     if metainfo.data_format == 1:
         out['dtype'] = '>4f-ibm'
+    elif metainfo.data_format == 2:
+        out['dtype'] = '>4i'
+    elif metainfo.data_format == 3:
+        out['dtype'] = '>2i'
     elif metainfo.data_format == 5:
         out['dtype'] = '>4f-ieee'
+    elif metainfo.data_format == 8:
+        out['dtype'] = '>1i'
+
     else:
         raise TypeError("don't support this data format")
 
@@ -450,6 +457,8 @@ def metainfo_to_dict(metainfo: MetaInfo, apply_scalar: bool = False) -> Dict:
     zinterval = metainfo.Z_interval
     yinterval = metainfo.Y_interval
     if apply_scalar:
+        if metainfo.scalar == 0:
+            metainfo.scalar = 1
         scalar = -1 / metainfo.scalar if metainfo.scalar < 0 else metainfo.scalar
         zinterval *= scalar
         yinterval *= scalar
