@@ -1,0 +1,35 @@
+fromfile(path, iline_start, xline_start, shape, steps) 
+-> to deal with iline missing
+
+B10, [P2_02], [Q8_03]: fast order
+[D9, E17_02, P10_01: map::at] finished. metaInfo中在打印 trace_sorting_string 时,超过了预设范围 
+[D12, E1, E2, E17_01, P2_03: metaInfo 和 get_metaInfo里的i-interval不一致] finished
+[D15: data type == 3: int16]
+P8_02_2, P12_01: RuntimeError: isNormal is true while sizeY * sizeZ != trace_count, maybe inline/crossline location is wrong
+[Q5: i-interval: nan]
+[L02_02: 两台机器不一致local and dhale, 无法打印 bheader]
+
+B10, F18_01, F03_03, GR_17: 有line缺失 
+P8_02_2: need force read
+[P12_01: 检查 isNormal 时出错 finished
+    x x x x x x
+  x x x x x x
+    x x x x x x ]
+
+L08_01, F15_02: use_guess 出错
+L07_01: line 有缺失
+
+D15: 需要确认读取
+
+[read 和 write分开，read支持int，write暂不支持] x
+[metaInfo的提示信息，dformat]
+
+L02_02: 如何处理?
+
+可以scan, 但是不可以guess:
+P2/02/Z3CLY1996E-1.sgy 
+P18/Z3WES1997A-1.sgy
+B10/Z3WIN2001B-1.sgy
+Q8/03/Z3CLY1996B-2.sgy
+GR_42/d1k-01-groningen15-hecate-00001-1.sgy
+GR_47/L3PET1992A-1.sgy

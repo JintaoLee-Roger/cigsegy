@@ -579,6 +579,46 @@ def fromfile_ignore_header(segy_name: str,
     """
 
 
+def fromfile_without_scan(segy_name: str,
+                          ni: int,
+                          nx: int,
+                          il_min: int,
+                          xl_min: int,
+                          iline: int = 189,
+                          xline: int = 193,
+                          istep: int = 1,
+                          xstep: int = 1) -> numpy.ndarray[numpy.float32]:
+    """
+    reading from a segy file without scanning.
+
+    Parameters
+    ----------
+    segy_name : str
+        the input segy file name
+    ni : int
+        number of inline
+    nx : int
+        number of crossline
+    il_min : int
+        the min number of inline
+    xl_min : int
+        the min number of crossline
+    iline : int
+        the inline number field in each trace header
+    xline : int
+        the crossline number field in each trace header
+    istep : int
+        the step of inline numbers
+    xstep : int
+        the step of crossline numbers
+    
+    Returns
+    -------
+    numpy.ndarray :
+        shape as (n-inline, n-crossline, n-time)
+    """
+
+
 def tofile(segy_name: str,
            out_name: str,
            iline: int = 189,
