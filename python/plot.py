@@ -1,6 +1,6 @@
 import numpy as np
-from typing import List, Tuple, Dict
-from .cigsegy import Pysegy
+from typing import List, Tuple, Dict, Union
+from .cigsegy import Pysegy # type: ignore
 from . import utils
 from . import tools
 
@@ -8,10 +8,10 @@ try:
     import matplotlib.pyplot as plt
 except:
     raise ImportError("`cigsegy.plot` depends on `matplotlib`, " +
-                      "run `pip install matplotlib` to install")
+                      "run `pip install matplotlib` to install") # HACK: remove?
 
 
-def plot_region(segy: str or Pysegy,
+def plot_region(segy: Union[str, Pysegy],
                 mode: str = 'line',
                 loc: list = None,
                 cdpxy_loc: list = None,
@@ -44,9 +44,10 @@ def plot_region(segy: str or Pysegy,
             segy.setInlineLocation(loc[0])
             segy.setCrosslineLocation(loc[1])
             segy.setSteps(loc[2], loc[3])
+            segy.setXLocation(loc[4])
+            segy.setYLocation(loc)[5]
             segy.scan()
         lineinfo = segy.get_lineInfo()
-        is_xline_fast = segy.is_crossline_fast_order
     elif isinstance(segy, str):
         if loc is None:
             loc = utils.guess(segy)[0]
@@ -56,7 +57,6 @@ def plot_region(segy: str or Pysegy,
         segy.setSteps(loc[2], loc[3])
         segy.scan()
         lineinfo = segy.get_lineInfo()
-        is_xline_fast = segy.is_crossline_fast_order
     else:
         raise RuntimeError("Invalid type of `segy`")
 
@@ -80,8 +80,6 @@ def plot_region(segy: str or Pysegy,
 
     istep = x[1] - x[0]
     xstep = (lineinfo[0, 2] - lineinfo[0, 1]) // (lineinfo[0, 5] - 1)
-    if not is_xline_fast:
-        istep, xstep = xstep, istep
 
     plt.fill(x, y, color=(0.9, 0.9, 0.9))
     plt.plot(x, y)
@@ -95,8 +93,7 @@ def plot_region(segy: str or Pysegy,
     else:
         xlabel = f"CDP X"
         ylabel = f"CDP Y"
-    if not is_xline_fast:
-        xlabel, ylabel = ylabel, xlabel
+
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title('Region')
@@ -106,7 +103,7 @@ def plot_region(segy: str or Pysegy,
     plt.show()
 
 
-def plot_trace_keys(segy: str or Pysegy,
+def plot_trace_keys(segy: Union[str, Pysegy],
                     keyloc: int,
                     beg: int = 0,
                     end: int = 1000,
@@ -128,7 +125,7 @@ def plot_trace_keys(segy: str or Pysegy,
     plt.show()
 
 
-def plot_trace_ix(segy: str or Pysegy,
+def plot_trace_ix(segy: Union[str, Pysegy],
                   iline: int,
                   xline: int,
                   beg: int = 0,

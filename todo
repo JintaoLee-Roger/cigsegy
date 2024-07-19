@@ -26,10 +26,15 @@ D15: 需要确认读取
 
 L02_02: 如何处理?
 
-可以scan, 但是不可以guess:
-P2/02/Z3CLY1996E-1.sgy 
-P18/Z3WES1997A-1.sgy
-B10/Z3WIN2001B-1.sgy
-Q8/03/Z3CLY1996B-2.sgy
-GR_42/d1k-01-groningen15-hecate-00001-1.sgy
-GR_47/L3PET1992A-1.sgy
+files cannot be guess via `use_guess`
+AL/AL_04/hum.81-middelie16-zomdtc-00001-1-.sgy # 数据被切成了好几块，然后拼在一块，不是sorted
+AL/AL_04/hum.8a-middelie16-fade3d-00001-1-.sgy # 数据被切成了好几块，然后拼在一块，不是sorted
+AL/AL_10/SLOOTDORP_3D_Vermilion.sgy # 17, 25
+GR/GR_08/L3NAM1991F-2.sgy # 递减
+GR/GR_42/d1k-01-groningen15-hecate-00001-1.sgy # 数据被分成了两半，不是sorted的.前一半 line i1-i2, xline x1-x2, 后一半 line i1-i2, xline x2-x3
+GR/GR_42/d1k-03-groningen15-van_gogh-00001-1.sgy # 数据被分成了两半，不是sorted的.前一半 line i1-i2, xline x1-x2, 后一半 line i1-i2, xline x2-x3
+GR/GR_48/3D_Akkrum_PreProcessed_CRS_Gather.sgy # gather!
+GR/GR_48/3D_Akkrum_PreProcessed_Gather.sgy # gather!
+GR/GR_51/d1k-02-friesland15-van_gogh-00001.sgy # 数据被分成了两半，不是sorted的.前一半 line i1-i2, xline x1-x2, 后一半 line i1-i2, xline x2-x3
+GR/GR_51/d1k-xx-friesland15-hecate-00001.sgy # 数据被分成了两半，不是sorted的.前一半 line i1-i2, xline x1-x2, 后一半 line i1-i2, xline x2-x3
+L/L02_02/Z3NAM2006B-1.sgy # line: 1455 1461 1465

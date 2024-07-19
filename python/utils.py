@@ -9,7 +9,7 @@ import sys
 import struct
 import numpy as np
 from typing import List, Tuple, Dict, Union
-from .cigsegy import (Pysegy, disable_progressbar, MetaInfo, kTraceHeaderHelp)
+from .cigsegy import (Pysegy, disable_progressbar, MetaInfo, kTraceHeaderHelp)  # type: ignore
 
 
 def get_trace_keys(segy: Union[str, Pysegy],
@@ -90,7 +90,7 @@ def get_trace_keys(segy: Union[str, Pysegy],
 
     out = []
 
-    for i in range_func(beg, end):
+    for i in range_func(beg, end): # TODO: 需要优化, end-beg特别大时，打印费时间
         th = segyc.get_trace_header(i, raw=raw)
 
         for key, l in zip(keyloc, length):
@@ -123,6 +123,89 @@ def get_trace_keys(segy: Union[str, Pysegy],
     return out
 
 
+def get_trace_keys2(segy: Union[str, Pysegy],
+                   keyloc: Union[int, List, np.ndarray],
+                   beg: int = -1,
+                   end: int = 0,
+                   force: int = None) -> np.ndarray:
+    """
+    get values at key location of trace headers
+
+    Parameters
+    ----------
+    segy : str or Pysegy
+        input segy file
+    keyloc : int or List or 1D np.ndarray
+        key locations, can input multi-values
+    beg : int
+        begin trace, if beg < 0, means read all values from all traces.
+    end : int
+        end trace, if end < 0, means read values from beg to the last trace,
+            if end == 0, means read one value from beg trace.
+    force : int
+        force to read a value in keyloc (size = force), even if the keyloc is 
+        not in the location of the standard SEG-Y Trace header's keys.
+        When force is not None, can only input one key location, i.e., keyloc 
+        must be a int or one element List
+
+    Returns
+    -------
+    np.ndarray
+        shape as (end-beg, )
+    """
+
+    if isinstance(keyloc, int):
+        keyloc = [keyloc]
+    elif isinstance(keyloc, np.ndarray):
+        assert keyloc.ndm == 1
+    assert isinstance(keyloc, List) or isinstance(keyloc, np.ndarray)
+
+    if isinstance(segy, str):
+        segyc = Pysegy(segy)
+    else:
+        segyc = segy
+
+    if beg < 0:
+        beg = 0
+        end = segyc.trace_count
+    if end < 0:
+        end = segyc.trace_count
+    if end == 0:
+        end = beg + 1
+
+    assert beg < end, f"beg ({beg} > end ({end}))"
+    assert beg >= 0, f"beg ({beg}) >= 0"
+    assert end <= segyc.trace_count, f"end <= trace_count"
+    if force is None:
+        for key in keyloc:
+            assert key in kTraceHeaderHelp.keys(
+            ), f"keyloc ({key}) in tracehelper"
+
+    if force is None:
+        length = [kTraceHeaderHelp[key][1] for key in keyloc]
+        raw = False
+    else:
+        assert len(keyloc) == 1
+        length = [force]
+        raw = True
+
+
+    print(keyloc, length, beg, end)
+    out = segyc.get_trace_keys(keyloc, length, beg, end)
+
+    if isinstance(segy, str):
+        segyc.close_file()
+
+    if len(keyloc) == 1:
+        out = out.flatten()
+
+    if end - beg == 1 and len(keyloc) == 1:  # one value
+        return out[0]
+
+    return out
+
+
+
 def eval_xline(segy: Pysegy) -> List:
     """
     To guess the crossline location of the segy
@@ -141,20 +224,14 @@ def eval_xline(segy: Pysegy) -> List:
     options = [193, 17, 21, 13]
     select = [193, 17, 21, 13]
     for op in options:
-        l = []
-        l.append(get_trace_keys(segy, op, 0))
-        l.append(get_trace_keys(segy, op, 1))
-        l.append(get_trace_keys(segy, op, 2))
-        l.append(get_trace_keys(segy, op, tracecout // 2))
-        l.append(get_trace_keys(segy, op, tracecout - 1))
-        if sum([x > 0 for x in l]) != 5:
+        if get_trace_keys(segy, op, tracecout - 1) - get_trace_keys(segy, op, 0) > tracecout // 2:
             select.remove(op)
             continue
-        if l[0] == l[1] or l[0] == l[2] or l[1] == l[2]:
+        d = get_trace_keys(segy, op, tracecout // 2, tracecout // 2 + 10)
+        if sum(d >= 0) != 10:
             select.remove(op)
             continue
-        step = l[1] - l[0]
-        if max(l) - min(l) > min((tracecout * step / 10), 10000 * step):
+        if len(np.where(np.diff(d) == 0)[0]) > 1:
             select.remove(op)
             continue
 
@@ -187,18 +264,16 @@ def eval_iline(segy: Pysegy) -> List:
         l0 = get_trace_keys(segy, op, 0, force=force)
         ll = get_trace_keys(segy, op, tracecout - 1, force=force)
         l2 = get_trace_keys(segy, op, tracecout // 2, force=force)
-        if sum([x > 0 for x in [l0, ll, l2]]) != 3:
+        if sum([x >= 0 for x in [l0, ll, l2]]) != 3:
             select.remove(op)
             continue
         if l0 == ll or l0 == l2 or ll == l2:
             select.remove(op)
             continue
-        if max([l0, ll, l2]) - min([l0, ll, l2]) > tracecout - 1:
+        if max([l0, ll, l2]) - min([l0, ll, l2]) > min(tracecout // 10 - 1, 100000):
             select.remove(op)
             continue
-        l1 = get_trace_keys(segy, op, 1, force=force)
-        ll2 = get_trace_keys(segy, op, tracecout - 2, force=force)
-        if l0 != l1 or ll != ll2:
+        if (l0 < l2 and l2 > ll) or (l0 > l2 and l2 < ll):
             select.remove(op)
             continue
 
@@ -224,14 +299,23 @@ def eval_xstep(segy: Pysegy, xline: int) -> int:
     List
         possible result
     """
-    l0 = get_trace_keys(segy, xline, 0)
-    l1 = get_trace_keys(segy, xline, 1)
-    l2 = get_trace_keys(segy, xline, 2)
+    tracecout = segy.trace_count
 
-    if l2 - l1 != l1 - l0:
+    d = get_trace_keys(segy, xline, tracecout // 2, tracecout // 2 + 10)
+    diff = np.diff(d)
+    if diff.min() > 0:
+        return diff.min()
+    idx = np.where(diff <= 0)[0]
+    if len(idx) > 1:
         return 0
+
+    d = get_trace_keys(segy, xline, tracecout // 2 + idx[0]+1,
+                       tracecout // 2 + 10 + idx[0]+1)
+    diff = np.diff(d)
+    if diff.min() > 0:
+        return diff.min()
     else:
-        return l2 - l1
+        return 0
 
 
 def eval_istep(segy: Pysegy, iline: int) -> int:
@@ -250,8 +334,9 @@ def eval_istep(segy: Pysegy, iline: int) -> int:
     List
         possible result
     """
-    i0 = get_trace_keys(segy, iline, 0, force=4)
-    x1 = 1
+    tracecount = segy.trace_count
+    i0 = get_trace_keys(segy, iline, tracecount//2, force=4)
+    x1 = tracecount//2 + 1
     while get_trace_keys(segy, iline, x1, force=4) == i0:
         x1 += 1
     i1 = get_trace_keys(segy, iline, x1, force=4)
@@ -267,7 +352,7 @@ def eval_istep(segy: Pysegy, iline: int) -> int:
         return i2 - i1
 
 
-def guess(segy_name: str or Pysegy) -> List:
+def guess(segy_name: Union[str, Pysegy]) -> List:
     """
     guess the locations and steps of inline and crossline
 
@@ -324,6 +409,21 @@ def guess(segy_name: str or Pysegy) -> List:
 
     if out == []:
         raise RuntimeError("cannot guess the location and steps")
+
+    s = Pysegy(segy_name)
+    s.setInlineLocation(out[0][i])
+    s.setCrosslineLocation(out[0][x])
+    s.setSteps(out[0][i], out[0][x])
+    s.setXLocation(73)
+    s.setYLocation(77)
+    mt = s.get_metaInfo()
+    if np.isnan(mt.Z_interval) or np.isnan(mt.Y_interval) or mt.Z_interval == 0 or mt.Y_interval == 0:
+        xloc, yloc = 181, 185
+    else:
+        xloc, yloc = 73, 77
+    s.close_file()
+    for o in out:
+        o += [xloc, yloc]
 
     return out
 

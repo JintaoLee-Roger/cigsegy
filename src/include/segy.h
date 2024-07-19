@@ -128,6 +128,7 @@ public:
   void get_binary_header_full(uchar *binheader, bool raw = false);
   void get_trace_header_full(int n, uchar *traceheader, bool raw = false);
   void get_trace_full(int n, uchar *trace, bool raw = false);
+  void get_trace_keys_c(int *dst, const std::vector<int>& keys, const std::vector<int>& length, int beg, int end);
 
   void collect(float *data, int beg = -1, int end = 0);
 
@@ -136,21 +137,18 @@ public:
   void read(float *dst, int startX, int endX, int startY, int endY, int startZ,
             int endZ);
   void read(float *dst);
-  void read(float *dst, int sizeY, int sizeZ, int minY, int minZ);
+  void read(float *dst, int sizeY, int sizeZ, int minY, int minZ); // for read unsorted
   void read_inline_slice(float *dst, int iZ);
   void read_cross_slice(float *dst, int iY);
   void read_time_slice(float *dst, int iX);
   void read_trace(float *dst, int iY, int iZ);
   void tofile(const std::string &binary_out_name);
-  void
-  cut(const std::string &outname, int startX, int endX, int startY, int endY,
+  void cut(const std::string &outname, int startX, int endX, int startY, int endY,
       int startZ, int endZ,
       const std::vector<std::string> &custom_info = std::vector<std::string>());
-  void
-  cut(const std::string &outname, int startY, int endY, int startZ, int endZ,
+  void cut(const std::string &outname, int startY, int endY, int startZ, int endZ,
       const std::vector<std::string> &custom_info = std::vector<std::string>());
-  void
-  cut(const std::string &outname, int startX, int endX,
+  void cut(const std::string &outname, int startX, int endX,
       const std::vector<std::string> &custom_info = std::vector<std::string>());
 
   // create
@@ -180,6 +178,7 @@ private:
   void write_binary_header(char *dst);
   void write_trace_header(char *dst, TraceHeader *trace_header, int32_t iY,
                           int32_t iZ, int32_t x, int32_t y);
+  void read_all_fast(float *dst);
 
   inline void _get_TraceInfo(uint64_t n, TraceInfo &tmetaInfo) {
     const char *field =

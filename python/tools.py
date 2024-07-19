@@ -7,14 +7,14 @@
 
 import warnings
 import numpy as np
-from typing import List, Tuple, Dict
-from .cigsegy import (Pysegy, fromfile, tofile, create_by_sharing_header,
+from typing import List, Tuple, Dict, Union
+from .cigsegy import (Pysegy, fromfile, tofile, create_by_sharing_header, # type: ignore
                       _load_prestack3D, kBinaryHeaderHelp, kTraceHeaderHelp)
 from . import utils
 
 
 def create(segy_out: str,
-           binary_in: str or np.ndarray,
+           binary_in: Union[str, np.ndarray],
            shape: Tuple = None,
            format: int = 5,
            dt: int = 2000,
@@ -129,7 +129,7 @@ def metaInfo(segy_name: str,
         if iline/xline/istep/xstep are unknow, you can set use_guess = True to guess them
     """
     if use_guess:
-        [iline, xline, istep, xstep] = utils.guess(segy_name)[0]
+        [iline, xline, istep, xstep, xloc, yloc] = utils.guess(segy_name)[0]
     segy = Pysegy(segy_name)
     segy.setInlineLocation(iline)
     segy.setCrosslineLocation(xline)
@@ -159,7 +159,7 @@ def fromfile_by_guess(segy_name: str) -> np.ndarray:
 
     for l in loc:
         try:
-            metaInfo(segy_name, l[0], l[1], l[2], l[3])
+            metaInfo(segy_name, l[0], l[1], l[2], l[3], l[4], l[5])
             d = fromfile(segy_name, l[0], l[1], l[2], l[3])
             return d
         except:
@@ -199,9 +199,9 @@ def tofile_by_guess(segy_name: str, out_name: str) -> None:
 
 def create_by_sharing_header_guess(segy_name: str,
                                    header_segy: str,
-                                   src: np.ndarray or str,
-                                   shape: list or tuple = None,
-                                   offset: list or tuple or dict = None,
+                                   src: Union[np.ndarray, str],
+                                   shape: Union[list, tuple] = None,
+                                   offset: Union[list, tuple, dict] = None,
                                    custom_info: List[str] = []) -> None:
     """
     create a segy and its header is from an existed segy.
@@ -350,7 +350,7 @@ def get_metaInfo(segy_name: str,
         Dict of meta information 
     """
     if use_guess:
-        [iline, xline, istep, xstep] = utils.guess(segy_name)[0]
+        [iline, xline, istep, xstep, xloc, yloc] = utils.guess(segy_name)[0]
     segy = Pysegy(segy_name)
     segy.setInlineLocation(iline)
     segy.setCrosslineLocation(xline)
@@ -364,7 +364,7 @@ def get_metaInfo(segy_name: str,
     return utils.metainfo_to_dict(m, apply_scalar)
 
 
-def trace_count(segy: str or Pysegy) -> int:
+def trace_count(segy: Union[str, Pysegy]) -> int:
     """
     Count the total numbers of a segy file
 
@@ -387,7 +387,7 @@ def trace_count(segy: str or Pysegy) -> int:
     return segy.trace_count
 
 
-def scan_prestack(segy: str or Pysegy,
+def scan_prestack(segy: Union[str, Pysegy],
                   iline: int,
                   xline: int,
                   offset: int = 37) -> Dict:

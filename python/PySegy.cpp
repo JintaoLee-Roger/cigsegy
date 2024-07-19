@@ -34,6 +34,7 @@ public:
   py::array_t<uchar> get_binary_header(bool raw = false);
   py::array_t<uchar> get_trace_header(int n, bool raw = false);
   py::array_t<uchar> get_trace(int n, bool raw = false);
+  py::array_t<int> get_trace_keys(const py::list &keys, const py::list &length, int beg, int end);
 
   py::array_t<float> read(int startZ, int endZ, int startY, int endY,
                           int startX, int endX);
@@ -88,6 +89,18 @@ py::array_t<uchar> Pysegy::get_trace(int n, bool raw) {
   py::array_t<uchar> out(segy::kTraceHeaderSize + sizeX * sizeof(float)); // HACK: ?
   uchar *outptr = static_cast<uchar *>(out.request().ptr);
   get_trace_full(n, outptr, raw);
+  return out;
+}
+
+py::array_t<int> Pysegy::get_trace_keys(const py::list &keys, const py::list &length, int beg, int end) {
+  auto keysvec = keys.cast<std::vector<int>>();
+  auto lengthvec = length.cast<std::vector<int>>();
+  int n1 = end - beg;
+  int n2 = keysvec.size();
+  py::array_t<int> out({n1, n2});
+  auto buff = out.request();
+  int *ptr = static_cast<int *>(buff.ptr);
+  get_trace_keys_c(ptr, keysvec, lengthvec, beg, end);
   return out;
 }
 
@@ -497,6 +510,7 @@ PYBIND11_MODULE(cigsegy, m) {
            py::arg("raw") = false)
       .def("get_trace", &Pysegy::get_trace, py::arg("n"),
            py::arg("raw") = false)
+      .def("get_trace_keys", &Pysegy::get_trace_keys, py::arg("leys"), py::arg("length"), py::arg("beg"), py::arg("end"))
       .def("setInlineLocation", &Pysegy::setInlineLocation, py::arg("iline"))
       .def("setCrosslineLocation", &Pysegy::setCrosslineLocation,
            py::arg("xline"))

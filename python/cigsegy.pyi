@@ -509,6 +509,31 @@ class Pysegy():
             240 + sizeX * 4 elements
         """
 
+    def get_trace_keys(self,
+                       keys: List,
+                       length: List,
+                       beg: int,
+                       end: int) -> numpy.ndarray[numpy.int32]:
+        """
+        get the trace keys from beg to end
+
+        Parameters
+        ------------
+        keys : List
+            location
+        length : List
+            keys' length
+        beg : int
+            the start trace index
+        end : int 
+            the stop trace index
+
+        Returns
+        -------
+        numpy.ndarray[numpy.int32]
+            shape is (end-beg, len(keys))
+        """
+
     def get_metaInfo() -> MetaInfo:
         """
         get metainfo in class `MetaInfo` format
@@ -707,7 +732,7 @@ def create_by_sharing_header(segy_name: str,
                              xline: int = 193,
                              istep: int = 1,
                              xstep: int = 1,
-                             offset: list or dict = None,
+                             offset: Union[list, dict] = None,
                              custom_info: List[str] = []) -> None:
     """
     create a segy and its header is from an existed segy.
@@ -741,12 +766,12 @@ def create_by_sharing_header(segy_name: str,
 def create_by_sharing_header(segy_name: str,
                              header_segy: str,
                              src_file: str,
-                             shape: tuple or list,
+                             shape: Union[tuple, list],
                              iline: int = 189,
                              xline: int = 193,
                              istep: int = 1,
                              xstep: int = 1,
-                             offset: list or dict = None,
+                             offset: Union[list, dict] = None,
                              custom_info: List[str] = []) -> None:
     """
     create a segy and its header is from an existed segy.

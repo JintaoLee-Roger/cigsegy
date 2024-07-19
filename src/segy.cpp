@@ -678,6 +678,26 @@ void SegyIO::get_trace_full(int n, uchar *trace, bool raw) {
   }
 }
 
+void SegyIO::get_trace_keys_c(int *dst, const std::vector<int>& keys, const std::vector<int>& length, int beg, int end) {
+
+  int sizeX = m_metaInfo.sizeX;
+  uint64_t trace_size = kTraceHeaderSize + sizeX * m_metaInfo.esize;
+  const char * src = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
+
+  for (int i = beg; i < end; i++) {
+    for (int j = 0; j < keys.size(); j++) {
+      if (length[j] == 4) {
+        *dst = swap_endian<int32_t>(src + i * trace_size + keys[j] - 1);
+      } else if (length[j] == 2) {
+        *dst = int(swap_endian<int16_t>(src + i * trace_size + keys[j] - 1));
+      } else {
+        throw std::runtime_error("only spport int32 and int16 type.");
+      }
+      dst++;
+    }
+  }
+}
+
 void SegyIO::collect(float *data, int beg, int end) {
   if (beg < 0) { // collect all traces
     beg = 0;
@@ -806,7 +826,7 @@ void SegyIO::scan() {
       m_lineInfo[i].count = 0;
       skip--;
       // HACK: Need print?
-      fmt::print("Inline {} (the {}-th line from 0) is missing!\n", m_lineInfo[i].line_num, i);
+      // fmt::print("Inline {} (the {}-th line from 0) is missing!\n", m_lineInfo[i].line_num, i);
       continue;
     }
 
@@ -1047,15 +1067,12 @@ void SegyIO::read(float *dst, int startX, int endX, int startY, int endY,
   }
   if (showpbar) {
     fmt::print("\n");
+
+    auto time_end = std::chrono::high_resolution_clock::now();
+
+    fmt::print("need time: {}s\n", std::chrono::duration_cast<std::chrono::nanoseconds>(time_end - time_start).count() * 1e-9);
   }
 
-  auto time_end = std::chrono::high_resolution_clock::now();
-
-  fmt::print("need time: {}s\n",
-             std::chrono::duration_cast<std::chrono::nanoseconds>(time_end -
-                                                                  time_start)
-                     .count() *
-                 1e-9);
 }
 
 void SegyIO::read(float *dst) {
@@ -1065,8 +1082,7 @@ void SegyIO::read(float *dst) {
   if (m_metaInfo.isNormalSegy) {
     collect(dst, -1, 0);
   } else {
-    read(dst,  m_metaInfo.sizeY, m_metaInfo.sizeZ, m_metaInfo.min_crossline, m_metaInfo.min_inline);
-    // read(dst, 0, m_metaInfo.sizeX, 0, m_metaInfo.sizeY, 0, m_metaInfo.sizeZ);
+    read_all_fast(dst);
   }
 }
 
@@ -1092,17 +1108,6 @@ void SegyIO::read(float *dst, int sizeY, int sizeZ, int minY, int minZ) {
     }
 
     float *dstl = dst + il * sizeY * sizeX + xl * sizeX;
-    // memcpy(dstl, source + i * trace_size + kTraceHeaderSize,
-    //        sizeX * m_metaInfo.esize);
-    // for (int iX = 0; iX < sizeX; iX++) {
-    //   if (m_metaInfo.data_format == 1) {
-    //     dstl[iX] = ibm_to_ieee(dstl[iX], true);
-    //   } else if (m_metaInfo.data_format == 5) {
-    //     dstl[iX] = swap_endian(dstl[iX]);
-    //   } else {
-    //     throw std::runtime_error("Unsuport sample format");
-    //   }
-    // }
     convert2np(dstl, source + i * trace_size + kTraceHeaderSize, sizeX, m_metaInfo.data_format);
   }
 }
@@ -1425,6 +1430,12 @@ void SegyIO::create(const std::string &segy_out_name,
   create(segy_out_name, (float *)m_source.data(), custom_info);
 }
 
+void SegyIO::close_file() {
+  if (m_source.is_mapped()) {
+    m_source.unmap();
+  }
+}
+
 /********************** SegyIO private *******************************/
 
 void SegyIO::initMetaInfo() {
@@ -1532,9 +1543,59 @@ void SegyIO::write_trace_header(char *dst, TraceHeader *trace_header,
   memcpy(dst, trace_header, kTraceHeaderSize);
 }
 
-void SegyIO::close_file() {
-  if (m_source.is_mapped()) {
-    m_source.unmap();
+void SegyIO::read_all_fast(float *dst) {
+  if (m_metaInfo.data_format == 4) {
+    throw std::runtime_error(fmt::format("Don't support this data format {} now. So cigsegy cannot load the file.\n", m_metaInfo.data_format));
+  }
+
+  int sizeX = m_metaInfo.sizeX;
+  int sizeY = m_metaInfo.sizeY;
+  int sizeZ = m_metaInfo.sizeZ;
+  int trace_count = m_metaInfo.trace_count;
+  const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
+  uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
+
+  int step = sizeZ >= 100 ? 1 : 100 / sizeZ + 1;
+  int nbar = sizeZ >= 100 ? sizeZ : step * sizeZ;
+  progressbar bar(nbar);
+  for (int iZ = 0; iZ < sizeZ; iZ++) {
+    // #pragma omp critical
+    if (showpbar) {
+      updatebar(bar, step);
+    }
+
+    float *dstline = dst + iZ * sizeX * sizeY;
+    const char *srcline = source + m_lineInfo[iZ].trace_start * trace_size;
+
+    // line is missing
+    if (m_lineInfo[iZ].count == 0) {
+      std::fill(dstline, dstline + sizeX * sizeY, m_metaInfo.fillNoValue);
+      continue;
+    }
+
+    if (m_lineInfo[iZ].count == m_metaInfo.sizeY) {
+      for (int iY = 0; iY < sizeY; iY++) {
+        convert2np(dstline + iY * sizeX, // dst
+                   srcline + iY * trace_size + kTraceHeaderSize, // src
+                   sizeX, // size
+                   m_metaInfo.data_format); // dformat
+      }
+    } else {
+      for (int it = 0; it < m_lineInfo[iZ].count; it++) {
+        int xl = getCrossline(srcline + it * trace_size, m_metaInfo.crossline_field);
+        xl = (xl - m_metaInfo.min_crossline) / m_metaInfo.crossline_step;
+
+        // xl is the index in a dst line (from 0 - sizeY)
+        // it is the index in a src line (from 0 - count) 
+        convert2np(dstline + xl * sizeX, 
+                   srcline + it * trace_size + kTraceHeaderSize, 
+                   sizeX, 
+                   m_metaInfo.data_format);
+      }
+    }
+  }
+  if (showpbar) {
+    fmt::print("\n");
   }
 }
 
