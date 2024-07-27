@@ -156,11 +156,13 @@ Citations
 If you find this work useful in your research and want to cite it, please consider use this:
 
 Plain Text
+
 .. code-block:: python
     Li, Jintao. "CIGSEGY: A tool for exchanging data between SEG-Y format and NumPy array inside Python environment". URL: https://github.com/JintaoLee-Roger/cigsegy
 
 
 BibTex
+
 .. code-block:: latex
     @misc{cigsegy,
     author = {Li, Jintao},
