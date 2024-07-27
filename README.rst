@@ -151,6 +151,25 @@ TODO
 - Add convenient function to support **unsorted** prestack gathers.
 
 
+Citations
+===========
+If you find this work useful in your research and want to cite it, please consider use this:
+
+Plain Text
+.. code-block:: python
+    Li, Jintao. "CIGSEGY: A tool for exchanging data between SEG-Y format and NumPy array inside Python environment". URL: https://github.com/JintaoLee-Roger/cigsegy
+
+
+BibTex
+.. code-block:: latex
+    @misc{cigsegy,
+    author = {Li, Jintao},
+    title = {CIGSEGY: A tool for exchanging data between SEG-Y format and NumPy array inside Python environment},
+    url = {\url{https://github.com/JintaoLee-Roger/cigsegy}},
+    }
+
+
+
 =========
 
 .. [1] Here **irregular** SEG-Y volume means the area covered by a SEG-Y file is not a rectangle but a polygon (meaning that some lines are missing some traces), or its inline/crossline intervals are not 1. 
