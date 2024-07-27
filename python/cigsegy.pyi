@@ -8,7 +8,7 @@ _Shape = typing.Tuple[int, ...]
 
 __all__ = [
     "Pysegy", "fromfile", "fromfile_ignore_header", "tofile",
-    "tofile_ignore_header", "collect", "create_by_sharing_header"
+    "tofile_ignore_header", "create_by_sharing_header"
 ]
 
 kBinaryHeaderHelp: Dict[int, Tuple[str, int]]  # binary header help
@@ -139,6 +139,30 @@ class Pysegy():
         -------
         str
             meta information string
+        """
+
+    def collect(self,
+                beg: int = -1,
+                end: int = 0) -> numpy.ndarray[numpy.float32]:
+        """
+        collect traces as a 2D data from the `segy_in` file in
+        range of [beg, end), beg < 0 means collect all traces,
+        end < 0 means collect traces from beg to the last trace,
+        end == 0 means read the beg-th trace (one trace).
+
+        Parameters
+        ----------
+        beg : int
+            the begin index of traces, < 0 means collect all traces
+        end : int
+            the end index of traces (not include), < 0 means collect 
+                traces from beg to the last trace, == 0 means read 
+                the beg-th trace (one trace).
+
+        Returns
+        -------
+        numpy.ndarray :
+            its shape = (trace_count, n-time)
         """
 
     @typing.overload
@@ -694,33 +718,6 @@ def tofile_ignore_header(segy_name: str,
         number of samples per trace
     format : {1, 5}, optional
         the data format code, 1 for 4 bytes IBM float, 5 for 4 bytes IEEE float
-    """
-
-
-def collect(segy_in: str,
-            beg: int = -1,
-            end: int = 0) -> numpy.ndarray[numpy.float32]:
-    """
-    collect traces as a 2D data from the `segy_in` file in
-    range of [beg, end), beg < 0 means collect all traces,
-    end < 0 means collect traces from beg to the last trace,
-    end == 0 means read the beg-th trace (one trace).
-
-    Parameters
-    ----------
-    segy_in : str
-        the input segy file
-    beg : int
-        the begin index of traces, < 0 means collect all traces
-    end : int
-        the end index of traces (not include), < 0 means collect 
-            traces from beg to the last trace, == 0 means read 
-            the beg-th trace (one trace).
-
-    Returns
-    -------
-    numpy.ndarray :
-        its shape = (trace_count, n-time)
     """
 
 

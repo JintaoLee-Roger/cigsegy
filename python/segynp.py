@@ -5,7 +5,7 @@
 
 from typing import Dict, List, Tuple
 import numpy as np
-from .cigsegy import (Pysegy, disable_progressbar, collect) # type: ignore
+from .cigsegy import (Pysegy, disable_progressbar) # type: ignore
 
 
 class SegyNP:
@@ -26,40 +26,48 @@ class SegyNP:
     >>> print(d.min(), d.max()) # NOTE: min and max are evalated by a small part of data
     """
 
-    def __init__(self, filename, iline, xline, istep, xstep) -> None:
+    def __init__(self, filename, iline=189, xline=193, istep=1, xstep=1, as_2d=False) -> None:
         # TODO: guess
         disable_progressbar()
+        self.as_3d = not as_2d
         self.fname = filename
+
         self.segy = Pysegy(filename)
-        self.segy.setInlineLocation(iline)
-        self.segy.setCrosslineLocation(xline)
-        self.segy.setSteps(istep, xstep)
-        self.segy.scan()
+        if self.as_3d:
+            self.segy.setInlineLocation(iline)
+            self.segy.setCrosslineLocation(xline)
+            self.segy.setSteps(istep, xstep)
+            self.segy.scan()
 
         self.metainfo = self.segy.get_metaInfo()
-        self._shape = (self.metainfo.sizeZ, self.metainfo.sizeY, self.metainfo.sizeX)
+        if self.as_3d:
+            self._shape = (self.metainfo.sizeZ, self.metainfo.sizeY, self.metainfo.sizeX)
+        else:
+            self._shape = (self.segy.trace_count, self.metainfo.sizeX)
         self._eval_range()
 
     def _eval_range(self):
-        tracecount = self.metainfo.trace_count
-        s, e = tracecount-4000, 4000
-        if tracecount < 4000:
-            e = tracecount
+        s, e = self.trace_count-4000, 4000
+        if self.trace_count < 4000:
+            e = self.trace_count
             s = 0
-        p0 = collect(self.fname, 0, e)
+        p0 = self.segy.collect(0, e)
         mi, ma = p0.min(), p0.max()
 
-        p0 = collect(self.fname, s, tracecount)
+        p0 = self.segy.collect(s, self.trace_count)
         mi = min(mi, p0.min())
         ma = max(ma, p0.max())
 
-        p0 = collect(self.fname, tracecount//3, tracecount//3+4000)
+        p0 = self.segy.collect(self.trace_count//3, self.trace_count//3+4000)
         mi = min(mi, p0.min())
         ma = max(ma, p0.max())
 
         self._min = mi
         self._max = ma
 
+    @property
+    def trace_count(self) -> int:
+        return self.segy.trace_count
 
     @property
     def shape(self) -> Tuple:
@@ -76,12 +84,15 @@ class SegyNP:
 
     def __getitem__(self, slices) -> np.ndarray:
         idx = self._process_keys(slices)
-
         self._check_bound(*idx)
-        data = self.read(*idx)
-
-        return data  # seismic index
-
+        if self.as_3d:
+            return self.read(*idx)
+        else:
+            data = self.segy.collect(idx[0], idx[1])
+            data = np.squeeze(data[:, idx[2]:idx[3]])
+            if data.ndim == 0:
+                return float(data)
+            return data
 
     def _process_keys(self, key) -> List:
         if isinstance(key, int):
@@ -89,19 +100,29 @@ class SegyNP:
                 key += self.shape[0]
             if key < 0 or key >= self.shape[0]:
                 raise IndexError("Index out of range")
-            return key, key + 1, 0, self.shape[1], 0, self.shape[2]
+            if self.as_3d:
+                return key, key + 1, 0, self.shape[1], 0, self.shape[2]
+            else:
+                return key, key + 1, 0, self.shape[1]
+
         elif key is Ellipsis:
-            return 0, self.shape[0], 0, self.shape[1], 0, self.shape[2]
+            if self.as_3d:
+                return 0, self.shape[0], 0, self.shape[1], 0, self.shape[2]
+            else:
+                return 0, self.shape[0], 0, self.shape[1]
+
         elif isinstance(key, Tuple):
+            N = 3 if self.as_3d else 2
             num_ellipsis = key.count(Ellipsis)
             if num_ellipsis > 1:
                 raise ValueError("Only one ellipsis (...) allowed")
             elif num_ellipsis == 1:
-                key = (key[0], slice(None, None,
-                                     None), slice(None, None, None))
+                key = (key[0], slice(None, None, None), slice(None, None, None))
+                if not self.as_3d:
+                    key = (key[0], slice(None, None, None))
 
-            start_idx = [None] * 3
-            end_idx = [None] * 3
+            start_idx = [None] * N
+            end_idx = [None] * N
             for i, k in enumerate(key):
                 if k is None:
                     continue
@@ -117,27 +138,38 @@ class SegyNP:
                     start_idx[i] = k.start or 0
                     end_idx[i] = k.stop or self.shape[i]
 
-            for i in range(3):
+            for i in range(N):
                 if start_idx[i] is None:
                     start_idx[i] = 0
                 if end_idx[i] is None:
                     end_idx[i] = self.shape[i]
 
-            ib, xb, tb = start_idx
-            ie, xe, te = end_idx
+            if self.as_3d:
+                ib, xb, tb = start_idx
+                ie, xe, te = end_idx
+                return ib, ie, xb, xe, tb, te
+            else:
+                ib, xb = start_idx
+                ie, xe = end_idx
+                return ib, ie, xb, xe
 
-            return ib, ie, xb, xe, tb, te
         elif isinstance(key, slice):
             ib = 0 if key.start is None else key.start
             ie = self._shape[0] if key.stop is None else key.stop
-            return ib, ie, 0, self.shape[1], 0, self.shape[2]
+            if self.as_3d:
+                return ib, ie, 0, self.shape[1], 0, self.shape[2]
+            else:
+                return ib, ie, 0, self.shape[1]
         else:
             raise IndexError("Invalid index slices")
 
-    def _check_bound(self, ib, ie, xb, xe, tb, te) -> None:
+
+    def _check_bound(self, ib, ie, xb, xe, tb=None, te=None) -> None:
         assert ib < ie and ie <= self._shape[0]
         assert xb < xe and xe <= self._shape[1]
-        assert tb < te and te <= self._shape[2]
+        if self.as_3d:
+            assert (tb is not None) and (te is not None)
+            assert tb < te and te <= self._shape[2]
 
     def max(self) -> float:
         return self._max

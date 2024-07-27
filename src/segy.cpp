@@ -724,20 +724,7 @@ void SegyIO::collect(float *data, int beg, int end) {
 
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
   const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
-  progressbar bar(100);
   for (int i = beg; i < end; i++) {
-    if (i % (total / 100) == 0 && showpbar) {
-      bar.update();
-    }
-    // memcpy(data, source + i * trace_size + kTraceHeaderSize,
-    //        m_metaInfo.sizeX * m_metaInfo.esize);
-    // for (int j = 0; j < m_metaInfo.sizeX; j++) {
-    //   if (m_metaInfo.data_format == 1) {
-    //     data[j] = ibm_to_ieee(data[j], true);
-    //   } else {
-    //     data[j] = swap_endian(data[j]);
-    //   }
-    // }
     convert2np(data, source + i * trace_size + kTraceHeaderSize, m_metaInfo.sizeX, m_metaInfo.data_format);
     data += m_metaInfo.sizeX;
   }

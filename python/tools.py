@@ -13,6 +13,37 @@ from .cigsegy import (Pysegy, fromfile, tofile, create_by_sharing_header, # type
 from . import utils
 
 
+def collect(segy_in: str,
+            beg: int = -1,
+            end: int = 0) -> np.ndarray[np.float32]:
+    """
+    collect traces as a 2D data from the `segy_in` file in
+    range of [beg, end), beg < 0 means collect all traces,
+    end < 0 means collect traces from beg to the last trace,
+    end == 0 means read the beg-th trace (one trace).
+
+    Parameters
+    ----------
+    segy_in : str
+        the input segy file
+    beg : int
+        the begin index of traces, < 0 means collect all traces
+    end : int
+        the end index of traces (not include), < 0 means collect 
+            traces from beg to the last trace, == 0 means read 
+            the beg-th trace (one trace).
+
+    Returns
+    -------
+    numpy.ndarray :
+        its shape = (trace_count, n-time)
+    """
+    segy = Pysegy(segy_in)
+    d = segy.collect(beg, end)
+    segy.close_file()
+    return d
+
+
 def create(segy_out: str,
            binary_in: Union[str, np.ndarray],
            shape: Tuple = None,
