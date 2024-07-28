@@ -7,6 +7,8 @@
   </tr>
 </table>
 
+## 中文版的README不是最新的, 只支持到1.1.5, 详情请参考英文版
+
 **此文件最后更新版本为 1.1.5**
 
 一个读写 `segy` 格式地震数据的 `python` 和 `c++` 工具。可以将 `segy` 格式文件读到内存或者直接转为二进制文件，也可以将一个 `numpy` 数据存储为`segy`格式的文件。
@@ -46,7 +48,6 @@ cigsegy.create_by_sharing_header('out.segy', 'header.segy', d, iline=, xline=, i
 - [用到的第三方依赖](#ThirdPart)
 - [两个在终端运行的可执行文件](#Executables)
 - [局限性](#Limitations)
-- [对比](#Comparison)
 - [感谢](#Acknowledge)
 
 <p id="Installation"></p>
@@ -360,45 +361,6 @@ segy.create('new_fx.segy', d)
 ### 局限性
 
 - 只测试过叠后数据
-- 只支持 4 字节的 IBM 浮点数和 4 字节的 IEEE 浮点数
-
-
-<p id="Comparison"></p>
-
-### 对比
-
-与`segysak`相比，我们的实现速度更快（`segysak`是纯`Python`实现）。
-
-在读取segy文件时，`cigsegy`比`segyio`稍慢，但差距很小。但是，`cigsegy`在创建`segy`文件时比`segyio`快。
-
-`segyio`假设文件是一个有序的三维数据集。它也支持仅由一系列道构成的文件（非严格模式），但在这种模式下，许多功能都被禁用，并会引发错误。然而，有许多segy文件是有序的，但其中缺少一些道。虽然这些文件很容易处理，
-但`segyio`不支持这些文件。`cigsegy`支持这些文件，只需使用相同的方法，例如`cigsegy.fromfile('miss.segy')`。此外，`cigsegy`还可以处理 inline 和 crossline 间隔不为1的文件。
-
-
-出于某些原因（保密要求、记录错误等），文件头可能损坏。如果您记得体积大小和采样格式（IBM为1，IEEE为5），
-`cigsegy` 也可以读取这些文件. 只需要使用
-```python
-d = cigsegy.fromfile_ignore_header('miss.segy', inline_size, crossline_size, time, dformat)
-```
-
-`segymat` 是在MATLAB中实现的，它的运行速度非常慢。
-
-`shape = (651, 951, 462) 1.3G`
-|mode|cigsegy|segyio|segysak|segymat|
-|---|---|---|---|---|
-|read|1.212s|0.944s|134.8s|151.99s|
-|create|3.01s|14.03s|-|-|
-
-
-
-对于 `cigsegy` and `segyio` 运行 `read` 3 次, 
-`segysak` 只运行一次, 
-`(1062, 2005, 2401) 20G` 
-|mode|cigsegy|segyio|segysak|segymat|
-|---|---|---|---|---|
-|read|45.6s+45.5s+45s|65s+20s+19s|612.45s|>1500s|
-|create|41.14s+43.35s|78.74s+82.74s|-|-|
-
 
 <p id="Acknowledge"></p>
 

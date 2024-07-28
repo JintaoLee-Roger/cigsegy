@@ -6,7 +6,7 @@
 from typing import Dict, List, Tuple
 import numpy as np
 from .cigsegy import (Pysegy, disable_progressbar) # type: ignore
-import utils
+from . import utils
 
 
 class SegyNP:

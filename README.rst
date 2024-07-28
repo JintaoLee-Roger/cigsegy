@@ -83,17 +83,11 @@ intervals, data format ...
 .. Note::
 
     If you are unsure about the values of some parameters, 
-    you can use the default values, such as
+    you can ignore them and cigsegy will try to guess them automatically.
  
     .. code-block:: python
 
-        >>> cigsegy.metaInfo('fx.segy', iline=9, xline=21)
-
-    You also can set ``use_guess=True`` to use the guessed parameters:
-
-    .. code-block:: python
-
-        >>> cigsegy.metaInfo('rogan.sgy', use_guess=True)
+        >>> cigsegy.metaInfo('fx.segy', iline=9, xline=21) # ignore istep, xstep, ...
 
 
 4. Read the SEG-Y
@@ -138,6 +132,25 @@ There is often such a workflow:
 
     # d is a numpy array, d.shape == (n-inlines, n-crosslines, n-time)
     >>> cigsegy.create('out.segy', d, format=5, start_time=0, iline_interval=15, ...)
+
+
+7. Access the SEG-Y file as a 3D numpy array, without reading the whole file into memory
+
+.. code-block:: python
+
+    >>> from cigsegy import SegyNP
+    >>> d = SegyNP('rogan.sgy', iline=9, xline=21)
+    >>> d.shape # (ni, nx, nt), use as a numpy array, 3D geometry
+    >> sx = d[100] # the 100-th inline profile
+    >> sx = d[100:200] # return a 3D array with shape (100, nx, nt)
+    >> sx = d[:, 200, :] # the 200-th crossline profile
+    >> sx = d[:, :, 100] # the 100-th time slice, note, it may be slow if the file is large
+    >> sx.min(), sx.max() 
+    # get the min and max value, but they are evaluated from a part of data, 
+    # so they may not be the real min and max value
+    >> sx.trace_cout # get the number of traces for the file
+
+
 
 License
 =======

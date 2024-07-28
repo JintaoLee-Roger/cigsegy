@@ -2,6 +2,19 @@
 Changelog
 #########
 
+v1.1.7
+--------
+
+- Refine the ``scan`` function to support more situations.
+- Add supports for dealing with more data sample formats, such as 4-byte, two's complement integer.
+- Add a new class ``SegyNP`` to simulate the segy file accessed as a numpy array.
+- Add functions: ``scan_unsorted3D`` and ``load_unsorted3D`` to support 3D unsorted data.
+- Remove the comparison part of the documents, as ``segysak`` has a large update.
+- ``use_guess`` in the functions like ``metaInfo`` has been deseperated.
+- Added more atomic operations, enabling finer control of SEG-Y files
+- And more ...
+
+
 v1.1.6
 -------
 

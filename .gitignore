@@ -24,6 +24,7 @@ _doxygenxml
 docs/cigsegy
 segyfile
 __pycache__
+todo.txt
 
 test.*
 thridpart/
