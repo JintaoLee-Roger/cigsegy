@@ -97,6 +97,7 @@ public:
   }
 
   int64_t trace_count();
+  int nt();
   void set_size(int x, int y, int z);
   MetaInfo get_metaInfo();
 
@@ -248,7 +249,7 @@ void modify_bin_key(const std::string &segy_name, int loc, T value) {
 template <typename T>
 void modify_trace_key(const std::string &segy_name, int loc, T value, int idx) {
   SegyIO segy_data(segy_name);
-  int sizeX = segy_data.get_metaInfo().sizeX;
+  int sizeX = segy_data.nt();
   int esize = segy_data.get_metaInfo().esize;
   int tracecount = segy_data.trace_count();
   int tracesize = sizeX * esize + kTraceHeaderSize;

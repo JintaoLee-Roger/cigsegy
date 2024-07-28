@@ -596,7 +596,8 @@ PYBIND11_MODULE(cigsegy, m) {
       .def("set_size", &Pysegy::set_size, py::arg("sizeX"), py::arg("sizeY"),
            py::arg("sizeZ"))
       .def("close_file", &Pysegy::close_file)
-      .def_property_readonly("trace_count", &Pysegy::trace_count);
+      .def_property_readonly("trace_count", &Pysegy::trace_count)
+      .def_property_readonly("nt", &Pysegy::nt);
 
   m.def("fromfile_ignore_header", &fromfile_ignore_header,
         "read by ignoring header and specify shape", py::arg("segy_name"),

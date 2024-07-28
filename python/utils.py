@@ -90,7 +90,7 @@ def get_trace_keys(segy: Union[str, Pysegy],
 
     out = []
 
-    for i in range_func(beg, end): # TODO: 需要优化, end-beg特别大时，打印费时间
+    for i in range_func(beg, end):  # TODO: 需要优化, end-beg特别大时，打印费时间
         th = segyc.get_trace_header(i, raw=raw)
 
         for key, l in zip(keyloc, length):
@@ -124,10 +124,10 @@ def get_trace_keys(segy: Union[str, Pysegy],
 
 
 def get_trace_keys2(segy: Union[str, Pysegy],
-                   keyloc: Union[int, List, np.ndarray],
-                   beg: int = -1,
-                   end: int = 0,
-                   force: int = None) -> np.ndarray:
+                    keyloc: Union[int, List, np.ndarray],
+                    beg: int = -1,
+                    end: int = 0,
+                    force: int = None) -> np.ndarray:
     """
     get values at key location of trace headers
 
@@ -189,7 +189,6 @@ def get_trace_keys2(segy: Union[str, Pysegy],
         length = [force]
         raw = True
 
-
     print(keyloc, length, beg, end)
     out = segyc.get_trace_keys(keyloc, length, beg, end)
 
@@ -203,7 +202,6 @@ def get_trace_keys2(segy: Union[str, Pysegy],
         return out[0]
 
     return out
-
 
 
 def eval_xline(segy: Pysegy) -> List:
@@ -224,7 +222,8 @@ def eval_xline(segy: Pysegy) -> List:
     options = [193, 17, 21, 13]
     select = [193, 17, 21, 13]
     for op in options:
-        if get_trace_keys(segy, op, tracecout - 1) - get_trace_keys(segy, op, 0) > tracecout // 2:
+        if get_trace_keys(segy, op, tracecout - 1) - get_trace_keys(
+                segy, op, 0) > tracecout // 2:
             select.remove(op)
             continue
         d = get_trace_keys(segy, op, tracecout // 2, tracecout // 2 + 10)
@@ -270,7 +269,8 @@ def eval_iline(segy: Pysegy) -> List:
         if l0 == ll or l0 == l2 or ll == l2:
             select.remove(op)
             continue
-        if max([l0, ll, l2]) - min([l0, ll, l2]) > min(tracecout // 10 - 1, 100000):
+        if max([l0, ll, l2]) - min([l0, ll, l2]) > min(tracecout // 10 - 1,
+                                                       100000):
             select.remove(op)
             continue
         if (l0 < l2 and l2 > ll) or (l0 > l2 and l2 < ll):
@@ -309,8 +309,8 @@ def eval_xstep(segy: Pysegy, xline: int) -> int:
     if len(idx) > 1:
         return 0
 
-    d = get_trace_keys(segy, xline, tracecout // 2 + idx[0]+1,
-                       tracecout // 2 + 10 + idx[0]+1)
+    d = get_trace_keys(segy, xline, tracecout // 2 + idx[0] + 1,
+                       tracecout // 2 + 10 + idx[0] + 1)
     diff = np.diff(d)
     if diff.min() > 0:
         return diff.min()
@@ -335,8 +335,8 @@ def eval_istep(segy: Pysegy, iline: int) -> int:
         possible result
     """
     tracecount = segy.trace_count
-    i0 = get_trace_keys(segy, iline, tracecount//2, force=4)
-    x1 = tracecount//2 + 1
+    i0 = get_trace_keys(segy, iline, tracecount // 2, force=4)
+    x1 = tracecount // 2 + 1
     while get_trace_keys(segy, iline, x1, force=4) == i0:
         x1 += 1
     i1 = get_trace_keys(segy, iline, x1, force=4)
@@ -352,8 +352,15 @@ def eval_istep(segy: Pysegy, iline: int) -> int:
         return i2 - i1
 
 
-def guess(segy_name: Union[str, Pysegy]) -> List:
+def guess(segy_name: Union[str, Pysegy],
+          iline=None,
+          xline=None,
+          istep=None,
+          xstep=None,
+          xloc=None,
+          yloc=None) -> List:
     """
+    TODO: scan 3 times when call metaInfo() ?
     guess the locations and steps of inline and crossline
 
     Parameters
@@ -373,24 +380,33 @@ def guess(segy_name: Union[str, Pysegy]) -> List:
         segy = segy_name
     else:
         raise TypeError("Invalid type of `segy_name`")
-    xlines = eval_xline(segy)
-    ilines = eval_iline(segy)
+    
+    xlines = eval_xline(segy) if xline is None else [xline]
+    ilines = eval_iline(segy) if iline is None else [iline]
     xselect = []
     iselect = []
     xsteps = []
     isteps = []
 
-    for xline in xlines:
-        xstep = eval_xstep(segy, xline)
-        if xstep:
-            xselect.append(xline)
-            xsteps.append(xstep)
-
-    for iline in ilines:
-        istep = eval_istep(segy, iline)
-        if istep:
-            iselect.append(iline)
-            isteps.append(istep)
+    if xstep is not None:
+        xsteps = [xstep]
+        xselect = xlines
+    else:
+        for xline in xlines:
+            xstep = eval_xstep(segy, xline)
+            if xstep:
+                xselect.append(xline)
+                xsteps.append(xstep)
+    
+    if istep is not None:
+        isteps = [istep]
+        iselect = ilines
+    else:
+        for iline in ilines:
+            istep = eval_istep(segy, iline)
+            if istep:
+                iselect.append(iline)
+                isteps.append(istep)
     segy.close_file()
 
     out = []
@@ -408,20 +424,23 @@ def guess(segy_name: Union[str, Pysegy]) -> List:
             out.append([iselect[i], xselect[x], isteps[i], xsteps[x]])
 
     if out == []:
-        raise RuntimeError("cannot guess the location and steps")
+        raise RuntimeError("cannot define the geometry through the location and steps")
 
-    s = Pysegy(segy_name)
-    s.setInlineLocation(out[0][i])
-    s.setCrosslineLocation(out[0][x])
-    s.setSteps(out[0][i], out[0][x])
-    s.setXLocation(73)
-    s.setYLocation(77)
-    mt = s.get_metaInfo()
-    if np.isnan(mt.Z_interval) or np.isnan(mt.Y_interval) or mt.Z_interval == 0 or mt.Y_interval == 0:
-        xloc, yloc = 181, 185
-    else:
-        xloc, yloc = 73, 77
-    s.close_file()
+    if xloc is None or yloc is None:
+        s = Pysegy(segy_name)
+        s.setInlineLocation(out[0][i])
+        s.setCrosslineLocation(out[0][x])
+        s.setSteps(out[0][i], out[0][x])
+        s.setXLocation(181)
+        s.setYLocation(185)
+        s.scan()
+        mt = s.get_metaInfo()
+        if np.isnan(mt.Z_interval) or np.isnan(mt.Y_interval) or mt.Z_interval == 0 or mt.Y_interval == 0:
+            xloc, yloc = 73, 77
+        else:
+            xloc, yloc = 181, 185
+        s.close_file()
+
     for o in out:
         o += [xloc, yloc]
 

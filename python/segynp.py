@@ -6,6 +6,7 @@
 from typing import Dict, List, Tuple
 import numpy as np
 from .cigsegy import (Pysegy, disable_progressbar) # type: ignore
+import utils
 
 
 class SegyNP:
@@ -26,7 +27,7 @@ class SegyNP:
     >>> print(d.min(), d.max()) # NOTE: min and max are evalated by a small part of data
     """
 
-    def __init__(self, filename, iline=189, xline=193, istep=1, xstep=1, as_2d=False) -> None:
+    def __init__(self, filename, iline=None, xline=None, istep=None, xstep=None, as_2d=False) -> None:
         # TODO: guess
         disable_progressbar()
         self.as_3d = not as_2d
@@ -34,6 +35,7 @@ class SegyNP:
 
         self.segy = Pysegy(filename)
         if self.as_3d:
+            [iline, xline, istep, xstep, xloc, yloc] = utils.guess(filename, iline, xline, istep, xstep, 181, 185)
             self.segy.setInlineLocation(iline)
             self.segy.setCrosslineLocation(xline)
             self.segy.setSteps(istep, xstep)

@@ -40,22 +40,36 @@ bool showpbar = true;
 /********************* static functions ***************************/
 
 static inline std::string dformat_string(int dformat) {
-  if (dformat == 1) return "1 = 4-byte IBM floating-point";
-  else if (dformat == 2) return "2 = 4-byte, two's complement integer";
-  else if (dformat == 3) return "3 = 2-byte, two's complement integer";
-  else if (dformat == 4) return "4 = 4-byte fixed-point with gain (obsolete)";
-  else if (dformat == 5) return "5 = 4-byte IEEE floating-point";
-  else if (dformat == 6) return "6 = 8-byte IEEE floating-point";
-  else if (dformat == 7) return "7 = 3-byte two's complement integer";
-  else if (dformat == 8) return "8 = 1-byte, two's complement integer";
-  else if (dformat == 9) return "9 = 8-byte, two's complement integer";
-  else if (dformat == 10) return "10 = 4-byte, unsigned integer";
-  else if (dformat == 11) return "11 = 2-byte, unsigned integer";
-  else if (dformat == 12) return "12 = 8-byte, unsigned integer";
-  else if (dformat == 15) return "15 = 3-byte, unsigned integer";
-  else if (dformat == 16) return "16 = 1-byte, unsigned integer";
-  else return "Unknown";
-
+  if (dformat == 1)
+    return "1 = 4-byte IBM floating-point";
+  else if (dformat == 2)
+    return "2 = 4-byte, two's complement integer";
+  else if (dformat == 3)
+    return "3 = 2-byte, two's complement integer";
+  else if (dformat == 4)
+    return "4 = 4-byte fixed-point with gain (obsolete)";
+  else if (dformat == 5)
+    return "5 = 4-byte IEEE floating-point";
+  else if (dformat == 6)
+    return "6 = 8-byte IEEE floating-point";
+  else if (dformat == 7)
+    return "7 = 3-byte two's complement integer";
+  else if (dformat == 8)
+    return "8 = 1-byte, two's complement integer";
+  else if (dformat == 9)
+    return "9 = 8-byte, two's complement integer";
+  else if (dformat == 10)
+    return "10 = 4-byte, unsigned integer";
+  else if (dformat == 11)
+    return "11 = 2-byte, unsigned integer";
+  else if (dformat == 12)
+    return "12 = 8-byte, unsigned integer";
+  else if (dformat == 15)
+    return "15 = 3-byte, unsigned integer";
+  else if (dformat == 16)
+    return "16 = 1-byte, unsigned integer";
+  else
+    return "Unknown";
 }
 
 static inline void updatebar(progressbar &bar, int n) {
@@ -243,7 +257,8 @@ static int64_t copy_traces(const mio::mmap_source &header,
   progressbar bar(nbar);
 
   uint64_t trace_size = kTraceHeaderSize + sizeX * meta_info.esize;
-  uint64_t trace_size_ori = kTraceHeaderSize + meta_info.sizeX * meta_info.esize;
+  uint64_t trace_size_ori =
+      kTraceHeaderSize + meta_info.sizeX * meta_info.esize;
 
   // iz: numpy sub volume
   // izo: numpy full volume
@@ -256,7 +271,8 @@ static int64_t copy_traces(const mio::mmap_source &header,
 
     int izo = iz + offsetZ;
 
-    if (line_info[izo].count == 0) { // TODO: 处理一下line missing的情况，并处理最后的判断条件
+    if (line_info[izo].count ==
+        0) { // TODO: 处理一下line missing的情况，并处理最后的判断条件
       continue;
     }
 
@@ -379,6 +395,7 @@ SegyIO::~SegyIO() {
 }
 
 int64_t SegyIO::trace_count() { return m_metaInfo.trace_count; }
+int SegyIO::nt() { return m_metaInfo.sizeX; }
 
 void SegyIO::set_size(int x, int y, int z) {
   m_metaInfo.sizeX = x;
@@ -474,8 +491,9 @@ void SegyIO::setSampleInterval(int dt) {
 }
 
 void SegyIO::setDataFormatCode(int dformat) {
-  if ((dformat < 1 ||  dformat > 5) && dformat != 8) {
-    throw std::runtime_error(fmt::format("Don't support this data format {} now.", dformat));
+  if ((dformat < 1 || dformat > 5) && dformat != 8) {
+    throw std::runtime_error(
+        fmt::format("Don't support this data format {} now.", dformat));
   }
   m_metaInfo.data_format = dformat;
   isScan = false;
@@ -596,10 +614,10 @@ std::string SegyIO::metaInfo() {
   istep = m_metaInfo.inline_step;
   xstep = m_metaInfo.crossline_step;
 
-  std::string shapeinfo = fmt::format(
-                "In python, the shape is (n-inline, n-crossline, n-time) "
-                "= ({}, {}, {}).\n\n",
-                sizeZ, sizeY, m_metaInfo.sizeX);
+  std::string shapeinfo =
+      fmt::format("In python, the shape is (n-inline, n-crossline, n-time) "
+                  "= ({}, {}, {}).\n\n",
+                  sizeZ, sizeY, m_metaInfo.sizeX);
 
   // if the trace sorting code is error
   if (m_metaInfo.trace_sorting_code > 9 || m_metaInfo.trace_sorting_code < -1) {
@@ -666,23 +684,26 @@ void SegyIO::get_trace_full(int n, uchar *trace, bool raw) {
   } else {
     read_one_trace_header(trace, src);
     float *data = reinterpret_cast<float *>(trace + kTraceHeaderSize);
-    // memcpy(data, src + kTraceHeaderSize, m_metaInfo.sizeX * m_metaInfo.esize);
-    // for (int i = 0; i < m_metaInfo.sizeX; i++) {
+    // memcpy(data, src + kTraceHeaderSize, m_metaInfo.sizeX *
+    // m_metaInfo.esize); for (int i = 0; i < m_metaInfo.sizeX; i++) {
     //   if (m_metaInfo.data_format == 1) {
     //     data[i] = ibm_to_ieee(data[i], true);
     //   } else {
     //     data[i] = swap_endian(data[i]);
     //   }
     // }
-    convert2np(data, src + kTraceHeaderSize, m_metaInfo.sizeX, m_metaInfo.data_format);
+    convert2np(data, src + kTraceHeaderSize, m_metaInfo.sizeX,
+               m_metaInfo.data_format);
   }
 }
 
-void SegyIO::get_trace_keys_c(int *dst, const std::vector<int>& keys, const std::vector<int>& length, int beg, int end) {
+void SegyIO::get_trace_keys_c(int *dst, const std::vector<int> &keys,
+                              const std::vector<int> &length, int beg,
+                              int end) {
 
   int sizeX = m_metaInfo.sizeX;
   uint64_t trace_size = kTraceHeaderSize + sizeX * m_metaInfo.esize;
-  const char * src = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
+  const char *src = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
 
   for (int i = beg; i < end; i++) {
     for (int j = 0; j < keys.size(); j++) {
@@ -717,7 +738,10 @@ void SegyIO::collect(float *data, int beg, int end) {
   }
 
   if (m_metaInfo.data_format == 4) {
-    throw std::runtime_error(fmt::format("Don't support this data format {} now. So cigsegy cannot load the file.\n", m_metaInfo.data_format));
+    throw std::runtime_error(
+        fmt::format("Don't support this data format {} now. So cigsegy cannot "
+                    "load the file.\n",
+                    m_metaInfo.data_format));
   }
 
   int total = end - beg;
@@ -725,7 +749,8 @@ void SegyIO::collect(float *data, int beg, int end) {
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
   const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
   for (int i = beg; i < end; i++) {
-    convert2np(data, source + i * trace_size + kTraceHeaderSize, m_metaInfo.sizeX, m_metaInfo.data_format);
+    convert2np(data, source + i * trace_size + kTraceHeaderSize,
+               m_metaInfo.sizeX, m_metaInfo.data_format);
     data += m_metaInfo.sizeX;
   }
 }
@@ -809,11 +834,13 @@ void SegyIO::scan() {
   _get_TraceInfo(0, trace2);
   for (int i = 0; i < m_metaInfo.sizeZ - 1; i++) {
     if (skip > 0) {
-      m_lineInfo[i].line_num = m_lineInfo[i-1].line_num + m_metaInfo.inline_step;
+      m_lineInfo[i].line_num =
+          m_lineInfo[i - 1].line_num + m_metaInfo.inline_step;
       m_lineInfo[i].count = 0;
       skip--;
       // HACK: Need print?
-      // fmt::print("Inline {} (the {}-th line from 0) is missing!\n", m_lineInfo[i].line_num, i);
+      // fmt::print("Inline {} (the {}-th line from 0) is missing!\n",
+      // m_lineInfo[i].line_num, i);
       continue;
     }
 
@@ -839,10 +866,13 @@ void SegyIO::scan() {
     _get_TraceInfo(itrace, trace2);
     _get_TraceInfo(itrace - 1, trace1);
 
-    if (trace2.inline_num == m_lineInfo[i].line_num) { // jump太小了, trace2没有跳出上一条line
+    if (trace2.inline_num ==
+        m_lineInfo[i].line_num) { // jump太小了, trace2没有跳出上一条line
       m_metaInfo.isNormalSegy = false;
-      while (trace2.inline_num < (m_lineInfo[i].line_num + m_metaInfo.inline_step) &&
-             itrace < m_metaInfo.trace_count) { // 将trace2往后移动, 直到trace2到达下一条line
+      while (trace2.inline_num <
+                 (m_lineInfo[i].line_num + m_metaInfo.inline_step) &&
+             itrace < m_metaInfo.trace_count) { // 将trace2往后移动,
+                                                // 直到trace2到达下一条line
         itrace++;
         jump++;
         if (jump > kMaxSizeOneDimemsion || itrace >= m_metaInfo.trace_count) {
@@ -855,10 +885,11 @@ void SegyIO::scan() {
       _get_TraceInfo(itrace - 1, trace1);
     }
 
-    else if (trace1.inline_num > m_lineInfo[i].line_num) { // jump太大了, trace1也到达了下一条line
+    else if (trace1.inline_num >
+             m_lineInfo[i].line_num) { // jump太大了, trace1也到达了下一条line
       m_metaInfo.isNormalSegy = false;
-      while (trace1.inline_num != m_lineInfo[i].line_num && 
-             itrace > 0 && jump > 0) { // 将trace1往前移动,直到返回上一条line
+      while (trace1.inline_num != m_lineInfo[i].line_num && itrace > 0 &&
+             jump > 0) { // 将trace1往前移动,直到返回上一条line
         itrace--;
         jump--;
         if (jump <= 0 || itrace <= 0) {
@@ -873,21 +904,27 @@ void SegyIO::scan() {
     }
 
     // TODO: 需要检查crossline_end是否一致
-    else if (trace2.inline_num == (m_lineInfo[i].line_num + m_metaInfo.inline_step) && 
-            trace1.inline_num == m_lineInfo[i].line_num && 
-            (trace2.crossline_num != m_lineInfo[i].crossline_start || 
-            trace1.crossline_num != (m_lineInfo[i].crossline_start + m_metaInfo.sizeY))) { // 平行四边形的情况
+    else if (trace2.inline_num ==
+                 (m_lineInfo[i].line_num + m_metaInfo.inline_step) &&
+             trace1.inline_num == m_lineInfo[i].line_num &&
+             (trace2.crossline_num != m_lineInfo[i].crossline_start ||
+              trace1.crossline_num != (m_lineInfo[i].crossline_start +
+                                       m_metaInfo.sizeY))) { // 平行四边形的情况
       m_metaInfo.isNormalSegy = false;
-      m_metaInfo.min_crossline = std::min(m_metaInfo.min_crossline, trace2.crossline_num);
-      m_metaInfo.max_crossline = std::max(m_metaInfo.max_crossline, trace1.crossline_num);
+      m_metaInfo.min_crossline =
+          std::min(m_metaInfo.min_crossline, trace2.crossline_num);
+      m_metaInfo.max_crossline =
+          std::max(m_metaInfo.max_crossline, trace1.crossline_num);
     }
 
     m_metaInfo.sizeY = (m_metaInfo.max_crossline - m_metaInfo.min_crossline) /
-                        m_metaInfo.crossline_step + 1;
+                           m_metaInfo.crossline_step +
+                       1;
 
     if (trace2.inline_num > m_lineInfo[i].line_num &&
         trace1.inline_num == m_lineInfo[i].line_num) {
-      m_metaInfo.max_crossline = std::max(m_metaInfo.max_crossline, trace1.crossline_num);
+      m_metaInfo.max_crossline =
+          std::max(m_metaInfo.max_crossline, trace1.crossline_num);
       m_lineInfo[i].trace_end = itrace - 1;
       m_lineInfo[i].count = itrace - m_lineInfo[i].trace_start;
       m_lineInfo[i].crossline_end = trace1.crossline_num;
@@ -895,22 +932,23 @@ void SegyIO::scan() {
       throw std::runtime_error("Error, cannot analysis this segy file!");
     }
 
-    // TODO: 处理有缺失line的情况! 需要一个状态来衡量是istep导致的问题，还是 line missing的情况
+    // TODO: 处理有缺失line的情况! 需要一个状态来衡量是istep导致的问题，还是
+    // line missing的情况
     if (trace2.inline_num > (m_lineInfo[i].line_num + m_metaInfo.inline_step)) {
-          // skip? what state of m_lineInfo[i] represents the missing line?
-      skip = trace2.inline_num - (m_lineInfo[i].line_num + m_metaInfo.inline_step);
+      // skip? what state of m_lineInfo[i] represents the missing line?
+      skip =
+          trace2.inline_num - (m_lineInfo[i].line_num + m_metaInfo.inline_step);
       if (skip % m_metaInfo.inline_step != 0) {
         throw std::runtime_error("Cannot analysis this segy file, "
-                               "may inline step != 1");
+                                 "may inline step != 1");
       }
       skip = skip / m_metaInfo.inline_step;
       if (old_skip == skip) {
         throw std::runtime_error("Cannot analysis this segy file, "
-                               "may inline step != 1");
+                                 "may inline step != 1");
       }
       old_skip = skip; // TODO: 有些问题, 比如多个同样的skip?
     }
-
   }
 
   if (m_metaInfo.isNormalSegy &&
@@ -937,11 +975,11 @@ void SegyIO::scan() {
   _get_TraceInfo(m_lineInfo[s].trace_end, trace2);
 
   // Y_interval = ((x2-x1)^2 + (y2-y1)^2)^0.5 / abs(xline2 - xline1) * xstep
-  m_metaInfo.Y_interval = std::sqrt(
-    std::pow(trace2.X - trace1.X, 2) +
-    std::pow(trace2.Y - trace1.Y, 2)) /
-    std::abs(trace2.crossline_num - trace1.crossline_num) * 
-    m_metaInfo.crossline_step;
+  m_metaInfo.Y_interval =
+      std::sqrt(std::pow(trace2.X - trace1.X, 2) +
+                std::pow(trace2.Y - trace1.Y, 2)) /
+      std::abs(trace2.crossline_num - trace1.crossline_num) *
+      m_metaInfo.crossline_step;
 
   s = m_metaInfo.sizeZ - 1;
   _get_TraceInfo(m_lineInfo[s].trace_start, trace2);
@@ -950,9 +988,14 @@ void SegyIO::scan() {
   // S2 = abs(xline2 - xline1) / xstep * Y_interval
   // (S1^2 - S2^2)^0.5 = S3
   // Z_interval = S3 / abs(iline2-iline1) / istep
-  float S1_2 = std::pow(trace2.X - trace1.X, 2) + std::pow(trace2.Y - trace1.Y, 2);
-  float S2_2 = std::pow(float(trace2.crossline_num - trace1.crossline_num) / m_metaInfo.crossline_step * m_metaInfo.Y_interval, 2);
-  m_metaInfo.Z_interval = std::sqrt(S1_2 - S2_2) / (std::abs(trace2.inline_num - trace1.inline_num) / float(m_metaInfo.inline_step));
+  float S1_2 =
+      std::pow(trace2.X - trace1.X, 2) + std::pow(trace2.Y - trace1.Y, 2);
+  float S2_2 = std::pow(float(trace2.crossline_num - trace1.crossline_num) /
+                            m_metaInfo.crossline_step * m_metaInfo.Y_interval,
+                        2);
+  m_metaInfo.Z_interval = std::sqrt(S1_2 - S2_2) /
+                          (std::abs(trace2.inline_num - trace1.inline_num) /
+                           float(m_metaInfo.inline_step));
 }
 
 void SegyIO::read(float *dst, int startX, int endX, int startY, int endY,
@@ -970,7 +1013,10 @@ void SegyIO::read(float *dst, int startX, int endX, int startY, int endY,
   }
 
   if (m_metaInfo.data_format == 4) {
-    throw std::runtime_error(fmt::format("Don't support this data format {} now. So cigsegy cannot load the file.\n", m_metaInfo.data_format));
+    throw std::runtime_error(
+        fmt::format("Don't support this data format {} now. So cigsegy cannot "
+                    "load the file.\n",
+                    m_metaInfo.data_format));
   }
 
   const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
@@ -1041,7 +1087,8 @@ void SegyIO::read(float *dst, int startX, int endX, int startY, int endY,
         //     throw std::runtime_error("Unsuport sample format");
         //   }
         // }
-        convert2np(dsttrace, sourceline + istart * trace_size + offset, sizeX, m_metaInfo.data_format);
+        convert2np(dsttrace, sourceline + istart * trace_size + offset, sizeX,
+                   m_metaInfo.data_format);
         istart++;
       } else {
         std::fill(dsttrace, dsttrace + sizeX, m_metaInfo.fillNoValue);
@@ -1057,9 +1104,12 @@ void SegyIO::read(float *dst, int startX, int endX, int startY, int endY,
 
     auto time_end = std::chrono::high_resolution_clock::now();
 
-    fmt::print("need time: {}s\n", std::chrono::duration_cast<std::chrono::nanoseconds>(time_end - time_start).count() * 1e-9);
+    fmt::print("need time: {}s\n",
+               std::chrono::duration_cast<std::chrono::nanoseconds>(time_end -
+                                                                    time_start)
+                       .count() *
+                   1e-9);
   }
-
 }
 
 void SegyIO::read(float *dst) {
@@ -1075,7 +1125,10 @@ void SegyIO::read(float *dst) {
 
 void SegyIO::read(float *dst, int sizeY, int sizeZ, int minY, int minZ) {
   if (m_metaInfo.data_format == 4) {
-    throw std::runtime_error(fmt::format("Don't support this data format {} now. So cigsegy cannot load the file.\n", m_metaInfo.data_format));
+    throw std::runtime_error(
+        fmt::format("Don't support this data format {} now. So cigsegy cannot "
+                    "load the file.\n",
+                    m_metaInfo.data_format));
   }
 
   int sizeX = m_metaInfo.sizeX;
@@ -1095,7 +1148,8 @@ void SegyIO::read(float *dst, int sizeY, int sizeZ, int minY, int minZ) {
     }
 
     float *dstl = dst + il * sizeY * sizeX + xl * sizeX;
-    convert2np(dstl, source + i * trace_size + kTraceHeaderSize, sizeX, m_metaInfo.data_format);
+    convert2np(dstl, source + i * trace_size + kTraceHeaderSize, sizeX,
+               m_metaInfo.data_format);
   }
 }
 
@@ -1219,7 +1273,8 @@ void SegyIO::cut(const std::string &outname, int startX, int endX, int startY,
   progressbar bar(nbar);
 
   uint64_t trace_size = kTraceHeaderSize + sizeX * m_metaInfo.esize;
-  uint64_t trace_size_ori = kTraceHeaderSize + m_metaInfo.sizeX * m_metaInfo.esize;
+  uint64_t trace_size_ori =
+      kTraceHeaderSize + m_metaInfo.sizeX * m_metaInfo.esize;
   tmp.resize(trace_size);
   tmp.assign(trace_size, 0);
   int tracecount = 0;
@@ -1390,7 +1445,8 @@ void SegyIO::create(const std::string &segy_out_name, const float *src,
       //   }
       //   dstdata[iX] = swap_endian(dstdata[iX]);
       // }
-      float2sgy(dstline + kTraceHeaderSize, srcline, m_metaInfo.sizeX, m_metaInfo.data_format);
+      float2sgy(dstline + kTraceHeaderSize, srcline, m_metaInfo.sizeX,
+                m_metaInfo.data_format);
 
       dstline += trace_size;
     }
@@ -1455,7 +1511,9 @@ void SegyIO::scanBinaryHeader() {
     throw std::runtime_error(fmt::format("Unknown data format {}.\n", dformat));
   }
   if (dformat == 4) {
-    fmt::print("Don't support this data format {} now. \nSo cigsegy just can be used to scan the file, cannot load the file.\n", dformat);
+    fmt::print("Don't support this data format {} now. \nSo cigsegy just can "
+               "be used to scan the file, cannot load the file.\n",
+               dformat);
   }
   m_metaInfo.data_format = dformat;
 
@@ -1468,7 +1526,6 @@ void SegyIO::scanBinaryHeader() {
   m_metaInfo.trace_sorting_code =
       swap_endian(binary_header->trace_sorting_code);
 }
-
 
 void SegyIO::write_textual_header(char *dst, const std::string &segy_out_name,
                                   const std::vector<std::string> &custom_info) {
@@ -1532,7 +1589,10 @@ void SegyIO::write_trace_header(char *dst, TraceHeader *trace_header,
 
 void SegyIO::read_all_fast(float *dst) {
   if (m_metaInfo.data_format == 4) {
-    throw std::runtime_error(fmt::format("Don't support this data format {} now. So cigsegy cannot load the file.\n", m_metaInfo.data_format));
+    throw std::runtime_error(
+        fmt::format("Don't support this data format {} now. So cigsegy cannot "
+                    "load the file.\n",
+                    m_metaInfo.data_format));
   }
 
   int sizeX = m_metaInfo.sizeX;
@@ -1562,21 +1622,21 @@ void SegyIO::read_all_fast(float *dst) {
 
     if (m_lineInfo[iZ].count == m_metaInfo.sizeY) {
       for (int iY = 0; iY < sizeY; iY++) {
-        convert2np(dstline + iY * sizeX, // dst
+        convert2np(dstline + iY * sizeX,                         // dst
                    srcline + iY * trace_size + kTraceHeaderSize, // src
-                   sizeX, // size
-                   m_metaInfo.data_format); // dformat
+                   sizeX,                                        // size
+                   m_metaInfo.data_format);                      // dformat
       }
     } else {
       for (int it = 0; it < m_lineInfo[iZ].count; it++) {
-        int xl = getCrossline(srcline + it * trace_size, m_metaInfo.crossline_field);
+        int xl =
+            getCrossline(srcline + it * trace_size, m_metaInfo.crossline_field);
         xl = (xl - m_metaInfo.min_crossline) / m_metaInfo.crossline_step;
 
         // xl is the index in a dst line (from 0 - sizeY)
-        // it is the index in a src line (from 0 - count) 
-        convert2np(dstline + xl * sizeX, 
-                   srcline + it * trace_size + kTraceHeaderSize, 
-                   sizeX, 
+        // it is the index in a src line (from 0 - count)
+        convert2np(dstline + xl * sizeX,
+                   srcline + it * trace_size + kTraceHeaderSize, sizeX,
                    m_metaInfo.data_format);
       }
     }
@@ -1703,8 +1763,9 @@ void create_by_sharing_header(const std::string &segy_name,
       throw std::runtime_error("size_{src} + offset > size_{header}");
     }
 
-    int max_size = kTextualHeaderSize + kBinaryHeaderSize +
-                   (kTraceHeaderSize + sizeX * meta_info.esize) * (sizeY * sizeZ);
+    int max_size =
+        kTextualHeaderSize + kBinaryHeaderSize +
+        (kTraceHeaderSize + sizeX * meta_info.esize) * (sizeY * sizeZ);
     std::vector<char> outsegy(max_size, 0);
     char *outptr = outsegy.data();
     int start_time =
@@ -1793,17 +1854,21 @@ void load_prestack3D(float *dst, const std::string &segy_name, int sizeX,
     throw std::runtime_error("Cannot mmap segy file");
   }
   const char *src = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
-  int data_format = swap_endian<int16_t>(m_source.data() + kTextualHeaderSize + 24);
+  int data_format =
+      swap_endian<int16_t>(m_source.data() + kTextualHeaderSize + 24);
 
   int esize = 4;
   auto it = kElementSize.find(data_format);
   if (it != kElementSize.end()) {
     esize = it->second;
   } else {
-    throw std::runtime_error(fmt::format("Unknown data format {}.\n", data_format));
+    throw std::runtime_error(
+        fmt::format("Unknown data format {}.\n", data_format));
   }
   if (data_format == 4) {
-    fmt::print("Don't support this data format {} now. \nSo cigsegy just can be used to scan the file, cannot load the file.\n", data_format);
+    fmt::print("Don't support this data format {} now. \nSo cigsegy just can "
+               "be used to scan the file, cannot load the file.\n",
+               data_format);
   }
 
   int trace_size = kTraceHeaderSize + sizeX * esize;
@@ -1843,7 +1908,8 @@ void load_prestack3D(float *dst, const std::string &segy_name, int sizeX,
           //   }
           // }
 
-          convert2np(dst, src + trace_idx * trace_size + kTraceHeaderSize, sizeX, data_format);
+          convert2np(dst, src + trace_idx * trace_size + kTraceHeaderSize,
+                     sizeX, data_format);
 
           trace_idx++;
         } else {

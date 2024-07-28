@@ -472,6 +472,12 @@ class Pysegy():
         """
 
     @property
+    def nt(self) -> int:
+        """
+        get dimension nt
+        """
+
+    @property
     def is_crossline_fast_order(self) -> bool:
         """
         The fast order is crossline order or not

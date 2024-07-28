@@ -8,8 +8,9 @@
 import warnings
 import numpy as np
 from typing import List, Tuple, Dict, Union
-from .cigsegy import (Pysegy, fromfile, tofile, create_by_sharing_header, # type: ignore
-                      _load_prestack3D, kBinaryHeaderHelp, kTraceHeaderHelp)
+from .cigsegy import (  # type: ignore
+    Pysegy, fromfile, fromfile_without_scan, tofile, create_by_sharing_header,
+    _load_prestack3D, kBinaryHeaderHelp, kTraceHeaderHelp)
 from . import utils
 
 
@@ -132,12 +133,12 @@ def textual_header(segy_name: str, coding: str = None) -> None:
 
 
 def metaInfo(segy_name: str,
-             iline: int = 189,
-             xline: int = 193,
-             istep: int = 1,
-             xstep: int = 1,
-             xloc: int = 73,
-             yloc: int = 77,
+             iline: int = None,
+             xline: int = None,
+             istep: int = None,
+             xstep: int = None,
+             xloc: int = None,
+             yloc: int = None,
              use_guess: bool = False) -> None:
     """
     print meta info of `segy_name` file
@@ -156,11 +157,16 @@ def metaInfo(segy_name: str,
         cdp x (real world) value location in trace header
     yloc : int
         cdp y (real world) value location in trace header
-    use_guess : bool
-        if iline/xline/istep/xstep are unknow, you can set use_guess = True to guess them
     """
     if use_guess:
-        [iline, xline, istep, xstep, xloc, yloc] = utils.guess(segy_name)[0]
+        warnings.warn(
+            "The 'use_guess' parameter is deprecated and will be removed in a future version. "
+            "cigsegy will automatically guess a parameter when it is `None`.",
+            DeprecationWarning,
+            stacklevel=2)
+
+    [iline, xline, istep, xstep, xloc,
+     yloc] = utils.guess(segy_name, iline, xline, istep, xstep, xloc, yloc)[0]
     segy = Pysegy(segy_name)
     segy.setInlineLocation(iline)
     segy.setCrosslineLocation(xline)
@@ -342,12 +348,12 @@ def read_header(segy: str, type, n=0, printstr=True):
 
 
 def get_metaInfo(segy_name: str,
-                 iline: int = 189,
-                 xline: int = 193,
-                 istep: int = 1,
-                 xstep: int = 1,
-                 xloc: int = 73,
-                 yloc: int = 77,
+                 iline: int = None,
+                 xline: int = None,
+                 istep: int = None,
+                 xstep: int = None,
+                 xloc: int = None,
+                 yloc: int = None,
                  use_guess: bool = False,
                  apply_scalar: bool = False) -> Dict:
     """
@@ -369,9 +375,6 @@ def get_metaInfo(segy_name: str,
         x (real world) value location in trace header
     yloc : int
         y (real world) value location in trace header
-    use_guess : bool
-        if iline/xline/istep/xstep are unknow, 
-            you can set use_guess = True to guess them
     apply_scalar : bool
         apply scalar to 'i-interval' and 'x-interval'
 
@@ -381,7 +384,15 @@ def get_metaInfo(segy_name: str,
         Dict of meta information 
     """
     if use_guess:
-        [iline, xline, istep, xstep, xloc, yloc] = utils.guess(segy_name)[0]
+        warnings.warn(
+            "The 'use_guess' parameter is deprecated and will be removed in a future version. "
+            "cigsegy will automatically guess a parameter when it is `None`.",
+            DeprecationWarning,
+            stacklevel=2)
+
+    [iline, xline, istep, xstep, xloc,
+     yloc] = utils.guess(segy_name, iline, xline, istep, xstep, xloc, yloc)[0]
+
     segy = Pysegy(segy_name)
     segy.setInlineLocation(iline)
     segy.setCrosslineLocation(xline)
@@ -566,7 +577,7 @@ def scan_prestack(segy: Union[str, Pysegy],
     ni = (ie - i0) // istep + 1
     nx = (xe - x0) // xstep + 1
     no = (oe - o0) // ostep + 1
-    nt = segyc.get_metaInfo().sizeX
+    nt = segyc.nt
 
     geom = {
         'shape': [ni, nx, no, nt],
@@ -631,3 +642,73 @@ def load_prestack3D(segy: str,
                            ostep, iline, xline, offset, fill)
 
     return out
+
+
+def scan_unsorted3D(
+    segy: Union[str, Pysegy],
+    iline: int,
+    xline: int,
+):
+    """
+    Scan an unsored 3D SEG-Y file and get the geometry
+    """
+    keys = utils.get_trace_keys(segy, [iline, xline])
+    i0 = keys[:, 0].min()
+    ie = keys[:, 0].max()
+    diff = np.diff(np.sort(keys[:, 0]))
+    diff = diff[diff != 0]
+    istep = diff.min()
+    if (ie - i0) % istep != 0:
+        raise RuntimeError(
+            "can not create geomtry (error when determine iline/istep)")
+
+    x0 = keys[:, 1].min()
+    xe = keys[:, 1].max()
+    diff = np.diff(np.sort(keys[:, 1]))
+    diff = diff[diff != 0]
+    xstep = diff.min()
+    if (xe - x0) % xstep != 0:
+        raise RuntimeError(
+            "can not create geomtry (error when determine xline/xstep)")
+
+    ni = int((ie - i0) // istep + 1)
+    nx = int((xe - x0) // xstep + 1)
+
+    if isinstance(segy, str):
+        nt = Pysegy(segy).nt
+    else:
+        nt = segy.nt
+
+    geom = {
+        'location': [iline, xline],
+        'shape': [ni, nx, nt],
+        'iline': dict(min_iline=i0, max_iline=ie, istep=istep),
+        'xline': dict(min_xline=x0, max_xline=xe, xstep=xstep),
+    }
+
+    return geom
+
+
+def load_unsorted3D(segy: str, geom: Dict = None):
+    """
+    using fromfile_without_scan to load unsorted 3D segy file
+    """
+    if geom is None:
+        raise ValueError(
+            "geom must be specified, call `scan_unsorted3D` to get geom")
+
+    try:
+        shape = geom['shape']
+        ni, nx = shape[:2]
+        iline, xline = geom['location']
+        il_min = geom['iline']['min_iline']
+        xl_min = geom['xline']['min_xline']
+        istep = geom['iline']['istep']
+        xstep = geom['xline']['xstep']
+    except Exception as e:
+        mesg = 'Invalid `geom`, you can call `cigsegy.tools.scan_unsorted3D` to scan the segy file and obtain a geom'
+
+        raise Exception(f"{mesg}: {e}") from e
+
+    return fromfile_without_scan(segy, ni, nx, il_min, xl_min, iline, xline,
+                                 istep, xstep)
