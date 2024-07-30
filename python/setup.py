@@ -11,14 +11,19 @@ try:
 except ImportError:
     bdist_wheel = None
 
+package_name = "cigsegy"
+version = "1.1.7"
+
 setup(
-    name='cigsegy',
-    version='1.1.7',
-    description=
-    'A tool for segy-format file reading and segy-format creating from binary file',
-    author='roger',
+    name=package_name,
+    version=version,
+    long_description=open('README.rst').read(),
+    long_description_content_type='text/x-rst',
+    author='Jintao Li',
     url='https://github.com/JintaoLee-Roger/cigsegy',
     license='MIT',
+    install_requires=['numpy'],
+    python_requires=">=3.6",
     cmdclass={'bdist_wheel': bdist_wheel},
     packages=find_packages(),
     package_data={'': ['*.so', '*.dylib', '*.pyd', '*.pyi']})

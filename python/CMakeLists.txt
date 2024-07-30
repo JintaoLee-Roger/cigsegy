@@ -14,6 +14,7 @@ message(${pyfiles})
 
 set(COPYRIGHT 
   ${CMAKE_SOURCE_DIR}/LICENSE
+  ${CMAKE_SOURCE_DIR}/README.rst
   ${CMAKE_SOURCE_DIR}/Attributions.md
   ${CMAKE_SOURCE_DIR}/python/setup.py)
 set(PYFILE
