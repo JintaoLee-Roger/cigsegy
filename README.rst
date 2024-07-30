@@ -141,14 +141,14 @@ There is often such a workflow:
     >>> from cigsegy import SegyNP
     >>> d = SegyNP('rogan.sgy', iline=9, xline=21)
     >>> d.shape # (ni, nx, nt), use as a numpy array, 3D geometry
-    >> sx = d[100] # the 100-th inline profile
-    >> sx = d[100:200] # return a 3D array with shape (100, nx, nt)
-    >> sx = d[:, 200, :] # the 200-th crossline profile
-    >> sx = d[:, :, 100] # the 100-th time slice, note, it may be slow if the file is large
-    >> sx.min(), sx.max() 
+    >>> sx = d[100] # the 100-th inline profile
+    >>> sx = d[100:200] # return a 3D array with shape (100, nx, nt)
+    >>> sx = d[:, 200, :] # the 200-th crossline profile
+    >>> sx = d[:, :, 100] # the 100-th time slice, note, it may be slow if the file is large
+    >>> sx.min(), sx.max() 
     # get the min and max value, but they are evaluated from a part of data, 
     # so they may not be the real min and max value
-    >> sx.trace_cout # get the number of traces for the file
+    >>> sx.trace_cout # get the number of traces for the file
 
 
 
