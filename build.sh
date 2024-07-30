@@ -55,18 +55,24 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   # done
   
   
-  rm -rf /share/thridpart/cigsegy/cigsegy*
-  rm -rf /share/thridpart/cigsegy/dist
-  rm -rf /share/thridpart/cigsegy/src
-  rm -rf /share/thridpart/cigsegy/python
-  rm /share/thridpart/cigsegy/setup.py
-  
+  rm -rf /share/thridpart/cigsegy
+  mkdir /share/thridpart/cigsegy
+
   cp -r /share/src /share/thridpart/cigsegy/
   cp -r /share/python /share/thridpart/cigsegy/
   cp -r /share/setup.py /share/thridpart/cigsegy/
-  
+  cp -r /share/README.rst /share/thridpart/cigsegy/
+  cp -r /share/thridpart/fmt_8/include /share/thridpart/cigsegy/
+  cp /share/LICENSE /share/thridpart/cigsegy/
+
+  echo "include LICENSE  
+  recursive-include python *.pyi *.py *.cpp  
+  recursive-include src *.h *.hpp *.cpp  
+  recursive-include include *.h *.hpp" > /share/thridpart/cigsegy/MANIFEST.in
+
   sed -i "s/fmt_root = ''/fmt_root = '.'/" /share/thridpart/cigsegy/setup.py
-  
+  sed -i "s/'numpy'/'numpy', 'pybind11'/g" /share/thridpart/cigsegy/setup.py
+
   cd /share/thridpart/cigsegy/
   python=/opt/_internal/cpython-3.11.9/bin/python3
   ${python} setup.py sdist
