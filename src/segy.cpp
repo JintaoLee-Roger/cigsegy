@@ -257,8 +257,7 @@ static int64_t copy_traces(const mio::mmap_source &header,
   progressbar bar(nbar);
 
   uint64_t trace_size = kTraceHeaderSize + sizeX * meta_info.esize;
-  uint64_t trace_size_ori =
-      kTraceHeaderSize + meta_info.sizeX * meta_info.esize;
+  uint64_t trace_size_ori = kTraceHeaderSize + meta_info.sizeX * meta_info.esize;
 
   // iz: numpy sub volume
   // izo: numpy full volume
@@ -1131,7 +1130,9 @@ void SegyIO::read(float *dst, int sizeY, int sizeZ, int minY, int minZ) {
                     m_metaInfo.data_format));
   }
 
-  int sizeX = m_metaInfo.sizeX;
+  int Ystep = m_metaInfo.crossline_step;
+  int Zstep = m_metaInfo.inline_step;
+  uint64_t sizeX = m_metaInfo.sizeX;
   int trace_count = m_metaInfo.trace_count;
   const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
@@ -1140,15 +1141,15 @@ void SegyIO::read(float *dst, int sizeY, int sizeZ, int minY, int minZ) {
 
     int il = getCrossline(source + i * trace_size, m_metaInfo.inline_field);
     int xl = getCrossline(source + i * trace_size, m_metaInfo.crossline_field);
-    il = il - minZ;
-    xl = xl - minY;
+    il = (il - minZ) / Zstep;
+    xl = (xl - minY) / Ystep;
 
     if (il < 0 || il >= sizeZ || xl < 0 || xl >= sizeY) {
       throw std::runtime_error("Index out of range");
     }
 
     float *dstl = dst + il * sizeY * sizeX + xl * sizeX;
-    convert2np(dstl, source + i * trace_size + kTraceHeaderSize, sizeX,
+    convert2np(dstl, source + i * trace_size + kTraceHeaderSize, (int)sizeX,
                m_metaInfo.data_format);
   }
 }
@@ -1273,8 +1274,7 @@ void SegyIO::cut(const std::string &outname, int startX, int endX, int startY,
   progressbar bar(nbar);
 
   uint64_t trace_size = kTraceHeaderSize + sizeX * m_metaInfo.esize;
-  uint64_t trace_size_ori =
-      kTraceHeaderSize + m_metaInfo.sizeX * m_metaInfo.esize;
+  uint64_t trace_size_ori = kTraceHeaderSize + m_metaInfo.sizeX * m_metaInfo.esize;
   tmp.resize(trace_size);
   tmp.assign(trace_size, 0);
   int tracecount = 0;
@@ -1670,25 +1670,6 @@ void tofile(const std::string &segy_name, const std::string &out_name,
   segy_data.close_file();
 }
 
-void read_ignore_header(const std::string &segy_name, float *dst, int sizeX,
-                        int sizeY, int sizeZ, int format) {
-  SegyIO segy_data(segy_name);
-  segy_data.setDataFormatCode(format);
-  segy_data.set_size(sizeX, sizeY, sizeZ);
-  segy_data.read(dst, 0, sizeX, 0, sizeY, 0, sizeZ);
-  segy_data.close_file();
-}
-
-void tofile_ignore_header(const std::string &segy_name,
-                          const std::string &out_name, int sizeX, int sizeY,
-                          int sizeZ, int format) {
-  SegyIO segy_data(segy_name);
-  segy_data.setDataFormatCode(format);
-  segy_data.set_size(sizeX, sizeY, sizeZ);
-  segy_data.tofile(out_name);
-  segy_data.close_file();
-}
-
 void create_by_sharing_header(const std::string &segy_name,
                               const std::string &header_segy, const float *src,
                               int sizeX, int sizeY, int sizeZ, int iline,
@@ -1724,7 +1705,7 @@ void create_by_sharing_header(const std::string &segy_name,
 
     uint64_t need_size =
         kTextualHeaderSize + kBinaryHeaderSize +
-        trace_count * (sizeX * meta_info.esize + kTraceHeaderSize);
+        (uint64_t)trace_count * (sizeX * meta_info.esize + kTraceHeaderSize);
     std::ofstream ffst(segy_name, std::ios::binary);
     if (!ffst) {
       throw std::runtime_error("create file failed");
@@ -1763,9 +1744,7 @@ void create_by_sharing_header(const std::string &segy_name,
       throw std::runtime_error("size_{src} + offset > size_{header}");
     }
 
-    int max_size =
-        kTextualHeaderSize + kBinaryHeaderSize +
-        (kTraceHeaderSize + sizeX * meta_info.esize) * (sizeY * sizeZ);
+    uint64_t max_size = kTextualHeaderSize + kBinaryHeaderSize + (uint64_t)(kTraceHeaderSize + sizeX * meta_info.esize) * (sizeY * sizeZ);
     std::vector<char> outsegy(max_size, 0);
     char *outptr = outsegy.data();
     int start_time =
@@ -1795,7 +1774,7 @@ void create_by_sharing_header(const std::string &segy_name,
     int16ptr = nullptr;
     outptr += kBinaryHeaderSize;
 
-    int64_t size =
+    uint64_t size =
         copy_traces(m_source, line_info, meta_info, src, outptr, sizeX, sizeY,
                     sizeZ, offsetX, offsetY, offsetZ, start_time);
 

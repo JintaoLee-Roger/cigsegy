@@ -204,13 +204,6 @@ void tofile(const std::string &segy_name, const std::string &out_name,
             int iline = kDefaultInlineField, int xline = kDefaultCrosslineField,
             int istep = 1, int xstep = 1);
 
-void read_ignore_header(const std::string &segy_name, float *dst, int sizeX,
-                        int sizeY, int sizeZ, int format = 5);
-
-void tofile_ignore_header(const std::string &segy_name,
-                          const std::string &out_name, int sizeX, int sizeY,
-                          int sizeZ, int format = 5);
-
 void create_by_sharing_header(
     const std::string &segy_name, const std::string &header_segy,
     const float *src, int sizeX, int sizeY, int sizeZ, int iline = 189,

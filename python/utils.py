@@ -5,6 +5,7 @@
 #
 # github: https://github.com/JintaoLee-Roger
 
+from pathlib import Path
 import sys
 import struct
 import numpy as np
@@ -49,8 +50,8 @@ def get_trace_keys(segy: Union[str, Pysegy],
         assert keyloc.ndm == 1
     assert isinstance(keyloc, List) or isinstance(keyloc, np.ndarray)
 
-    if isinstance(segy, str):
-        segyc = Pysegy(segy)
+    if isinstance(segy, Union[str, Path]):
+        segyc = Pysegy(str(segy))
     else:
         segyc = segy
 
@@ -110,7 +111,7 @@ def get_trace_keys(segy: Union[str, Pysegy],
                 v = struct.unpack(upstr, struct.pack(f'{l}B', *sub))[0]
                 out.append(v)
 
-    if isinstance(segy, str):
+    if isinstance(segy, Union[str, Path]):
         segyc.close_file()
 
     out = np.array(out)
@@ -160,8 +161,8 @@ def get_trace_keys2(segy: Union[str, Pysegy],
         assert keyloc.ndm == 1
     assert isinstance(keyloc, List) or isinstance(keyloc, np.ndarray)
 
-    if isinstance(segy, str):
-        segyc = Pysegy(segy)
+    if isinstance(segy, Union[str, Path]):
+        segyc = Pysegy(str(segy))
     else:
         segyc = segy
 
@@ -192,7 +193,7 @@ def get_trace_keys2(segy: Union[str, Pysegy],
     print(keyloc, length, beg, end)
     out = segyc.get_trace_keys(keyloc, length, beg, end)
 
-    if isinstance(segy, str):
+    if isinstance(segy, Union[str, Path]):
         segyc.close_file()
 
     if len(keyloc) == 1:
@@ -374,8 +375,8 @@ def guess(segy_name: Union[str, Pysegy],
         locations, [loc1, loc2, ...], all possible loctaions,
           each location is like: [iline, xline, istep, xstep]
     """
-    if isinstance(segy_name, str):
-        segy = Pysegy(segy_name)
+    if isinstance(segy_name, Union[str, Path]):
+        segy = Pysegy(str(segy_name))
     elif isinstance(segy_name, Pysegy):
         segy = segy_name
     else:
@@ -413,7 +414,7 @@ def guess(segy_name: Union[str, Pysegy],
     for i in range(len(iselect)):
         for x in range(len(xselect)):
             try:
-                s = Pysegy(segy_name)
+                s = Pysegy(str(segy_name))
                 s.setInlineLocation(iselect[i])
                 s.setCrosslineLocation(xselect[x])
                 s.setSteps(isteps[i], xsteps[x])
@@ -427,10 +428,10 @@ def guess(segy_name: Union[str, Pysegy],
         raise RuntimeError("cannot define the geometry through the location and steps")
 
     if xloc is None or yloc is None:
-        s = Pysegy(segy_name)
-        s.setInlineLocation(out[0][i])
-        s.setCrosslineLocation(out[0][x])
-        s.setSteps(out[0][i], out[0][x])
+        s = Pysegy(str(segy_name))
+        s.setInlineLocation(out[0][0])
+        s.setCrosslineLocation(out[0][1])
+        s.setSteps(out[0][2], out[0][3])
         s.setXLocation(181)
         s.setYLocation(185)
         s.scan()

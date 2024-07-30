@@ -6,10 +6,7 @@ import numpy
 
 _Shape = typing.Tuple[int, ...]
 
-__all__ = [
-    "Pysegy", "fromfile", "fromfile_ignore_header", "tofile",
-    "tofile_ignore_header", "create_by_sharing_header"
-]
+__all__ = ["Pysegy", "fromfile", "tofile", "create_by_sharing_header"]
 
 kBinaryHeaderHelp: Dict[int, Tuple[str, int]]  # binary header help
 
@@ -182,6 +179,17 @@ class Pysegy():
         """ 
         read a volume with index, the volume size is 
         [startZ:endZ, startY:endY, startX:endX]
+
+        Returns
+        -------
+        numpy.ndarray
+            data, 3D array
+        """
+
+    @typing.overload
+    def read(self, sizeY: int, sizeZ: int, minY: int, minZ: int) -> numpy.ndarray[numpy.float32]:
+        """ 
+        read without scanning
 
         Returns
         -------
@@ -539,10 +547,7 @@ class Pysegy():
             240 + sizeX * 4 elements
         """
 
-    def get_trace_keys(self,
-                       keys: List,
-                       length: List,
-                       beg: int,
+    def get_trace_keys(self, keys: List, length: List, beg: int,
                        end: int) -> numpy.ndarray[numpy.int32]:
         """
         get the trace keys from beg to end
@@ -603,34 +608,6 @@ def fromfile(segy_name: str,
     -------
     numpy.ndarray :
         shape as (n-inline, n-crossline, n-time)
-    """
-
-
-def fromfile_ignore_header(segy_name: str,
-                           sizeZ: int,
-                           sizeY: int,
-                           sizeX: int,
-                           format: int = 5) -> numpy.ndarray[numpy.float32]:
-    """
-    reading by ignoring segy headers and specifing the volume shape
-
-    Parameters
-    ----------
-    segy_name : str
-        the input segy file
-    sizeZ : int
-        number of inline
-    sizeY : int 
-        number of crossline
-    sizeX : int
-        number of samples per trace
-    format : {1, 5}, optional
-        the data format code, 1 for 4 bytes IBM float, 5 for 4 bytes IEEE float
-
-    Returns
-    -------
-    numpy.ndarray :
-        shape as (sizeZ, sizeY, sizeX)
     """
 
 
@@ -697,33 +674,6 @@ def tofile(segy_name: str,
         the step of inline numbers
     xstep : int
         the step of crossline numbers
-    """
-
-
-def tofile_ignore_header(segy_name: str,
-                         out_name: str,
-                         sizeX: int,
-                         sizeY: int,
-                         sizeZ: int,
-                         format: int = 5) -> None:
-    """
-    convert a segy file to a binary file by ignoring segy header 
-    and specifing the volume shape.
-
-    Parameters
-    ----------
-    segy_name : str
-        the input segy file name
-    out_name : str
-        the output binary file name
-    sizeZ : int
-        number of inline
-    sizeY : int
-        number of crossline
-    sizeX : int
-        number of samples per trace
-    format : {1, 5}, optional
-        the data format code, 1 for 4 bytes IBM float, 5 for 4 bytes IEEE float
     """
 
 

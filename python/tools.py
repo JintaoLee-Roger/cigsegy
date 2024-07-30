@@ -5,6 +5,7 @@
 #
 # github: https://github.com/JintaoLee-Roger
 
+from pathlib import Path
 import warnings
 import numpy as np
 from typing import List, Tuple, Dict, Union
@@ -39,7 +40,7 @@ def collect(segy_in: str,
     numpy.ndarray :
         its shape = (trace_count, n-time)
     """
-    segy = Pysegy(segy_in)
+    segy = Pysegy(str(segy_in))
     d = segy.collect(beg, end)
     segy.close_file()
     return d
@@ -84,10 +85,10 @@ def create(segy_out: str,
     custom_info : List[str]
         textual header info by user custom, max: 12 rows each row is less than 76 chars
     """
-    if isinstance(binary_in, str):
+    if isinstance(binary_in, Union[str, Path]):
         assert shape is not None
         assert len(shape) == 3
-        segy_create = Pysegy(binary_in, shape[2], shape[1], shape[0])
+        segy_create = Pysegy(str(binary_in), shape[2], shape[1], shape[0])
     elif isinstance(binary_in, np.ndarray):
         assert len(binary_in.shape) == 3
         sizeZ, sizeY, sizeX = binary_in.shape
@@ -102,10 +103,10 @@ def create(segy_out: str,
     segy_create.setCrosslineInterval(xline_interval)
     segy_create.setMinInline(min_iline)
     segy_create.setMinCrossline(min_xline)
-    if isinstance(binary_in, str):
-        segy_create.create(segy_out, custom_info)
+    if isinstance(binary_in, Union[str, Path]):
+        segy_create.create(str(segy_out), custom_info)
     else:
-        segy_create.create(segy_out, binary_in, custom_info)
+        segy_create.create(str(segy_out), binary_in, custom_info)
 
 
 def textual_header(segy_name: str, coding: str = None) -> None:
@@ -127,7 +128,7 @@ def textual_header(segy_name: str, coding: str = None) -> None:
                 f"but your input is `coding='{coding}'`")
 
     coding = 'u' if coding is None else coding
-    segy = Pysegy(segy_name)
+    segy = Pysegy(str(segy_name))
     print(segy.textual_header(coding))
     segy.close_file()
 
@@ -167,7 +168,7 @@ def metaInfo(segy_name: str,
 
     [iline, xline, istep, xstep, xloc,
      yloc] = utils.guess(segy_name, iline, xline, istep, xstep, xloc, yloc)[0]
-    segy = Pysegy(segy_name)
+    segy = Pysegy(str(segy_name))
     segy.setInlineLocation(iline)
     segy.setCrosslineLocation(xline)
     segy.setSteps(istep, xstep)
@@ -258,7 +259,7 @@ def create_by_sharing_header_guess(segy_name: str,
     custom_info : List[str]
         textual header info by user custom, max: 12 rows each row is less than 76 chars, use it when offset is not None
     """
-    if isinstance(src, str) and shape is None:
+    if isinstance(src, Union[str, Path]) and shape is None:
         raise ValueError("Shape is None!")
 
     loc = utils.guess(header_segy)
@@ -266,7 +267,7 @@ def create_by_sharing_header_guess(segy_name: str,
 
     for l in loc:
         try:
-            if isinstance(src, str):
+            if isinstance(src, Union[str, Path]):
                 create_by_sharing_header(segy_name,
                                          header_segy,
                                          src,
@@ -318,7 +319,7 @@ def read_header(segy: str, type, n=0, printstr=True):
     -------
     Dict or None
     """
-    segy = Pysegy(segy)
+    segy = Pysegy(str(segy))
 
     if type == 'bh':
         arr = segy.get_binary_header()
@@ -393,7 +394,7 @@ def get_metaInfo(segy_name: str,
     [iline, xline, istep, xstep, xloc,
      yloc] = utils.guess(segy_name, iline, xline, istep, xstep, xloc, yloc)[0]
 
-    segy = Pysegy(segy_name)
+    segy = Pysegy(str(segy_name))
     segy.setInlineLocation(iline)
     segy.setCrosslineLocation(xline)
     segy.setSteps(istep, xstep)
@@ -420,8 +421,8 @@ def trace_count(segy: Union[str, Pysegy]) -> int:
     int
         The total numbers of a segy file
     """
-    if isinstance(segy, str):
-        segy = Pysegy(segy)
+    if isinstance(segy, Union[str, Path]):
+        segy = Pysegy(str(segy))
         count = segy.trace_count
         segy.close_file()
         return count
@@ -448,8 +449,8 @@ def scan_prestack(segy: Union[str, Pysegy],
     --------
     geom : Dict
     """
-    if isinstance(segy, str):
-        segyc = Pysegy(segy)
+    if isinstance(segy, Union[str, Path]):
+        segyc = Pysegy(str(segy))
 
     if segyc.get_metaInfo().trace_sorting_code == 4:
         warnings.warn("trace sorting code is 4, this means the " +
@@ -586,7 +587,7 @@ def scan_prestack(segy: Union[str, Pysegy],
         'offset': dict(min_offset=o0, max_offset=oe, ostep=ostep),
     }
 
-    if isinstance(segy, str):
+    if isinstance(segy, Union[str, Path]):
         segyc.close_file()
 
     return geom
@@ -674,8 +675,8 @@ def scan_unsorted3D(
     ni = int((ie - i0) // istep + 1)
     nx = int((xe - x0) // xstep + 1)
 
-    if isinstance(segy, str):
-        nt = Pysegy(segy).nt
+    if isinstance(segy, Union[str, Path]):
+        nt = Pysegy(str(segy)).nt
     else:
         nt = segy.nt
 

@@ -33,9 +33,9 @@ class SegyNP:
         self.as_3d = not as_2d
         self.fname = filename
 
-        self.segy = Pysegy(filename)
+        self.segy = Pysegy(str(filename))
         if self.as_3d:
-            [iline, xline, istep, xstep, xloc, yloc] = utils.guess(filename, iline, xline, istep, xstep, 181, 185)
+            [iline, xline, istep, xstep, xloc, yloc] = utils.guess(filename, iline, xline, istep, xstep, 181, 185)[0]
             self.segy.setInlineLocation(iline)
             self.segy.setCrosslineLocation(xline)
             self.segy.setSteps(istep, xstep)
@@ -181,3 +181,11 @@ class SegyNP:
 
     def close(self) -> None:
         self.segy.close_file()
+
+    def __array__(self):
+        """To support np.array(SegyNP(xxx))"""
+        return self[...]
+        
+    def to_numpy(self):
+        """like pandas"""
+        return self[...]

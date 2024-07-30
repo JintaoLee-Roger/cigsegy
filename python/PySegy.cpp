@@ -324,16 +324,6 @@ void create_by_sharing_header(const std::string &segy_name,
   }
 }
 
-py::array_t<float> fromfile_ignore_header(const std::string &segy_name,
-                                          int sizeZ, int sizeY, int sizeX,
-                                          int format = 5) {
-  py::array_t<float> out({sizeZ, sizeY, sizeX});
-  auto buff = out.request();
-  float *ptr = static_cast<float *>(buff.ptr);
-  segy::read_ignore_header(segy_name, ptr, sizeX, sizeY, sizeZ, format);
-  return out;
-}
-
 py::array_t<float> fromfile(const std::string &segy_name, int iline = 189,
                             int xline = 193, int istep = 1, int xstep = 1) {
   Pysegy segy_data(segy_name);
@@ -599,10 +589,6 @@ PYBIND11_MODULE(cigsegy, m) {
       .def_property_readonly("trace_count", &Pysegy::trace_count)
       .def_property_readonly("nt", &Pysegy::nt);
 
-  m.def("fromfile_ignore_header", &fromfile_ignore_header,
-        "read by ignoring header and specify shape", py::arg("segy_name"),
-        py::arg("sizeZ"), py::arg("sizeY"), py::arg("sizeX"),
-        py::arg("format") = 5);
   m.def("fromfile", &fromfile, "read from a file", py::arg("segy_name"),
         py::arg("iline") = 189, py::arg("xline") = 193, py::arg("istep") = 1,
         py::arg("xstep") = 1);
@@ -610,10 +596,6 @@ PYBIND11_MODULE(cigsegy, m) {
         py::arg("segy_name"), py::arg("ni"), py::arg("nx"),
         py::arg("il_min"), py::arg("xl_min"), py::arg("iline") = 189,
         py::arg("xline") = 193, py::arg("istep") = 1, py::arg("xstep") = 1);
-  m.def("tofile_ignore_header", &segy::tofile_ignore_header,
-        "convert to binary file by ignoring header and specify shape",
-        py::arg("segy_name"), py::arg("out_name"), py::arg("sizeX"),
-        py::arg("sizeY"), py::arg("sizeZ"), py::arg("format") = 5);
   m.def("tofile", &segy::tofile, "convert to binary file", py::arg("segy_name"),
         py::arg("out_name"), py::arg("iline") = 189, py::arg("xline") = 193,
         py::arg("istep") = 1, py::arg("xstep") = 1);

@@ -1,5 +1,6 @@
 import numpy as np
 from typing import List, Tuple, Dict, Union
+from pathlib import Path
 from .cigsegy import Pysegy # type: ignore
 from . import utils
 from . import tools
@@ -48,10 +49,10 @@ def plot_region(segy: Union[str, Pysegy],
             segy.setYLocation(loc)[5]
             segy.scan()
         lineinfo = segy.get_lineInfo()
-    elif isinstance(segy, str):
+    elif isinstance(segy, Union[str, Path]):
         if loc is None:
-            loc = utils.guess(segy)[0]
-        segy = Pysegy(segy)
+            loc = utils.guess(str(segy))[0]
+        segy = Pysegy(str(segy))
         segy.setInlineLocation(loc[0])
         segy.setCrosslineLocation(loc[1])
         segy.setSteps(loc[2], loc[3])
