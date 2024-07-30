@@ -44,7 +44,7 @@ def plot_region(segy: Union[str, Pysegy],
             segy.setYLocation(loc)[5]
             segy.scan()
         lineinfo = segy.get_lineInfo()
-    elif isinstance(segy, Union[str, Path]):
+    elif isinstance(segy, (str, Path)):
         if loc is None:
             loc = utils.guess(str(segy))[0]
         segy = Pysegy(str(segy))

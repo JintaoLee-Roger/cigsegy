@@ -50,7 +50,7 @@ def get_trace_keys(segy: Union[str, Pysegy],
         assert keyloc.ndm == 1
     assert isinstance(keyloc, List) or isinstance(keyloc, np.ndarray)
 
-    if isinstance(segy, Union[str, Path]):
+    if isinstance(segy, (str, Path)):
         segyc = Pysegy(str(segy))
     else:
         segyc = segy
@@ -111,7 +111,7 @@ def get_trace_keys(segy: Union[str, Pysegy],
                 v = struct.unpack(upstr, struct.pack(f'{l}B', *sub))[0]
                 out.append(v)
 
-    if isinstance(segy, Union[str, Path]):
+    if isinstance(segy, (str, Path)):
         segyc.close_file()
 
     out = np.array(out)
@@ -161,7 +161,7 @@ def get_trace_keys2(segy: Union[str, Pysegy],
         assert keyloc.ndm == 1
     assert isinstance(keyloc, List) or isinstance(keyloc, np.ndarray)
 
-    if isinstance(segy, Union[str, Path]):
+    if isinstance(segy, (str, Path)):
         segyc = Pysegy(str(segy))
     else:
         segyc = segy
@@ -193,7 +193,7 @@ def get_trace_keys2(segy: Union[str, Pysegy],
     print(keyloc, length, beg, end)
     out = segyc.get_trace_keys(keyloc, length, beg, end)
 
-    if isinstance(segy, Union[str, Path]):
+    if isinstance(segy, (str, Path)):
         segyc.close_file()
 
     if len(keyloc) == 1:
@@ -375,7 +375,7 @@ def guess(segy_name: Union[str, Pysegy],
         locations, [loc1, loc2, ...], all possible loctaions,
           each location is like: [iline, xline, istep, xstep]
     """
-    if isinstance(segy_name, Union[str, Path]):
+    if isinstance(segy_name, (str, Path)):
         segy = Pysegy(str(segy_name))
     elif isinstance(segy_name, Pysegy):
         segy = segy_name

@@ -17,7 +17,7 @@ from . import utils
 
 def collect(segy_in: str,
             beg: int = -1,
-            end: int = 0) -> np.ndarray[np.float32]:
+            end: int = 0) -> np.ndarray:
     """
     collect traces as a 2D data from the `segy_in` file in
     range of [beg, end), beg < 0 means collect all traces,
@@ -85,7 +85,7 @@ def create(segy_out: str,
     custom_info : List[str]
         textual header info by user custom, max: 12 rows each row is less than 76 chars
     """
-    if isinstance(binary_in, Union[str, Path]):
+    if isinstance(binary_in, (str, Path)):
         assert shape is not None
         assert len(shape) == 3
         segy_create = Pysegy(str(binary_in), shape[2], shape[1], shape[0])
@@ -103,7 +103,7 @@ def create(segy_out: str,
     segy_create.setCrosslineInterval(xline_interval)
     segy_create.setMinInline(min_iline)
     segy_create.setMinCrossline(min_xline)
-    if isinstance(binary_in, Union[str, Path]):
+    if isinstance(binary_in, (str, Path)):
         segy_create.create(str(segy_out), custom_info)
     else:
         segy_create.create(str(segy_out), binary_in, custom_info)
@@ -259,7 +259,7 @@ def create_by_sharing_header_guess(segy_name: str,
     custom_info : List[str]
         textual header info by user custom, max: 12 rows each row is less than 76 chars, use it when offset is not None
     """
-    if isinstance(src, Union[str, Path]) and shape is None:
+    if isinstance(src, (str, Path)) and shape is None:
         raise ValueError("Shape is None!")
 
     loc = utils.guess(header_segy)
@@ -267,7 +267,7 @@ def create_by_sharing_header_guess(segy_name: str,
 
     for l in loc:
         try:
-            if isinstance(src, Union[str, Path]):
+            if isinstance(src, (str, Path)):
                 create_by_sharing_header(segy_name,
                                          header_segy,
                                          src,
@@ -421,7 +421,7 @@ def trace_count(segy: Union[str, Pysegy]) -> int:
     int
         The total numbers of a segy file
     """
-    if isinstance(segy, Union[str, Path]):
+    if isinstance(segy, (str, Path)):
         segy = Pysegy(str(segy))
         count = segy.trace_count
         segy.close_file()
@@ -449,7 +449,7 @@ def scan_prestack(segy: Union[str, Pysegy],
     --------
     geom : Dict
     """
-    if isinstance(segy, Union[str, Path]):
+    if isinstance(segy, (str, Path)):
         segyc = Pysegy(str(segy))
 
     if segyc.get_metaInfo().trace_sorting_code == 4:
@@ -587,7 +587,7 @@ def scan_prestack(segy: Union[str, Pysegy],
         'offset': dict(min_offset=o0, max_offset=oe, ostep=ostep),
     }
 
-    if isinstance(segy, Union[str, Path]):
+    if isinstance(segy, (str, Path)):
         segyc.close_file()
 
     return geom
@@ -675,7 +675,7 @@ def scan_unsorted3D(
     ni = int((ie - i0) // istep + 1)
     nx = int((xe - x0) // xstep + 1)
 
-    if isinstance(segy, Union[str, Path]):
+    if isinstance(segy, (str, Path)):
         nt = Pysegy(str(segy)).nt
     else:
         nt = segy.nt
