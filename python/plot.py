@@ -4,12 +4,7 @@ from pathlib import Path
 from .cigsegy import Pysegy # type: ignore
 from . import utils
 from . import tools
-
-try:
-    import matplotlib.pyplot as plt
-except:
-    raise ImportError("`cigsegy.plot` depends on `matplotlib`, " +
-                      "run `pip install matplotlib` to install") # HACK: remove?
+import matplotlib.pyplot as plt
 
 
 def plot_region(segy: Union[str, Pysegy],
