@@ -270,8 +270,7 @@ static int64_t copy_traces(const mio::mmap_source &header,
 
     int izo = iz + offsetZ;
 
-    if (line_info[izo].count ==
-        0) { // TODO: 处理一下line missing的情况，并处理最后的判断条件
+    if (line_info[izo].count == 0) {
       continue;
     }
 
@@ -316,15 +315,6 @@ static int64_t copy_traces(const mio::mmap_source &header,
         outptr += kTraceHeaderSize;
 
         // copy data
-        // memcpy(outptr, srcopy + iy * sizeX, sizeX * sizeof(float));
-        // float *floatptr = reinterpret_cast<float *>(outptr);
-        // for (int ix = 0; ix < sizeX; ix++) {
-        //   if (meta_info.data_format == 1) {
-        //     floatptr[ix] = ieee_to_ibm(floatptr[ix], true);
-        //   }
-        //   floatptr[ix] = swap_endian(floatptr[ix]);
-        // }
-        // floatptr = nullptr;
         float2sgy(outptr, srcopy + iy * sizeX, sizeX, meta_info.data_format);
         outptr += (sizeX * meta_info.esize);
       }
@@ -595,12 +585,6 @@ std::string SegyIO::metaInfo() {
                      : m_metaInfo.Z_interval / -m_metaInfo.scalar;
   }
 
-  // if (!is_crossline_fast) {
-  //   float t = Y_interval;
-  //   Y_interval = Z_interval;
-  //   Z_interval = t;
-  // }
-
   int sizeY, sizeZ, ifield, xfield, istart, iend, xstart, xend, istep, xstep;
   sizeY = m_metaInfo.sizeY;
   sizeZ = m_metaInfo.sizeZ;
@@ -683,14 +667,6 @@ void SegyIO::get_trace_full(int n, uchar *trace, bool raw) {
   } else {
     read_one_trace_header(trace, src);
     float *data = reinterpret_cast<float *>(trace + kTraceHeaderSize);
-    // memcpy(data, src + kTraceHeaderSize, m_metaInfo.sizeX *
-    // m_metaInfo.esize); for (int i = 0; i < m_metaInfo.sizeX; i++) {
-    //   if (m_metaInfo.data_format == 1) {
-    //     data[i] = ibm_to_ieee(data[i], true);
-    //   } else {
-    //     data[i] = swap_endian(data[i]);
-    //   }
-    // }
     convert2np(data, src + kTraceHeaderSize, m_metaInfo.sizeX,
                m_metaInfo.data_format);
   }
@@ -848,30 +824,28 @@ void SegyIO::scan() {
     m_lineInfo[i].count = 1;
     m_lineInfo[i].crossline_start = trace2.crossline_num;
 
-    // 判断需不需要更新最小的crossline
+    // Determine if the minimum crossline needs to be updated.
     if (trace2.crossline_num < m_metaInfo.min_crossline) {
       m_metaInfo.min_crossline = trace2.crossline_num;
     }
 
     itrace += jump;
 
-    // 结束时的处理
+    // process for ends
     if (itrace >= m_metaInfo.trace_count) {
       jump -= (itrace - m_metaInfo.trace_count + 1);
       itrace = m_metaInfo.trace_count - 1;
     }
 
-    // trace1 是上一条line的结束, trace2 是下一条line的开始
+    // trace1 is the end of the previous line, trace2 is the start of the next line
     _get_TraceInfo(itrace, trace2);
     _get_TraceInfo(itrace - 1, trace1);
 
-    if (trace2.inline_num ==
-        m_lineInfo[i].line_num) { // jump太小了, trace2没有跳出上一条line
+    // jump too small
+    if (trace2.inline_num == m_lineInfo[i].line_num) { 
       m_metaInfo.isNormalSegy = false;
-      while (trace2.inline_num <
-                 (m_lineInfo[i].line_num + m_metaInfo.inline_step) &&
-             itrace < m_metaInfo.trace_count) { // 将trace2往后移动,
-                                                // 直到trace2到达下一条line
+      while (trace2.inline_num < (m_lineInfo[i].line_num + m_metaInfo.inline_step) &&
+             itrace < m_metaInfo.trace_count) { 
         itrace++;
         jump++;
         if (jump > kMaxSizeOneDimemsion || itrace >= m_metaInfo.trace_count) {
@@ -880,15 +854,13 @@ void SegyIO::scan() {
               "'setInlineLocation(loc)'/'setCrosslineLocation(loc)' to set");
         }
         _get_TraceInfo(itrace, trace2);
-      } // trace2 跳出了上一条line, 到达下一条line
+      } 
       _get_TraceInfo(itrace - 1, trace1);
     }
 
-    else if (trace1.inline_num >
-             m_lineInfo[i].line_num) { // jump太大了, trace1也到达了下一条line
+    else if (trace1.inline_num > m_lineInfo[i].line_num) {
       m_metaInfo.isNormalSegy = false;
-      while (trace1.inline_num != m_lineInfo[i].line_num && itrace > 0 &&
-             jump > 0) { // 将trace1往前移动,直到返回上一条line
+      while (trace1.inline_num != m_lineInfo[i].line_num && itrace > 0 && jump > 0) {
         itrace--;
         jump--;
         if (jump <= 0 || itrace <= 0) {
@@ -902,23 +874,17 @@ void SegyIO::scan() {
       _get_TraceInfo(itrace, trace2);
     }
 
-    // TODO: 需要检查crossline_end是否一致
-    else if (trace2.inline_num ==
-                 (m_lineInfo[i].line_num + m_metaInfo.inline_step) &&
+    // for parallelogram
+    else if (trace2.inline_num == (m_lineInfo[i].line_num + m_metaInfo.inline_step) &&
              trace1.inline_num == m_lineInfo[i].line_num &&
              (trace2.crossline_num != m_lineInfo[i].crossline_start ||
-              trace1.crossline_num != (m_lineInfo[i].crossline_start +
-                                       m_metaInfo.sizeY))) { // 平行四边形的情况
+              trace1.crossline_num != (m_lineInfo[i].crossline_start + m_metaInfo.sizeY))) {
       m_metaInfo.isNormalSegy = false;
-      m_metaInfo.min_crossline =
-          std::min(m_metaInfo.min_crossline, trace2.crossline_num);
-      m_metaInfo.max_crossline =
-          std::max(m_metaInfo.max_crossline, trace1.crossline_num);
+      m_metaInfo.min_crossline = m_metaInfo.min_crossline < trace2.crossline_num ? m_metaInfo.min_crossline : trace2.crossline_num;
+      m_metaInfo.max_crossline = m_metaInfo.max_crossline > trace1.crossline_num ? m_metaInfo.max_crossline : trace1.crossline_num;
     }
 
-    m_metaInfo.sizeY = (m_metaInfo.max_crossline - m_metaInfo.min_crossline) /
-                           m_metaInfo.crossline_step +
-                       1;
+    m_metaInfo.sizeY = (m_metaInfo.max_crossline - m_metaInfo.min_crossline) / m_metaInfo.crossline_step + 1;
 
     if (trace2.inline_num > m_lineInfo[i].line_num &&
         trace1.inline_num == m_lineInfo[i].line_num) {
@@ -931,8 +897,6 @@ void SegyIO::scan() {
       throw std::runtime_error("Error, cannot analysis this segy file!");
     }
 
-    // TODO: 处理有缺失line的情况! 需要一个状态来衡量是istep导致的问题，还是
-    // line missing的情况
     if (trace2.inline_num > (m_lineInfo[i].line_num + m_metaInfo.inline_step)) {
       // skip? what state of m_lineInfo[i] represents the missing line?
       skip =
@@ -946,7 +910,7 @@ void SegyIO::scan() {
         throw std::runtime_error("Cannot analysis this segy file, "
                                  "may inline step != 1");
       }
-      old_skip = skip; // TODO: 有些问题, 比如多个同样的skip?
+      old_skip = skip; // TODO: need to be fixed for several same skips?
     }
   }
 
@@ -1075,17 +1039,6 @@ void SegyIO::read(float *dst, int startX, int endX, int startY, int endY,
            (getCrossline(sourceline + istart * trace_size,
                          m_metaInfo.crossline_field) ==
             (m_metaInfo.min_crossline + iY * m_metaInfo.crossline_step)))) {
-        // memcpy(dsttrace, sourceline + istart * trace_size + offset,
-        //        sizeX * m_metaInfo.esize);
-        // for (int iX = 0; iX < sizeX; iX++) {
-        //   if (m_metaInfo.data_format == 1) {
-        //     dsttrace[iX] = ibm_to_ieee(dsttrace[iX], true);
-        //   } else if (m_metaInfo.data_format == 5) {
-        //     dsttrace[iX] = swap_endian(dsttrace[iX]);
-        //   } else {
-        //     throw std::runtime_error("Unsuport sample format");
-        //   }
-        // }
         convert2np(dsttrace, sourceline + istart * trace_size + offset, sizeX,
                    m_metaInfo.data_format);
         istart++;
@@ -1288,7 +1241,6 @@ void SegyIO::cut(const std::string &outname, int startX, int endX, int startY,
     }
 
     int izo = iz + startZ;
-    // TODO: 同copy_traces，处理一下line missing的情况
     if (m_lineInfo[izo].count == 0) {
       continue;
     }
@@ -1438,13 +1390,6 @@ void SegyIO::create(const std::string &segy_out_name, const float *src,
       const float *srcline =
           src + static_cast<uint64_t>(iY) * m_metaInfo.sizeX +
           static_cast<uint64_t>(iZ) * m_metaInfo.sizeX * m_metaInfo.sizeY;
-      // memcpy(dstdata, srcline, m_metaInfo.sizeX * m_metaInfo.esize);
-      // for (int iX = 0; iX < m_metaInfo.sizeX; iX++) {
-      //   if (m_metaInfo.data_format == 1) {
-      //     dstdata[iX] = ieee_to_ibm(dstdata[iX], true);
-      //   }
-      //   dstdata[iX] = swap_endian(dstdata[iX]);
-      // }
       float2sgy(dstline + kTraceHeaderSize, srcline, m_metaInfo.sizeX,
                 m_metaInfo.data_format);
 
@@ -1874,19 +1819,6 @@ void load_prestack3D(float *dst, const std::string &segy_name, int sizeX,
                                       offset_field - 1);
 
         if (i == iline && j == xline && k == offset) {
-          // memcpy(dst, src + trace_idx * trace_size + kTraceHeaderSize,
-          //        sizeX * sizeof(float));
-
-          // for (int iX = 0; iX < sizeX; iX++) {
-          //   if (data_format == 1) {
-          //     dst[iX] = ibm_to_ieee(dst[iX], true);
-          //   } else if (data_format == 5) {
-          //     dst[iX] = swap_endian(dst[iX]);
-          //   } else {
-          //     throw std::runtime_error("Unsuport sample format");
-          //   }
-          // }
-
           convert2np(dst, src + trace_idx * trace_size + kTraceHeaderSize,
                      sizeX, data_format);
 
