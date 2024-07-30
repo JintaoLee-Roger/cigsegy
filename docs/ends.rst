@@ -18,8 +18,9 @@ Third part dependencies
 Limitations
 ###########
 
-- Only support 4 bytes IBM floating points and 4 bytes IEEE floating points
 - Don't support extended textual/trace file headers
+- Need to refine the unsorted file reading
+- Need more high performance functions to read/write prestack data
 
 
 Acknowledge

@@ -54,6 +54,7 @@ struct MetaInfo {
   int crossline_step = 1;
 
   int trace_sorting_code;
+  int esize=4;
 };
 
 struct LineInfo {
@@ -96,11 +97,11 @@ public:
   }
 
   int64_t trace_count();
+  int nt();
   void set_size(int x, int y, int z);
   MetaInfo get_metaInfo();
 
   inline std::vector<LineInfo> line_info() { return m_lineInfo; }
-  inline bool is_crossline_fast_order() { return is_crossline_fast; }
 
   // read segy
   void setInlineLocation(int loc);
@@ -128,6 +129,7 @@ public:
   void get_binary_header_full(uchar *binheader, bool raw = false);
   void get_trace_header_full(int n, uchar *traceheader, bool raw = false);
   void get_trace_full(int n, uchar *trace, bool raw = false);
+  void get_trace_keys_c(int *dst, const std::vector<int>& keys, const std::vector<int>& length, int beg, int end);
 
   void collect(float *data, int beg = -1, int end = 0);
 
@@ -136,20 +138,18 @@ public:
   void read(float *dst, int startX, int endX, int startY, int endY, int startZ,
             int endZ);
   void read(float *dst);
+  void read(float *dst, int sizeY, int sizeZ, int minY, int minZ); // for read unsorted
   void read_inline_slice(float *dst, int iZ);
   void read_cross_slice(float *dst, int iY);
   void read_time_slice(float *dst, int iX);
   void read_trace(float *dst, int iY, int iZ);
   void tofile(const std::string &binary_out_name);
-  void
-  cut(const std::string &outname, int startX, int endX, int startY, int endY,
+  void cut(const std::string &outname, int startX, int endX, int startY, int endY,
       int startZ, int endZ,
       const std::vector<std::string> &custom_info = std::vector<std::string>());
-  void
-  cut(const std::string &outname, int startY, int endY, int startZ, int endZ,
+  void cut(const std::string &outname, int startY, int endY, int startZ, int endZ,
       const std::vector<std::string> &custom_info = std::vector<std::string>());
-  void
-  cut(const std::string &outname, int startX, int endX,
+  void cut(const std::string &outname, int startX, int endX,
       const std::vector<std::string> &custom_info = std::vector<std::string>());
 
   // create
@@ -165,7 +165,6 @@ public:
 private:
   bool isReadSegy;
   bool isScan = false;
-  bool is_crossline_fast = true;
   mio::mmap_source m_source;
   mio::mmap_sink m_sink;
   std::vector<LineInfo> m_lineInfo;
@@ -173,7 +172,6 @@ private:
 
   void scanBinaryHeader();
   void initMetaInfo();
-  void check_order();
   void initTraceHeader(TraceHeader *trace_header);
   void write_textual_header(
       char *dst, const std::string &segy_out_name,
@@ -181,11 +179,12 @@ private:
   void write_binary_header(char *dst);
   void write_trace_header(char *dst, TraceHeader *trace_header, int32_t iY,
                           int32_t iZ, int32_t x, int32_t y);
+  void read_all_fast(float *dst);
 
   inline void _get_TraceInfo(uint64_t n, TraceInfo &tmetaInfo) {
     const char *field =
         m_source.data() + kTextualHeaderSize + kBinaryHeaderSize +
-        n * (kTraceHeaderSize + m_metaInfo.sizeX * sizeof(float));
+        n * (kTraceHeaderSize + m_metaInfo.sizeX * m_metaInfo.esize);
     tmetaInfo.inline_num =
         swap_endian<int32_t>(field + m_metaInfo.inline_field - 1);
     tmetaInfo.crossline_num =
@@ -204,13 +203,6 @@ void read(const std::string &segy_name, float *dst,
 void tofile(const std::string &segy_name, const std::string &out_name,
             int iline = kDefaultInlineField, int xline = kDefaultCrosslineField,
             int istep = 1, int xstep = 1);
-
-void read_ignore_header(const std::string &segy_name, float *dst, int sizeX,
-                        int sizeY, int sizeZ, int format = 5);
-
-void tofile_ignore_header(const std::string &segy_name,
-                          const std::string &out_name, int sizeX, int sizeY,
-                          int sizeZ, int format = 5);
 
 void create_by_sharing_header(
     const std::string &segy_name, const std::string &header_segy,
@@ -250,9 +242,10 @@ void modify_bin_key(const std::string &segy_name, int loc, T value) {
 template <typename T>
 void modify_trace_key(const std::string &segy_name, int loc, T value, int idx) {
   SegyIO segy_data(segy_name);
-  int sizeX = segy_data.get_metaInfo().sizeX;
+  int sizeX = segy_data.nt();
+  int esize = segy_data.get_metaInfo().esize;
   int tracecount = segy_data.trace_count();
-  int tracesize = sizeX * sizeof(float) + kTraceHeaderSize;
+  int tracesize = sizeX * esize + kTraceHeaderSize;
   segy_data.close_file();
   if (idx >= tracecount) {
     throw std::runtime_error(

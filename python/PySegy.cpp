@@ -28,16 +28,21 @@ public:
   using segy::SegyIO::read_time_slice;
   using segy::SegyIO::read_trace;
   using segy::SegyIO::SegyIO;
+  using segy::SegyIO::collect;
 
   py::array_t<int> get_lineInfo();
 
   py::array_t<uchar> get_binary_header(bool raw = false);
   py::array_t<uchar> get_trace_header(int n, bool raw = false);
   py::array_t<uchar> get_trace(int n, bool raw = false);
+  py::array_t<int> get_trace_keys(const py::list &keys, const py::list &length, int beg, int end);
+
+  py::array_t<float> collect(int beg = -1, int end = 0);
 
   py::array_t<float> read(int startZ, int endZ, int startY, int endY,
                           int startX, int endX);
   py::array_t<float> read();
+  py::array_t<float> read(int sizeY, int sizeZ, int minY, int minZ);
   py::array_t<float> read_inline_slice(int iZ);
   py::array_t<float> read_cross_slice(int iY);
   py::array_t<float> read_time_slice(int iX);
@@ -65,14 +70,6 @@ py::array_t<int> Pysegy::get_lineInfo() {
   py::array_t<int> out({n, 6});
   int *outptr = static_cast<int *>(out.request().ptr);
   memcpy(outptr, info.data(), sizeof(int) * 6 * n);
-  if (!is_crossline_fast_order()) {
-    std::cout
-        << "[Warining] As the fast order of your segy file "
-           "is inline order (default is crossline order). So the lineInfo "
-           "you obtained is seems as [crossline, inline_start, inline_end, "
-           "trace_start, trace_end, count]\n"
-        << std::endl;
-  }
   return out;
 }
 
@@ -92,10 +89,49 @@ py::array_t<uchar> Pysegy::get_trace_header(int n, bool raw) {
 
 py::array_t<uchar> Pysegy::get_trace(int n, bool raw) {
   int sizeX = shape(0);
-  py::array_t<uchar> out(segy::kTraceHeaderSize + sizeX * sizeof(float));
+  py::array_t<uchar> out(segy::kTraceHeaderSize + sizeX * sizeof(float)); // HACK: ?
   uchar *outptr = static_cast<uchar *>(out.request().ptr);
   get_trace_full(n, outptr, raw);
   return out;
+}
+
+py::array_t<int> Pysegy::get_trace_keys(const py::list &keys, const py::list &length, int beg, int end) {
+  auto keysvec = keys.cast<std::vector<int>>();
+  auto lengthvec = length.cast<std::vector<int>>();
+  int n1 = end - beg;
+  int n2 = keysvec.size();
+  py::array_t<int> out({n1, n2});
+  auto buff = out.request();
+  int *ptr = static_cast<int *>(buff.ptr);
+  get_trace_keys_c(ptr, keysvec, lengthvec, beg, end);
+  return out;
+}
+
+py::array_t<float> Pysegy::collect(int beg, int end) {
+  int need = 0;
+  if (beg < 0) {
+    need = trace_count();
+  } else {
+    if (end == 0) {
+      need = 1;
+    } else if (end < 0) {
+      need = trace_count() - beg;
+    } else {
+      need = end - beg;
+    }
+  }
+
+  if (need <= 0) {
+    throw std::runtime_error("Invalid input (end <= beg)");
+  }
+
+  auto data = py::array_t<float>({need, shape(0)});
+  auto buff = data.request();
+  float *ptr = static_cast<float *>(buff.ptr);
+
+  collect(ptr, beg, end);
+
+  return data;
 }
 
 // Be careful the order of the dimensions
@@ -130,6 +166,16 @@ py::array_t<float> Pysegy::read() {
   read(ptr);
   return out;
 }
+py::array_t<float> Pysegy::read(int sizeY, int sizeZ, int minY, int minZ) {
+  int nt = shape(0);
+  py::array_t<float> out({sizeZ, sizeY, nt});
+
+  auto buff = out.request();
+  float *ptr = static_cast<float *>(buff.ptr);
+  read(ptr, sizeY, sizeZ, minY, minZ);
+  return out;
+}
+
 py::array_t<float> Pysegy::read_inline_slice(int iZ) {
   py::array_t<float> out({shape(1), shape(0)});
   auto buff = out.request();
@@ -278,16 +324,6 @@ void create_by_sharing_header(const std::string &segy_name,
   }
 }
 
-py::array_t<float> fromfile_ignore_header(const std::string &segy_name,
-                                          int sizeZ, int sizeY, int sizeX,
-                                          int format = 5) {
-  py::array_t<float> out({sizeZ, sizeY, sizeX});
-  auto buff = out.request();
-  float *ptr = static_cast<float *>(buff.ptr);
-  segy::read_ignore_header(segy_name, ptr, sizeX, sizeY, sizeZ, format);
-  return out;
-}
-
 py::array_t<float> fromfile(const std::string &segy_name, int iline = 189,
                             int xline = 193, int istep = 1, int xstep = 1) {
   Pysegy segy_data(segy_name);
@@ -300,30 +336,16 @@ py::array_t<float> fromfile(const std::string &segy_name, int iline = 189,
   return out;
 }
 
-py::array_t<float> collect(const std::string &segy_in, int beg = -1,
-                           int end = 0) {
-  Pysegy segy(segy_in);
+py::array_t<float> fromfile_without_scan(const std::string &segy_name, int ni, int nx, 
+          int il_min, int xl_min, int iline = 189,
+          int xline = 193, int istep = 1, int xstep = 1) {
+  Pysegy segy_data(segy_name);
+  segy_data.setInlineLocation(iline);
+  segy_data.setCrosslineLocation(xline);
+  segy_data.setSteps(istep, xstep);
+  py::array_t<float> out = segy_data.read(nx, ni, xl_min, il_min);
 
-  int need = 0;
-  if (beg < 0) {
-    need = segy.trace_count();
-  } else {
-    if (end == 0) {
-      need = 1;
-    } else if (end < 0) {
-      need = segy.trace_count() - beg;
-    } else {
-      need = end - beg;
-    }
-  }
-
-  auto data = py::array_t<float>({need, segy.shape(0)});
-  auto buff = data.request();
-  float *ptr = static_cast<float *>(buff.ptr);
-
-  segy.collect(ptr, beg, end);
-
-  return data;
+  return out;
 }
 
 py::array_t<float> _load_prestack3D(const std::string &segy_name,
@@ -482,6 +504,7 @@ PYBIND11_MODULE(cigsegy, m) {
            py::arg("raw") = false)
       .def("get_trace", &Pysegy::get_trace, py::arg("n"),
            py::arg("raw") = false)
+      .def("get_trace_keys", &Pysegy::get_trace_keys, py::arg("leys"), py::arg("length"), py::arg("beg"), py::arg("end"))
       .def("setInlineLocation", &Pysegy::setInlineLocation, py::arg("iline"))
       .def("setCrosslineLocation", &Pysegy::setCrosslineLocation,
            py::arg("xline"))
@@ -493,13 +516,19 @@ PYBIND11_MODULE(cigsegy, m) {
       .def("setFillNoValue", &Pysegy::setFillNoValue, py::arg("fills"))
       .def("scan", &Pysegy::scan)
       .def("tofile", &Pysegy::tofile, py::arg("binary_out_name"))
+      .def("collect", overload_cast_<int, int>()(&Pysegy::collect), "Load traces from beg to end as a 2D array",
+          py::arg("beg") = -1, py::arg("end") = 0)
       .def("read", overload_cast_<>()(&Pysegy::read), "read hole volume")
       .def("read",
            overload_cast_<int, int, int, int, int, int>()(&Pysegy::read),
            "read with index", py::arg("startZ"), py::arg("endZ"),
            py::arg("startY"), py::arg("endY"), py::arg("startX"),
            py::arg("endX"))
-      .def("read_inline_slice",
+      .def("read",
+           overload_cast_<int, int, int, int>()(&Pysegy::read),
+           "read without scanning", py::arg("sizeY"), py::arg("sizeZ"),
+           py::arg("minY"), py::arg("minZ"))
+      .def("read_inline_slice", 
            overload_cast_<int>()(&Pysegy::read_inline_slice),
            "read inline slice", py::arg("iZ"))
       .def("read_cross_slice", overload_cast_<int>()(&Pysegy::read_cross_slice),
@@ -557,26 +586,19 @@ PYBIND11_MODULE(cigsegy, m) {
       .def("set_size", &Pysegy::set_size, py::arg("sizeX"), py::arg("sizeY"),
            py::arg("sizeZ"))
       .def("close_file", &Pysegy::close_file)
-      .def_property_readonly("is_crossline_fast_order",
-                             &Pysegy::is_crossline_fast_order)
-      .def_property_readonly("trace_count", &Pysegy::trace_count);
+      .def_property_readonly("trace_count", &Pysegy::trace_count)
+      .def_property_readonly("nt", &Pysegy::nt);
 
-  m.def("fromfile_ignore_header", &fromfile_ignore_header,
-        "read by ignoring header and specify shape", py::arg("segy_name"),
-        py::arg("sizeZ"), py::arg("sizeY"), py::arg("sizeX"),
-        py::arg("format") = 5);
   m.def("fromfile", &fromfile, "read from a file", py::arg("segy_name"),
         py::arg("iline") = 189, py::arg("xline") = 193, py::arg("istep") = 1,
         py::arg("xstep") = 1);
-  m.def("tofile_ignore_header", &segy::tofile_ignore_header,
-        "convert to binary file by ignoring header and specify shape",
-        py::arg("segy_name"), py::arg("out_name"), py::arg("sizeX"),
-        py::arg("sizeY"), py::arg("sizeZ"), py::arg("format") = 5);
+  m.def("fromfile_without_scan", &fromfile_without_scan, "read from a file without scanning",
+        py::arg("segy_name"), py::arg("ni"), py::arg("nx"),
+        py::arg("il_min"), py::arg("xl_min"), py::arg("iline") = 189,
+        py::arg("xline") = 193, py::arg("istep") = 1, py::arg("xstep") = 1);
   m.def("tofile", &segy::tofile, "convert to binary file", py::arg("segy_name"),
         py::arg("out_name"), py::arg("iline") = 189, py::arg("xline") = 193,
         py::arg("istep") = 1, py::arg("xstep") = 1);
-  m.def("collect", &collect, "colloct all trace (as 2D data)",
-        py::arg("segy_in"), py::arg("beg") = -1, py::arg("end") = 0);
   m.def("create_by_sharing_header",
         overload_cast_<const std::string &, const std::string &,
                        const npfloat &, int, int, int, int, const py::object &,
@@ -640,5 +662,6 @@ PYBIND11_MODULE(cigsegy, m) {
       .def_readwrite("Y_field", &segy::MetaInfo::Y_field)
       .def_readwrite("inline_step", &segy::MetaInfo::inline_step)
       .def_readwrite("crossline_step", &segy::MetaInfo::crossline_step)
-      .def_readwrite("trace_sorting_code", &segy::MetaInfo::trace_sorting_code);
+      .def_readwrite("trace_sorting_code", &segy::MetaInfo::trace_sorting_code)
+      .def_readwrite("esize", &segy::MetaInfo::esize);
 }

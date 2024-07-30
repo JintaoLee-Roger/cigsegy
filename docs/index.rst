@@ -28,6 +28,7 @@
 
    core/headers
    core/post
+   core/SegyNP
    core/pre
    core/create
 
@@ -43,7 +44,6 @@
    :maxdepth: 2
 
    cli
-   comparison
    ends
 
 

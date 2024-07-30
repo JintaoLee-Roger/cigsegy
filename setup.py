@@ -1,9 +1,16 @@
 import os, sys
 import subprocess
-
 from pathlib import Path
 
-from pybind11.setup_helpers import Pybind11Extension, build_ext
+def install_package(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+try:
+    from pybind11.setup_helpers import Pybind11Extension, build_ext
+except ImportError:
+    install_package("pybind11")
+    from pybind11.setup_helpers import Pybind11Extension, build_ext
+
 from setuptools import setup
 from distutils.ccompiler import get_default_compiler
 
@@ -65,12 +72,12 @@ def get_extensions():
 setup(
     name=package_name,
     version=version,
-    description=
-    'A tool for segy-format file reading and segy-format creating from binary file',
-    author='roger',
+    long_description=open('README.rst').read(),
+    long_description_content_type='text/x-rst',
+    author='Jintao Li',
     url='https://github.com/JintaoLee-Roger/cigsegy',
     license='MIT',
-    # install_requires=['numpy'],
+    install_requires=['numpy'],
     python_requires=">=3.6",
     ext_modules=get_extensions(),
     cmdclass={"build_ext": build_ext},

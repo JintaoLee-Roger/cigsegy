@@ -38,12 +38,17 @@ location, inline/crossline step, cdp x/y location, ... See :ref:`textual_header`
 
 
 In some SEG-Y files, we cannot get useful information from textual header, i.e., 
-don't know iline/xline/istep/xstep. We can enter ``use_guess=True`` to guess 
-the locations and steps of inline and crossline:
+don't know iline/xline/istep/xstep. You can just ignore them, and cigsegy 
+will automatically guess the locations and steps of inline and crossline.
+
+.. Note::
+
+    For the previous version, you may need to set ``use_guess=True``. For the lasted version,
+    you don't need do this, just ignore them.
 
 .. code-block:: python
 
-    >>> cigsegy.metaInfo('rogan.sgy', use_guess=True)
+    >>> cigsegy.metaInfo('rogan.sgy', 189, 193) # ignore istep and xstep
     # In python, the shape is (n-inline, n-crossline, n-time) = (663, 769, 1001).
 
     # shape: (n-time, n-crossline, n-inline) = (1001, 769, 663)
@@ -59,7 +64,7 @@ To get the meta information in ``dict`` format, use ``cigsegy.tools.get_metaInfo
 
 .. code-block:: python
 
-    >>> meta = cigsegy.tools.get_metaInfo('rogan.sgy', use_guess=True)
+    >>> meta = cigsegy.tools.get_metaInfo('rogan.sgy')
     >>> print(meta)
     # {'nt': 1001, 'nx': 769, 'ni': 663, 'trace_count': 380762, 
     # 'dt': 4000, 'dtype': '>4f-ibm', 'scalar': 1, 'i-interval': 35.01677322387695, 
@@ -71,7 +76,8 @@ To get the meta information in ``dict`` format, use ``cigsegy.tools.get_metaInfo
 
 .. Note::
 
-    You can use ``cigsegy.tools.trace_count('rogan.sgy')`` to get the trace number.
+    You can use ``cigsegy.tools.trace_count('rogan.sgy')`` to get the trace number,
+    and use ``cigsegy.tools.nt('rogan.sgy')`` to get the number of time samples for one trace.
 
 
 Read 3D poststack data
@@ -94,6 +100,34 @@ dealing with **huge** files.
 .. code-block:: python
 
     >>> cigsegy.tofile('rogan.sgy', 'out.dat', iline=9, xline=21, istep=2, xstep=1)
+
+
+
+
+Read unsorted 3D poststack data
+==================================
+
+If the SEG-Y file is unsorted, you can use ``cigsegy.scan_unsorted3D`` to scan the 
+geometry of the file, and then use ``cigsegy.load_unsorted3D`` to read the data.
+
+But, please note that ``cigsegy.scan_unsorted3D`` is slow, because it needs to scan the whole file.
+Besides, ``iline`` and ``xline`` are required to be specified.
+
+.. code-block:: python
+
+    >>> geom = cigsegy.scan_unsorted3D('rogan.sgy', 189, 193) # must pass iline and xline
+    >>> d = cigsegy.load_unsorted3D('rogan.sgy', geom)
+
+
+
+
+Read 3D poststack data by ignoring header
+==========================================
+
+.. Note::
+
+    This feature will be deseperated in the future version. 
+    You can use ``cigsegy.collect('rogan.sgy').reshape(ni, nx, nt)`` to do the same thing.
 
 
 If the header is broken and the shape and data format is already known, 
@@ -173,6 +207,12 @@ Use ``cigsegy.collect`` to read all traces as a 2D array:
 
 Arbitrary slicing and extration
 ===============================
+
+.. Note::
+
+    Use ``cigsegy.SegyNP`` class is a more efficient way, which treats the SEG-Y file as a 3D/2D numpy array.
+    Please see :ref:`SegyNP` for more details. (From version 1.1.7)
+
 
 Use ``Pysegy`` class to read arbitrary sub-volumes, slices, traces.
 

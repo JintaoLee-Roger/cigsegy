@@ -32,7 +32,7 @@ const int kTraceHeaderSize = 240;
 const int kTextualColumns = 80;
 const int kTextualRows = 40;
 
-const int kMaxSizeOneDimemsion = 10000;
+const int kMaxSizeOneDimemsion = 100000;
 
 // const binary header field
 const int kBSampleIntervalField = 17;
@@ -412,6 +412,9 @@ const std::map<int, const char *> kTraceSortingHelp = {
 
 const uint64_t kMaxLSeekSize = std::numeric_limits<long>::max();
 
+// NOTE: only support SEGY-v1
+const std::map<int, int> kElementSize = {{1, 4}, {2, 4}, {3, 2}, {4, 4}, {5, 4}, {8, 1}};
+
 inline void swap_endian_inplace(void *dst, const void *src, int n) {
   uchar *_dst = static_cast<uchar *>(dst);
   const uchar *_src = static_cast<const uchar *>(src);
@@ -603,6 +606,54 @@ inline void read_one_trace_header(void *dst, const void *src) {
     swap_endian_inplace(_dst + loc, _src + loc, len);
   }
 }
+
+
+template <typename T> void convert2npT(float *dst, const void *src, int size, int dformat) {
+  const T *_src = static_cast<const T *>(src);
+  for (int i = 0; i < size; ++i) {
+    if (dformat == 1) {
+      dst[i] = ibm_to_ieee(_src[i], true);
+    } else {
+      dst[i] = float(swap_endian<T>(_src[i]));
+    }
+  }
+}
+
+
+inline void convert2np(float *dst, const char *src, int size, int dformat) {
+  if (dformat == 1) convert2npT<float>(dst, src, size, dformat);
+  else if (dformat == 2) convert2npT<int32_t>(dst, src, size, dformat);
+  else if (dformat == 3) convert2npT<int16_t>(dst, src, size, dformat);
+  else if (dformat == 5) convert2npT<float>(dst, src, size, dformat);
+  else if (dformat == 8) convert2npT<int8_t>(dst, src, size, dformat);
+  else if (dformat == 10) convert2npT<uint32_t>(dst, src, size, dformat);
+  else if (dformat == 11) convert2npT<uint16_t>(dst, src, size, dformat);
+  else if (dformat == 16) convert2npT<uint8_t>(dst, src, size, dformat);
+}
+
+template <typename T> void float2sgyT(void *dst, const float *src, int size, int dformat) {
+  T *_dst = static_cast<T *>(dst);
+
+  for (int i = 0; i < size; ++i) {
+    if (dformat == 1) {
+      _dst[i] = ibm_to_ieee(src[i], true);
+    } else {
+      _dst[i] = swap_endian<T>(T(src[i]));
+    }
+  }
+}
+
+inline void float2sgy(char *dst, const float *src, int size, int dformat) {
+  if (dformat == 1) float2sgyT<float>(dst, src, size, dformat);
+  else if (dformat == 2) float2sgyT<int32_t>(dst, src, size, dformat);
+  else if (dformat == 3) float2sgyT<int16_t>(dst, src, size, dformat);
+  else if (dformat == 5) float2sgyT<float>(dst, src, size, dformat);
+  else if (dformat == 8) float2sgyT<int8_t>(dst, src, size, dformat);
+  else if (dformat == 10) float2sgyT<uint32_t>(dst, src, size, dformat);
+  else if (dformat == 11) float2sgyT<uint16_t>(dst, src, size, dformat);
+  else if (dformat == 16) float2sgyT<uint8_t>(dst, src, size, dformat);
+}
+
 
 } // namespace segy
 

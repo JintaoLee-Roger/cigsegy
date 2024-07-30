@@ -6,10 +6,7 @@ import numpy
 
 _Shape = typing.Tuple[int, ...]
 
-__all__ = [
-    "Pysegy", "fromfile", "fromfile_ignore_header", "tofile",
-    "tofile_ignore_header", "collect", "create_by_sharing_header"
-]
+__all__ = ["Pysegy", "fromfile", "tofile", "create_by_sharing_header"]
 
 kBinaryHeaderHelp: Dict[int, Tuple[str, int]]  # binary header help
 
@@ -141,6 +138,30 @@ class Pysegy():
             meta information string
         """
 
+    def collect(self,
+                beg: int = -1,
+                end: int = 0) -> numpy.ndarray[numpy.float32]:
+        """
+        collect traces as a 2D data from the `segy_in` file in
+        range of [beg, end), beg < 0 means collect all traces,
+        end < 0 means collect traces from beg to the last trace,
+        end == 0 means read the beg-th trace (one trace).
+
+        Parameters
+        ----------
+        beg : int
+            the begin index of traces, < 0 means collect all traces
+        end : int
+            the end index of traces (not include), < 0 means collect 
+                traces from beg to the last trace, == 0 means read 
+                the beg-th trace (one trace).
+
+        Returns
+        -------
+        numpy.ndarray :
+            its shape = (trace_count, n-time)
+        """
+
     @typing.overload
     def read(self) -> numpy.ndarray[numpy.float32]:
         """
@@ -158,6 +179,17 @@ class Pysegy():
         """ 
         read a volume with index, the volume size is 
         [startZ:endZ, startY:endY, startX:endX]
+
+        Returns
+        -------
+        numpy.ndarray
+            data, 3D array
+        """
+
+    @typing.overload
+    def read(self, sizeY: int, sizeZ: int, minY: int, minZ: int) -> numpy.ndarray[numpy.float32]:
+        """ 
+        read without scanning
 
         Returns
         -------
@@ -448,6 +480,12 @@ class Pysegy():
         """
 
     @property
+    def nt(self) -> int:
+        """
+        get dimension nt
+        """
+
+    @property
     def is_crossline_fast_order(self) -> bool:
         """
         The fast order is crossline order or not
@@ -509,6 +547,28 @@ class Pysegy():
             240 + sizeX * 4 elements
         """
 
+    def get_trace_keys(self, keys: List, length: List, beg: int,
+                       end: int) -> numpy.ndarray[numpy.int32]:
+        """
+        get the trace keys from beg to end
+
+        Parameters
+        ------------
+        keys : List
+            location
+        length : List
+            keys' length
+        beg : int
+            the start trace index
+        end : int 
+            the stop trace index
+
+        Returns
+        -------
+        numpy.ndarray[numpy.int32]
+            shape is (end-beg, len(keys))
+        """
+
     def get_metaInfo() -> MetaInfo:
         """
         get metainfo in class `MetaInfo` format
@@ -551,31 +611,43 @@ def fromfile(segy_name: str,
     """
 
 
-def fromfile_ignore_header(segy_name: str,
-                           sizeZ: int,
-                           sizeY: int,
-                           sizeX: int,
-                           format: int = 5) -> numpy.ndarray[numpy.float32]:
+def fromfile_without_scan(segy_name: str,
+                          ni: int,
+                          nx: int,
+                          il_min: int,
+                          xl_min: int,
+                          iline: int = 189,
+                          xline: int = 193,
+                          istep: int = 1,
+                          xstep: int = 1) -> numpy.ndarray[numpy.float32]:
     """
-    reading by ignoring segy headers and specifing the volume shape
+    reading from a segy file without scanning.
 
     Parameters
     ----------
     segy_name : str
-        the input segy file
-    sizeZ : int
+        the input segy file name
+    ni : int
         number of inline
-    sizeY : int 
+    nx : int
         number of crossline
-    sizeX : int
-        number of samples per trace
-    format : {1, 5}, optional
-        the data format code, 1 for 4 bytes IBM float, 5 for 4 bytes IEEE float
-
+    il_min : int
+        the min number of inline
+    xl_min : int
+        the min number of crossline
+    iline : int
+        the inline number field in each trace header
+    xline : int
+        the crossline number field in each trace header
+    istep : int
+        the step of inline numbers
+    xstep : int
+        the step of crossline numbers
+    
     Returns
     -------
     numpy.ndarray :
-        shape as (sizeZ, sizeY, sizeX)
+        shape as (n-inline, n-crossline, n-time)
     """
 
 
@@ -605,60 +677,6 @@ def tofile(segy_name: str,
     """
 
 
-def tofile_ignore_header(segy_name: str,
-                         out_name: str,
-                         sizeX: int,
-                         sizeY: int,
-                         sizeZ: int,
-                         format: int = 5) -> None:
-    """
-    convert a segy file to a binary file by ignoring segy header 
-    and specifing the volume shape.
-
-    Parameters
-    ----------
-    segy_name : str
-        the input segy file name
-    out_name : str
-        the output binary file name
-    sizeZ : int
-        number of inline
-    sizeY : int
-        number of crossline
-    sizeX : int
-        number of samples per trace
-    format : {1, 5}, optional
-        the data format code, 1 for 4 bytes IBM float, 5 for 4 bytes IEEE float
-    """
-
-
-def collect(segy_in: str,
-            beg: int = -1,
-            end: int = 0) -> numpy.ndarray[numpy.float32]:
-    """
-    collect traces as a 2D data from the `segy_in` file in
-    range of [beg, end), beg < 0 means collect all traces,
-    end < 0 means collect traces from beg to the last trace,
-    end == 0 means read the beg-th trace (one trace).
-
-    Parameters
-    ----------
-    segy_in : str
-        the input segy file
-    beg : int
-        the begin index of traces, < 0 means collect all traces
-    end : int
-        the end index of traces (not include), < 0 means collect 
-            traces from beg to the last trace, == 0 means read 
-            the beg-th trace (one trace).
-
-    Returns
-    -------
-    numpy.ndarray :
-        its shape = (trace_count, n-time)
-    """
-
-
 @typing.overload
 def create_by_sharing_header(segy_name: str,
                              header_segy: str,
@@ -667,7 +685,7 @@ def create_by_sharing_header(segy_name: str,
                              xline: int = 193,
                              istep: int = 1,
                              xstep: int = 1,
-                             offset: list or dict = None,
+                             offset: Union[list, dict] = None,
                              custom_info: List[str] = []) -> None:
     """
     create a segy and its header is from an existed segy.
@@ -701,12 +719,12 @@ def create_by_sharing_header(segy_name: str,
 def create_by_sharing_header(segy_name: str,
                              header_segy: str,
                              src_file: str,
-                             shape: tuple or list,
+                             shape: Union[tuple, list],
                              iline: int = 189,
                              xline: int = 193,
                              istep: int = 1,
                              xstep: int = 1,
-                             offset: list or dict = None,
+                             offset: Union[list, dict] = None,
                              custom_info: List[str] = []) -> None:
     """
     create a segy and its header is from an existed segy.
