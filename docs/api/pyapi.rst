@@ -8,6 +8,11 @@ Core functions
     :members:
 
 
+SegyNP class
+==============
+.. automodule:: cigsegy.segynp
+    :members:
+
 
 Tools
 =====

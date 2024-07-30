@@ -87,7 +87,7 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
   mkdir wheels
   cd  build 
 
-  for env in py38 py39 base py311;
+  for env in py38 py39 py310 base py312;
   do
     source activate $env
     python -m pip install --upgrade pip
