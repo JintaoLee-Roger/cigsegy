@@ -2,8 +2,10 @@ import os, sys
 import subprocess
 from pathlib import Path
 
+
 def install_package(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
 
 try:
     from pybind11.setup_helpers import Pybind11Extension, build_ext
@@ -25,24 +27,15 @@ for v in sys.argv:
 cwd = Path(__file__).resolve().parent
 
 package_name = "cigsegy"
-version = "1.1.7"
 git_hash = "unknown"
 
-try:
-    git_hash = (subprocess.check_output(["git", "rev-parse", "HEAD"],
-                                        cwd=cwd).decode().strip())
-except (FileNotFoundError, subprocess.CalledProcessError):
-    pass
+version_path = Path(__file__).parent / "VERSION.txt"
+if not version_path.exists():
+    raise FileNotFoundError("VERSION.txt file not found")
+version = version_path.read_text().strip()
 
-
-def write_version_file():
-    path = 'python/version.py'
-    with open(path, "w") as f:
-        f.write(f'__version__ = "{version}"\n')
-        f.write(f'git_version = "{git_hash}"\n')
-
-
-write_version_file()
+if not version:
+    raise RuntimeError("Failed to parse version from VERSION")
 
 
 def get_extensions():
@@ -72,19 +65,18 @@ def get_extensions():
     return ext_modules
 
 
-setup(
-    name=package_name,
-    version=version,
-    long_description=open('README.rst').read(),
-    long_description_content_type='text/x-rst',
-    author='Jintao Li',
-    url='https://github.com/JintaoLee-Roger/cigsegy',
-    license='MIT',
-    install_requires=['numpy'],
-    python_requires=">=3.6",
-    ext_modules=get_extensions(),
-    cmdclass={"build_ext": build_ext},
-    packages=['cigsegy'],
-    package_dir={'cigsegy': 'python'},
-    include_package_data=True,
-    exclude_package_data={'cigsegy': ['*.cpp', '*.txt', 'setup.py']})
+setup(name=package_name,
+      version=version,
+      long_description=open('README.rst').read(),
+      long_description_content_type='text/x-rst',
+      author='Jintao Li',
+      url='https://github.com/JintaoLee-Roger/cigsegy',
+      license='MIT',
+      install_requires=['numpy'],
+      python_requires=">=3.6",
+      ext_modules=get_extensions(),
+      cmdclass={"build_ext": build_ext},
+      packages=['cigsegy'],
+      package_dir={'cigsegy': 'python'},
+      include_package_data=True,
+      exclude_package_data={'cigsegy': ['*.cpp', '*.txt', 'setup.py']})
