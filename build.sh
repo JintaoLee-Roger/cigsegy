@@ -34,7 +34,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
       make install
       cd /share/dist_$version_min/python 
       $pypi wheel .
-      whl=`ls *.whl`
+      whl=`ls cig*.whl`
       prefix="${whl%linux_x86_64.whl}"
       cp $whl /share/wheels/${prefix}manylinux2014_x86_64.whl
       # auditwheel repair $whl -w /share/wheelhouse/
@@ -71,7 +71,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   recursive-include include *.h *.hpp" > /share/thridpart/cigsegy/MANIFEST.in
 
   sed -i "s/fmt_root = ''/fmt_root = '.'/" /share/thridpart/cigsegy/setup.py
-  sed -i "s/'numpy'/'numpy', 'pybind11'/g" /share/thridpart/cigsegy/setup.py
+  # sed -i "s/'numpy'/'numpy', 'pybind11'/g" /share/thridpart/cigsegy/setup.py
 
   cd /share/thridpart/cigsegy/
   python=/opt/_internal/cpython-3.11.9/bin/python3

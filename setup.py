@@ -56,6 +56,9 @@ def get_extensions():
         extra_compile_args = ['/wd4244', '/wd4996', '/wd4819']
     else:
         extra_compile_args = ["-std=c++11", "-Wall", "-O3"]
+
+    extra_compile_args.append("-DUSE_PYBIND11")
+
     extra_link_args = []
     # extra_link_args = ['-lfmt']
 
