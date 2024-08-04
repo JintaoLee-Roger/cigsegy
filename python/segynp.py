@@ -5,8 +5,9 @@
 
 from typing import Dict, List, Tuple
 import numpy as np
-from .cigsegy import (Pysegy, disable_progressbar) # type: ignore
+from .cigsegy import (Pysegy, disable_progressbar)  # type: ignore
 from . import utils
+import warnings
 
 
 class SegyNP:
@@ -25,31 +26,44 @@ class SegyNP:
     >>> k = d[:, 20, :]
     >>> k = f[20:30]
     >>> print(d.min(), d.max()) # NOTE: min and max are evalated by a small part of data
+    >>> d.to_2d() # as a collection of traces, shape is like (trace_count, n-time)
+    >>> k = d[900] # the 900-th traces, output shape is (nt, )
     """
 
-    def __init__(self, filename, iline=None, xline=None, istep=None, xstep=None, as_2d=False) -> None:
-        # TODO: guess
+    def __init__(self,
+                 filename,
+                 iline=None,
+                 xline=None,
+                 istep=None,
+                 xstep=None,
+                 as_2d=False) -> None:
         disable_progressbar()
         self.as_3d = not as_2d
         self.fname = filename
 
         self.segy = Pysegy(str(filename))
+        self.keylocs = None
+        self._shape3d = None
         if self.as_3d:
-            [iline, xline, istep, xstep, xloc, yloc] = utils.guess(filename, iline, xline, istep, xstep, 181, 185)[0]
-            self.segy.setInlineLocation(iline)
-            self.segy.setCrosslineLocation(xline)
-            self.segy.setSteps(istep, xstep)
-            self.segy.scan()
+            self._scan3d(iline, xline, istep, xstep)
 
         self.metainfo = self.segy.get_metaInfo()
         if self.as_3d:
-            self._shape = (self.metainfo.sizeZ, self.metainfo.sizeY, self.metainfo.sizeX)
-        else:
-            self._shape = (self.segy.trace_count, self.metainfo.sizeX)
+            self._shape3d = (self.metainfo.sizeZ, self.metainfo.sizeY, self.metainfo.sizeX)
+
+        self._shape2d = (self.segy.trace_count, self.metainfo.sizeX)
         self._eval_range()
 
+    def _scan3d(self, iline=None, xline=None, istep=None, xstep=None):
+        [iline, xline, istep, xstep, xloc, yloc] = utils.guess(self.filename, iline, xline, istep, xstep, 181, 185)[0]
+        self.keylocs = [iline, xline, istep, xstep, xloc, yloc]
+        self.segy.setInlineLocation(iline)
+        self.segy.setCrosslineLocation(xline)
+        self.segy.setSteps(istep, xstep)
+        self.segy.scan()
+
     def _eval_range(self):
-        s, e = self.trace_count-4000, 4000
+        s, e = self.trace_count - 4000, 4000
         if self.trace_count < 4000:
             e = self.trace_count
             s = 0
@@ -60,7 +74,7 @@ class SegyNP:
         mi = min(mi, p0.min())
         ma = max(ma, p0.max())
 
-        p0 = self.segy.collect(self.trace_count//3, self.trace_count//3+4000)
+        p0 = self.segy.collect(self.trace_count // 3, self.trace_count // 3 + 4000)
         mi = min(mi, p0.min())
         ma = max(ma, p0.max())
 
@@ -73,7 +87,10 @@ class SegyNP:
 
     @property
     def shape(self) -> Tuple:
-        return self._shape
+        if self.as_3d:
+            return self._shape3d
+        else:
+            return self._shape2d
 
     def read(self, ib, ie, xb, xe, tb, te) -> np.ndarray:
         shape = [ie - ib, xe - xb, te - tb]
@@ -82,7 +99,6 @@ class SegyNP:
         if shape.count(1) == 3:
             return d[0, 0, 0]
         return np.squeeze(d)
-
 
     def __getitem__(self, slices) -> np.ndarray:
         idx = self._process_keys(slices)
@@ -97,7 +113,7 @@ class SegyNP:
             return data
 
     def _process_keys(self, key) -> List:
-        if isinstance(key, int):
+        if isinstance(key, np.integer):
             if key < 0:
                 key += self.shape[0]
             if key < 0 or key >= self.shape[0]:
@@ -128,7 +144,7 @@ class SegyNP:
             for i, k in enumerate(key):
                 if k is None:
                     continue
-                if isinstance(k, int):
+                if isinstance(k, np.integer):
                     if k < 0:
                         k += self.shape[i]
                     start_idx[i] = k
@@ -157,7 +173,7 @@ class SegyNP:
 
         elif isinstance(key, slice):
             ib = 0 if key.start is None else key.start
-            ie = self._shape[0] if key.stop is None else key.stop
+            ie = self.shape[0] if key.stop is None else key.stop
             if self.as_3d:
                 return ib, ie, 0, self.shape[1], 0, self.shape[2]
             else:
@@ -165,18 +181,40 @@ class SegyNP:
         else:
             raise IndexError("Invalid index slices")
 
-
     def _check_bound(self, ib, ie, xb, xe, tb=None, te=None) -> None:
-        assert ib < ie and ie <= self._shape[0]
-        assert xb < xe and xe <= self._shape[1]
+        assert ib < ie and ie <= self.shape[0]
+        assert xb < xe and xe <= self.shape[1]
         if self.as_3d:
             assert (tb is not None) and (te is not None)
-            assert tb < te and te <= self._shape[2]
+            assert tb < te and te <= self.shape[2]
 
-    def max(self) -> float:
+    def to_2d(self) -> None:
+        """Treat the SEG-Y file as a collection of traces, shape is like (trace_count, nt)"""
+        self.as_3d = False
+
+    def to_3d(self, iline=None, xline=None, istep=None, xstep=None) -> None:
+        """
+        Treat the SEG-Y file as a 3D array. If the SEG-Y file is scanned, the parameters (iline, xline, istep, xstep) will be ignored 
+        """
+        self.as_3d = True
+        if self._shape3d is None:
+            self._scan3d(iline, xline, istep, xstep)
+            self.metainfo = self.segy.get_metaInfo()
+            self._shape3d = (self.metainfo.sizeZ, self.metainfo.sizeY, self.metainfo.sizeX)
+        elif iline or xline or istep or xstep:
+            warnings.warn(
+                "The file has been scanned, so `iline, xline, istep, xstep` will be ignored",
+                DeprecationWarning,
+                stacklevel=2)
+
+    def max(self, real=False) -> float:
+        if real:
+            return self[...].min()
         return self._max
 
-    def min(self) -> float:
+    def min(self, real=False) -> float:
+        if real:
+            return self[...].max()
         return self._min
 
     def close(self) -> None:
@@ -185,7 +223,15 @@ class SegyNP:
     def __array__(self):
         """To support np.array(SegyNP(xxx))"""
         return self[...]
-        
+
     def to_numpy(self):
         """like pandas"""
         return self[...]
+
+    def __array_function__(self, func, types, args, kwargs):
+        if func is np.nanmin:
+            return self.min(*args, **kwargs)
+        elif func is np.nanmax:
+            return self.max(*args, **kwargs)
+        raise NotImplementedError(
+            f"Function {func} is not implemented for SegyNP")
