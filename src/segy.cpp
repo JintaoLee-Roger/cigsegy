@@ -1150,16 +1150,16 @@ void SegyIO::tofile(const std::string &binary_out_name) {
                        m_metaInfo.sizeY * m_metaInfo.sizeZ * m_metaInfo.esize;
   std::ofstream ffst(binary_out_name, std::ios::binary);
   if (!ffst) {
-    throw std::runtime_error("create file failed");
+    throw std::runtime_error("create file failed: Open file failed");
   }
-  for (int i = 0; i < int(need_size / kMaxLSeekSize) + 1; i++) {
+  while (need_size > 0) {
     uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
     ffst.seekp(move_point - 1, std::ios_base::cur);
     ffst.put(0);
     need_size -= move_point;
   }
   if (need_size != 0) {
-    throw std::runtime_error("create file failed");
+    throw std::runtime_error("create file failed: Write space failed");
   }
   ffst.close();
 
@@ -1345,23 +1345,16 @@ void SegyIO::create(const std::string &segy_out_name, const float *src,
           (m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize);
   std::ofstream ffst(segy_out_name, std::ios::binary);
   if (!ffst) {
-    throw std::runtime_error("create file failed");
+    throw std::runtime_error("create file failed: Open file failed");
   }
-  // int fd = open(binary_out_name.c_str(), O_RDWR | O_CREAT | O_TRUNC, 00644);
-  for (int i = 0; i < int(need_size / kMaxLSeekSize) + 1; i++) {
+  while (need_size > 0) {
     uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
-    // if (lseek(fd, move_point - 1, SEEK_END) < 0) {
-    //   throw std::runtime_error("create file failed");
-    // }
-    // if (write(fd, "", 1) < 0) {
-    //   throw std::runtime_error("create file failed");
-    // }
     ffst.seekp(move_point - 1, std::ios_base::cur);
     ffst.put(0);
     need_size -= move_point;
   }
   if (need_size != 0) {
-    throw std::runtime_error("create file failed");
+    throw std::runtime_error("create file failed: Write space failed");
   }
   ffst.close();
 
@@ -1663,17 +1656,16 @@ void create_by_sharing_header(const std::string &segy_name,
         (uint64_t)trace_count * (sizeX * meta_info.esize + kTraceHeaderSize);
     std::ofstream ffst(segy_name, std::ios::binary);
     if (!ffst) {
-      throw std::runtime_error("create file failed");
+      throw std::runtime_error("create file failed: Open file failed");
     }
-    for (int i = 0; i < int(need_size / kMaxLSeekSize) + 1; i++) {
-      uint64_t move_point =
-          need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
+    while (need_size > 0) {
+      uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
       ffst.seekp(move_point - 1, std::ios_base::cur);
       ffst.put(0);
       need_size -= move_point;
     }
     if (need_size != 0) {
-      throw std::runtime_error("create file failed");
+      throw std::runtime_error("create file failed: Write space failed");
     }
     ffst.close();
 

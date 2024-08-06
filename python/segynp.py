@@ -55,7 +55,7 @@ class SegyNP:
         self._eval_range()
 
     def _scan3d(self, iline=None, xline=None, istep=None, xstep=None):
-        [iline, xline, istep, xstep, xloc, yloc] = utils.guess(self.filename, iline, xline, istep, xstep, 181, 185)[0]
+        [iline, xline, istep, xstep, xloc, yloc] = utils.guess(self.fname, iline, xline, istep, xstep, 181, 185)[0]
         self.keylocs = [iline, xline, istep, xstep, xloc, yloc]
         self.segy.setInlineLocation(iline)
         self.segy.setCrosslineLocation(xline)
@@ -113,7 +113,7 @@ class SegyNP:
             return data
 
     def _process_keys(self, key) -> List:
-        if isinstance(key, np.integer):
+        if isinstance(key, (int, np.integer)):
             if key < 0:
                 key += self.shape[0]
             if key < 0 or key >= self.shape[0]:
@@ -144,7 +144,7 @@ class SegyNP:
             for i, k in enumerate(key):
                 if k is None:
                     continue
-                if isinstance(k, np.integer):
+                if isinstance(k, (int, np.integer)):
                     if k < 0:
                         k += self.shape[i]
                     start_idx[i] = k
@@ -230,8 +230,8 @@ class SegyNP:
 
     def __array_function__(self, func, types, args, kwargs):
         if func is np.nanmin:
-            return self.min(*args, **kwargs)
+            return self.min()
         elif func is np.nanmax:
-            return self.max(*args, **kwargs)
+            return self.max()
         raise NotImplementedError(
             f"Function {func} is not implemented for SegyNP")
