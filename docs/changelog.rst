@@ -2,6 +2,15 @@
 Changelog
 #########
 
+
+v1.1.8
+---------
+- fixed a bug when create file on windows
+- deal with interreput signal
+- optimize ``SegyNP``
+
+
+
 v1.1.7
 --------
 
