@@ -15,9 +15,9 @@ from pathlib import Path
 DIR = Path(__file__).parent.resolve()
 
 project = 'cigsegy'
-copyright = '2023, Roger Lee'
+copyright = '2024, Roger Lee'
 author = 'Roger Lee'
-version = 'v1.1.7'
+version = 'v1.1.8'
 language = 'en'
 
 # -- General configuration ---------------------------------------------------
@@ -111,6 +111,13 @@ def prepare(app):
         contents = contents.replace('from .cigsegy', 'from .cigsegyc')
 
     with open(targetdir / 'plot.py', 'w') as f:
+        f.write(contents)
+
+    with open(sourcedir / 'segynp.py') as f:
+        contents = f.read()
+        contents = contents.replace('from .cigsegy', 'from .cigsegyc')
+
+    with open(targetdir / 'segynp.py', 'w') as f:
         f.write(contents)
 
 
