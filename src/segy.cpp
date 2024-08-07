@@ -265,6 +265,7 @@ static int64_t copy_traces(const mio::mmap_source &header,
     if (showpbar) {
       updatebar(bar, step);
     }
+    CHECK_SIGNALS();
 
     const float *srcopy = src + iz * sizeY * sizeX;
 
@@ -681,6 +682,7 @@ void SegyIO::get_trace_keys_c(int *dst, const std::vector<int> &keys,
   const char *src = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
 
   for (int i = beg; i < end; i++) {
+    CHECK_SIGNALS();
     for (int j = 0; j < keys.size(); j++) {
       if (length[j] == 4) {
         *dst = swap_endian<int32_t>(src + i * trace_size + keys[j] - 1);
@@ -724,6 +726,7 @@ void SegyIO::collect(float *data, int beg, int end) {
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
   const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
   for (int i = beg; i < end; i++) {
+    CHECK_SIGNALS();
     convert2np(data, source + i * trace_size + kTraceHeaderSize,
                m_metaInfo.sizeX, m_metaInfo.data_format);
     data += m_metaInfo.sizeX;
@@ -808,6 +811,8 @@ void SegyIO::scan() {
   int old_skip = 0;
   _get_TraceInfo(0, trace2);
   for (int i = 0; i < m_metaInfo.sizeZ - 1; i++) {
+    CHECK_SIGNALS();
+
     if (skip > 0) {
       m_lineInfo[i].line_num =
           m_lineInfo[i - 1].line_num + m_metaInfo.inline_step;
@@ -998,6 +1003,7 @@ void SegyIO::read(float *dst, int startX, int endX, int startY, int endY,
 
   // #pragma omp parallel for
   for (int iZ = startZ; iZ < endZ; iZ++) {
+    CHECK_SIGNALS();
     // init start trace in iZ line
     int istart = startY;
     float *dstline = dst + static_cast<uint64_t>(iZ - startZ) * sizeX * sizeY;
@@ -1091,6 +1097,7 @@ void SegyIO::read(float *dst, int sizeY, int sizeZ, int minY, int minZ) {
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
 
   for (int i = 0; i < trace_count; ++i) {
+    CHECK_SIGNALS();
 
     int il = getCrossline(source + i * trace_size, m_metaInfo.inline_field);
     int xl = getCrossline(source + i * trace_size, m_metaInfo.crossline_field);
@@ -1143,16 +1150,16 @@ void SegyIO::tofile(const std::string &binary_out_name) {
                        m_metaInfo.sizeY * m_metaInfo.sizeZ * m_metaInfo.esize;
   std::ofstream ffst(binary_out_name, std::ios::binary);
   if (!ffst) {
-    throw std::runtime_error("create file failed");
+    throw std::runtime_error("create file failed: Open file failed");
   }
-  for (int i = 0; i < int(need_size / kMaxLSeekSize) + 1; i++) {
+  while (need_size > 0) {
     uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
     ffst.seekp(move_point - 1, std::ios_base::cur);
     ffst.put(0);
     need_size -= move_point;
   }
   if (need_size != 0) {
-    throw std::runtime_error("create file failed");
+    throw std::runtime_error("create file failed: Write space failed");
   }
   ffst.close();
 
@@ -1239,6 +1246,7 @@ void SegyIO::cut(const std::string &outname, int startX, int endX, int startY,
     if (showpbar) {
       updatebar(bar, step);
     }
+    CHECK_SIGNALS();
 
     int izo = iz + startZ;
     if (m_lineInfo[izo].count == 0) {
@@ -1337,23 +1345,16 @@ void SegyIO::create(const std::string &segy_out_name, const float *src,
           (m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize);
   std::ofstream ffst(segy_out_name, std::ios::binary);
   if (!ffst) {
-    throw std::runtime_error("create file failed");
+    throw std::runtime_error("create file failed: Open file failed");
   }
-  // int fd = open(binary_out_name.c_str(), O_RDWR | O_CREAT | O_TRUNC, 00644);
-  for (int i = 0; i < int(need_size / kMaxLSeekSize) + 1; i++) {
+  while (need_size > 0) {
     uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
-    // if (lseek(fd, move_point - 1, SEEK_END) < 0) {
-    //   throw std::runtime_error("create file failed");
-    // }
-    // if (write(fd, "", 1) < 0) {
-    //   throw std::runtime_error("create file failed");
-    // }
     ffst.seekp(move_point - 1, std::ios_base::cur);
     ffst.put(0);
     need_size -= move_point;
   }
   if (need_size != 0) {
-    throw std::runtime_error("create file failed");
+    throw std::runtime_error("create file failed: Write space failed");
   }
   ffst.close();
 
@@ -1378,6 +1379,7 @@ void SegyIO::create(const std::string &segy_out_name, const float *src,
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
   // #pragma omp parallel for
   for (int iZ = 0; iZ < m_metaInfo.sizeZ; iZ++) {
+    CHECK_SIGNALS();
     for (int iY = 0; iY < m_metaInfo.sizeY; iY++) {
       // write header
       int64_t x = iY * m_metaInfo.Y_interval + 5200;
@@ -1551,6 +1553,7 @@ void SegyIO::read_all_fast(float *dst) {
   int nbar = sizeZ >= 100 ? sizeZ : step * sizeZ;
   progressbar bar(nbar);
   for (int iZ = 0; iZ < sizeZ; iZ++) {
+    CHECK_SIGNALS();
     // #pragma omp critical
     if (showpbar) {
       updatebar(bar, step);
@@ -1653,17 +1656,16 @@ void create_by_sharing_header(const std::string &segy_name,
         (uint64_t)trace_count * (sizeX * meta_info.esize + kTraceHeaderSize);
     std::ofstream ffst(segy_name, std::ios::binary);
     if (!ffst) {
-      throw std::runtime_error("create file failed");
+      throw std::runtime_error("create file failed: Open file failed");
     }
-    for (int i = 0; i < int(need_size / kMaxLSeekSize) + 1; i++) {
-      uint64_t move_point =
-          need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
+    while (need_size > 0) {
+      uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
       ffst.seekp(move_point - 1, std::ios_base::cur);
       ffst.put(0);
       need_size -= move_point;
     }
     if (need_size != 0) {
-      throw std::runtime_error("create file failed");
+      throw std::runtime_error("create file failed: Write space failed");
     }
     ffst.close();
 
@@ -1808,6 +1810,7 @@ void load_prestack3D(float *dst, const std::string &segy_name, int sizeX,
     if (showpbar) {
       updatebar(bar, step);
     }
+    CHECK_SIGNALS();
 
     for (int j = min_crossline; j <= max_crossline; j += crossline_step) {
       for (int k = min_offset; k <= max_offset; k += offset_step) {
