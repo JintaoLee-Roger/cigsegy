@@ -146,6 +146,7 @@ public:
   void get_trace_keys_c(int *dst, const std::vector<int>& keys, const std::vector<int>& length, int beg, int end);
 
   void collect(float *data, int beg = -1, int end = 0);
+  void collect(float *data, const int32_t *index, int n);
 
   // read segy
   void scan();

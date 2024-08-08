@@ -17,6 +17,7 @@
 
 namespace py = pybind11;
 using npfloat = py::array_t<float, py::array::c_style | py::array::forcecast>;
+using npint32 = py::array_t<int32_t, py::array::c_style | py::array::forcecast>;
 
 class Pysegy : public segy::SegyIO {
 public:
@@ -38,6 +39,7 @@ public:
   py::array_t<int> get_trace_keys(const py::list &keys, const py::list &length, int beg, int end);
 
   py::array_t<float> collect(int beg = -1, int end = 0);
+  py::array_t<float> collect(const npint32 &index);
 
   py::array_t<float> read(int startZ, int endZ, int startY, int endY,
                           int startX, int endX);
@@ -130,6 +132,23 @@ py::array_t<float> Pysegy::collect(int beg, int end) {
   float *ptr = static_cast<float *>(buff.ptr);
 
   collect(ptr, beg, end);
+
+  return data;
+}
+
+py::array_t<float> Pysegy::collect(const npint32&index) {
+  auto buff = index.request();
+  if (buff.ndim != 1) {
+    throw std::runtime_error("Input index must be a 1D data.");
+  }
+  int N = index.shape()[0];
+  int32_t *idx = static_cast<int32_t *>(buff.ptr);
+
+  auto data = py::array_t<float>({N, shape(0)});
+  auto buff2 = data.request();
+  float *ptr = static_cast<float *>(buff2.ptr);
+
+  collect(ptr, idx, N);
 
   return data;
 }
@@ -518,6 +537,7 @@ PYBIND11_MODULE(cigsegy, m) {
       .def("tofile", &Pysegy::tofile, py::arg("binary_out_name"))
       .def("collect", overload_cast_<int, int>()(&Pysegy::collect), "Load traces from beg to end as a 2D array",
           py::arg("beg") = -1, py::arg("end") = 0)
+      .def("collect", overload_cast_<const npint32&>()(&Pysegy::collect), "Load traces with index as a 2D array", py::arg("index"))
       .def("read", overload_cast_<>()(&Pysegy::read), "read hole volume")
       .def("read",
            overload_cast_<int, int, int, int, int, int>()(&Pysegy::read),

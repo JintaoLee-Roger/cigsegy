@@ -162,6 +162,21 @@ class Pysegy():
             its shape = (trace_count, n-time)
         """
 
+    def collect(self, index: numpy.ndarray) -> numpy.ndarray:
+        """
+        collect traces as a 2D data from the `segy_in` file with the index
+
+        Parameters
+        ----------
+        index : ArrayLike, np.int32
+            the trace index
+
+        Returns
+        -------
+        numpy.ndarray :
+            its shape = (len(index), n-time)
+        """
+
     @typing.overload
     def read(self) -> numpy.ndarray[numpy.float32]:
         """

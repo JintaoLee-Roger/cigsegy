@@ -733,6 +733,30 @@ void SegyIO::collect(float *data, int beg, int end) {
   }
 }
 
+void SegyIO::collect(float *data, const int32_t *index, int n) {
+  if (n <= 0) {
+    throw std::runtime_error("invalid index size (must > 0)");
+  }
+
+  uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
+  const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
+  for (int i = 0; i < n; i++) {
+    CHECK_SIGNALS();
+    if (index[i] >= m_metaInfo.trace_count) {
+      throw std::runtime_error(
+        fmt::format("invalid index: {} > trace_count", index[i]));
+    }
+    if (index[i] < 0) {
+      std::fill(data, data + m_metaInfo.sizeX, 0);
+    } else {
+
+    convert2np(data, source + index[i] * trace_size + kTraceHeaderSize,
+               m_metaInfo.sizeX, m_metaInfo.data_format);
+    }
+    data += m_metaInfo.sizeX;
+  }
+}
+
 void SegyIO::scan() {
   if (!isReadSegy) {
     throw std::runtime_error(
