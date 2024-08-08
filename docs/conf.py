@@ -15,9 +15,10 @@ from pathlib import Path
 DIR = Path(__file__).parent.resolve()
 
 project = 'cigsegy'
-copyright = '2024, Roger Lee'
-author = 'Roger Lee'
-version = 'v1.1.8'
+copyright = '2024, Jintao Li'
+author = 'Jintao Li'
+verison_path = DIR.parent / "VERSION.txt"
+version =  verison_path.read_text().strip()
 language = 'en'
 
 # -- General configuration ---------------------------------------------------
@@ -42,7 +43,22 @@ html_theme = 'furo'
 # html_static_path = ['_static']
 
 
+def update_doxyfile():
+    doxyfile_in = DIR / 'Doxyfile.in'
+    doxyfile = DIR / 'Doxyfile'
+
+    with open(doxyfile_in, 'r') as infile:
+        content = infile.read()
+
+    print(f'Overide version: {version}')
+    content = content.replace('@VERSION@', version)
+
+    with open(doxyfile, 'w') as outfile:
+        outfile.write(content)
+
+
 def generate_doxygen_xml(app):
+    update_doxyfile()
     build_dir = os.path.join(app.confdir, "_doxygenxml")
     if not os.path.exists(build_dir):
         os.mkdir(build_dir)
@@ -113,6 +129,18 @@ def prepare(app):
     with open(targetdir / 'plot.py', 'w') as f:
         f.write(contents)
 
+    with open(sourcedir / 'transform.py') as f:
+        contents = f.read()
+
+    with open(targetdir / 'transform.py', 'w') as f:
+        f.write(contents)
+
+    with open(sourcedir / 'interp.py') as f:
+        contents = f.read()
+
+    with open(targetdir / 'interp.py', 'w') as f:
+        f.write(contents)
+
     with open(sourcedir / 'segynp.py') as f:
         contents = f.read()
         contents = contents.replace('from .cigsegy', 'from .cigsegyc')
@@ -123,6 +151,7 @@ def prepare(app):
 
 def clean_up(app, exception):  # noqa: ARG001
     os.remove(DIR / 'readme.rst')
+    os.remove(DIR / 'Doxyfile')
     shutil.rmtree(DIR / 'cigsegy')
 
 
