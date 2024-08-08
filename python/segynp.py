@@ -8,6 +8,7 @@ import numpy as np
 from .cigsegy import (Pysegy, disable_progressbar)  # type: ignore
 from . import utils
 from .transform import get_transform_metrix, apply_transform
+from .interp import arbitray_line
 import warnings
 
 
@@ -32,14 +33,15 @@ class SegyNP:
     """
 
     def __init__(self,
-                 filename,
-                 iline=None,
-                 xline=None,
-                 istep=None,
-                 xstep=None,
-                 xloc=None,
-                 yloc=None,
-                 as_2d=False) -> None:
+                 filename: str,
+                 iline: int = None,
+                 xline: int = None,
+                 istep: int = None,
+                 xstep: int = None,
+                 xloc: int = None,
+                 yloc: int = None,
+                 as_2d: bool = False,
+                 as_unsorted: bool = False) -> None: # TODO: support unsorted?
         disable_progressbar()
         np.set_printoptions(suppress=True)
         self.as_3d = not as_2d
@@ -117,6 +119,13 @@ class SegyNP:
 
     def _read(self, ib, ie, xb, xe, tb, te) -> np.ndarray:
         shape = [ie - ib, xe - xb, te - tb]
+        # if self._geomety is not None and shape[0]*shape[1] < 100: # TODO: how many?
+        #     # when the cube is small, it is very slow compare with using 2d collect
+        #     # so, if created geometry, using collect
+        #     x, y = np.meshgrid(np.arange(ib, ie), np.arange(xb, xe), indexing='ij')
+        #     d = self.read_traces_with_index(np.c_[x.flatten(), y.flatten()])
+        #     d = d[..., tb:te]
+        # else:
         d = self.segy.read(ib, ie, xb, xe, tb, te)
 
         if shape.count(1) == 3:
@@ -125,14 +134,33 @@ class SegyNP:
 
     def __getitem__(self, slices) -> np.ndarray:
         idx = self._process_keys(slices)
-        self._check_bound(*idx)
-        if self.as_3d:
-            return self._read(*idx)
+        num = idx.count(-1)
+        if num == 0:
+            self._check_bound(*idx)
+            if self.as_3d:
+                return self._read(*idx)
+            else:
+                data = self.segy.collect(idx[0], idx[1])
+                data = np.squeeze(data[:, idx[2]:idx[3]])
+                if data.ndim == 0:
+                    return float(data)
+                return data
         else:
-            data = self.segy.collect(idx[0], idx[1])
-            data = np.squeeze(data[:, idx[2]:idx[3]])
-            if data.ndim == 0:
-                return float(data)
+            if self.as_3d:
+                raise NotImplementedError("array/list indices only used when is 2d, TODO:")
+
+            if idx[1] == -1:
+                assert idx[0].ndim == 1, "indices must be 1D array"
+                data = self.read_traces_with_index(idx[0])
+            else: # the first dimension is continuous
+                data = self.segy.collect(idx[0], idx[1])
+
+            if idx[-1] == -1:
+                data = data[..., idx[-2]]
+            else:
+                assert idx[-2] < idx[-1] and idx[-2] >= 0 and idx[-1] <= self.shape[-1], "index out of range"
+                data = data[..., idx[-2]:idx[-1]]
+
             return data
 
     def _process_keys(self, key) -> List:
@@ -154,13 +182,16 @@ class SegyNP:
 
         elif isinstance(key, Tuple):
             N = 3 if self.as_3d else 2
+            if len(key) > N:
+                raise IndexError(f"Too many dimensions: expected at most {N}, got {len(key)}")
+
             num_ellipsis = key.count(Ellipsis)
             if num_ellipsis > 1:
                 raise ValueError("Only one ellipsis (...) allowed")
-            elif num_ellipsis == 1:
-                key = (key[0], slice(None, None, None), slice(None, None, None))
-                if not self.as_3d:
-                    key = (key[0], slice(None, None, None))
+            if num_ellipsis == 1:
+                idx = key.index(Ellipsis)
+                n_insert = N - len(key) + 1
+                key = key[:idx] + (slice(None),) * n_insert + key[idx + 1:]
 
             start_idx = [None] * N
             end_idx = [None] * N
@@ -179,7 +210,9 @@ class SegyNP:
                     start_idx[i] = k.start or 0
                     end_idx[i] = k.stop or self.shape[i]
                 elif isinstance(k, (List, np.ndarray)):
-                    raise NotImplementedError("Not implemented yet: TODO:") 
+                    start_idx[i] = np.array(k)
+                    end_idx[i] = -1
+                    # raise NotImplementedError("Not implemented yet: TODO:") 
                 else:
                     raise IndexError("Invalid index slices")
 
@@ -198,24 +231,25 @@ class SegyNP:
                 ie, xe = end_idx
                 return ib, ie, xb, xe
 
-        elif isinstance(key, slice):
-            ib = 0 if key.start is None else key.start
-            ie = self.shape[0] if key.stop is None else key.stop
+        elif isinstance(key, (slice, List, np.ndarray)):
+            if isinstance(key, slice):
+                ib = 0 if key.start is None else key.start
+                ie = self.shape[0] if key.stop is None else key.stop
+            else:
+                ib, ie = np.array(key), -1
             if self.as_3d:
                 return ib, ie, 0, self.shape[1], 0, self.shape[2]
             else:
                 return ib, ie, 0, self.shape[1]
-        elif isinstance(key, (List, np.ndarray)):
-            raise NotImplementedError("Not implemented yet: TODO:") 
         else:
             raise IndexError("Invalid index slices")
 
     def _check_bound(self, ib, ie, xb, xe, tb=None, te=None) -> None:
-        assert ib < ie and ie <= self.shape[0]
-        assert xb < xe and xe <= self.shape[1]
+        assert ib < ie and ie <= self.shape[0] and ib >= 0, "index out of range"
+        assert xb < xe and xe <= self.shape[1] and xb >= 0, "index out of range"
         if self.as_3d:
             assert (tb is not None) and (te is not None)
-            assert tb < te and te <= self.shape[2]
+            assert tb < te and te <= self.shape[2] and tb >= 0, "index out of range"
 
     def to_2d(self) -> None:
         """Treat the SEG-Y file as a collection of traces, shape is like (trace_count, nt)"""
@@ -308,11 +342,21 @@ class SegyNP:
         each line represents: inline, crossline_start, crossline_end, trace_start, trace_end, count
         """
         if self._shape3d is None:
-            raise NotImplementedError("Need scan the file first, please call `to_3d` first")
+            raise RuntimeError("Need scan the file first, please call `to_3d` first")
         return self.segy.get_lineInfo()
 
-    def update_trans_matrix(self):
-        if self._shape3d is not None:
+    def update_trans_matrix(self, xyic=None):
+        """
+        Update the transformation matrix for inline/crossline to x/y
+
+        parameters
+        ----------
+        xyic : np.ndarray, optional
+            The inline/crossline and x/y information, shape is (n, 4), default None
+        """
+        if xyic is not None:
+            assert xyic.shape[1] == 4, "The shape of xyic should be (n, 4)"
+        elif self._shape3d is not None: # using lineinfo to get the xyic
             line = self.lineinfo()
             ni = line.shape[0]
             nx = self._shape3d[1]
@@ -324,7 +368,7 @@ class SegyNP:
             xyic[ni*2:ni*2+nx, :] = self.segy.get_trace_keys(keylocs, [4]*4, 0, nx)
             xyic[ni*2+nx:ni*2+nx*2, :] = self.segy.get_trace_keys(keylocs, [4]*4, self.trace_count-nx, self.trace_count)
         else:
-            raise NotImplementedError("Need scan the file first, please call `to_3d` first") # HACK: need to be optimized when as_2d
+            raise RuntimeError("Need scan the file first, please call `to_3d` first")
 
         self._trans_matrix = get_transform_metrix(xyic[:, 2:], xyic[:, :2])
 
@@ -375,14 +419,98 @@ class SegyNP:
             self.update_trans_matrix()
         return np.round(apply_transform(ix, self._trans_matrix), 2).reshape(shape)
 
+    @property
+    def is_create_geometry(self):
+        return self._geomety is not None
 
-    def create_geometry(self):
+    def update_geometry(self, ic=None):
         if self._shape3d is None:
-            raise NotImplementedError("Need scan the file first, please call `to_3d` first")
+            raise RuntimeError("Need scan the file first, please call `to_3d` first")
 
-        raise NotImplementedError("Not implemented yet: TODO:")
-        geom = np.zeros(self.shape[:2]) - 1 # (ni, nx), -1 means no trace
+        if ic is not None and ic.shape[0] != self.trace_count:
+            raise ValueError("The length of ic should be the same as the trace count")
+        
+        if ic is None:
+            ic = self.segy.get_trace_keys(self.keylocs[:2], [2]*2, 0, self.trace_count)
+        if ic.max() >= max(self._shape3d[:2]): # move ic to zero-origin
+            ic[:, 0] = (ic[:, 0] - self.iline_range[0]) / self.keylocs[2]
+            ic[:, 1] = (ic[:, 1] - self.xline_range[0]) / self.keylocs[3]
+            ic = np.round(ic).astype(np.int32)
+        
+        # check ic is in the range of (n1, n2)
+        if ic[:, 0].min() < 0 or ic[:, 0].max() >= self._shape3d[0]:
+            raise IndexError("the first dimension out of range")
+        if ic[:, 1].min() < 0 or ic[:, 1].max() >= self._shape3d[1]:
+            raise IndexError("the second dimension out of range")
 
+        self._geomety = np.full(self.shape[:2], -1, dtype=np.int32) # (ni, nx), -1 means no trace
+        self._geomety[ic[:, 0], ic[:, 1]] = np.arange(self.trace_count)
 
-    def read_traces_fast(self, index):
-        raise NotImplementedError("Not implemented yet: TODO:")
+    def read_traces_with_index(self, index):
+        index = np.array(index)
+
+        if index.ndim == 2 and index.shape[1] == 2:
+            if not self.as_3d:
+                raise RuntimeError("The SEG-Y file is treat as 2D array, index must be 1D array. Call `to_3d()` to view as a 3D")
+            if self._geomety is None:
+                raise RuntimeError("geometry is not created, Call `update_geometry` first")
+    
+            index = self._geomety[index[:, 0], index[:, 1]]
+
+        assert index.ndim == 1, "index must be 1D array or list"
+        return self.segy.collect(index)
+
+    def map_to_index(self, index):
+        if self._geomety is None:
+            raise RuntimeError("geometry is not created, Call `update_geometry` first")
+
+        index = np.array(index)
+        assert index.ndim == 2 and index.shape[1] == 2, "index shape must be (N, 2)"
+        index = self._geomety[index[:, 0], index[:, 1]]
+        return index
+
+    def arbitrary_line(self, points, ptype='auto', return_path=True, di=1):
+        """
+        Extract an arbitrary line from the the SEG-Y file. 
+        The path is consisted by points
+
+        Parameters
+        -----------
+        points : ArrayLike
+            shape is (N, 2), it also can be a list
+        ptype : str
+            one of ['auto', 'zero', 'line', 'xy'], default is 'auto'.
+            'zero' means points are taken from a geometry with zero-origin (i.e., numpy array indexes), 
+            'line' means points are taken from the inline/xline geometry, 
+            'xy' means points are taken from the X-Y geometry.
+        return_path : bool
+            if true, will return the path
+        di : float
+            the interval between two points of the path
+        """
+        if not self.as_3d:
+            raise RuntimeError("`arbitrary_line` only support 3D SEG-Y file. Mybe you could call `to_3d` if is a 3D file")
+
+        points = np.array(points)
+        # HACK: Need optimize
+        if ptype == 'auto':
+            if points.max() > 100000:
+                ptype = 'xy'
+            elif points[:, 0].max() >= self.shape[0] or  points[:, 1].max() >= self.shape[1]:
+                ptype = 'line'
+            else:
+                ptype = 'zero'
+
+        if ptype == 'line':
+            points[:, 0] -= self.iline_range[0]
+            points[:, 1] -= self.xline_range[0]
+        elif ptype == 'xy':
+            points = self.xy_to_ix(points)
+
+        if points[:, 0].max() >= self.shape[0] or points[:, 0].min() < 0 or  points[:, 1].max() >= self.shape[1] or points[:, 1].min() < 0:
+            raise RuntimeError("`points` out range of the geometry. Maybe it's because the `ptype` is not set correctly (don't set 'auto')")
+
+        out, p = arbitray_line(self, points, di)
+        if not return_path:
+            return out 
+        return out, p
