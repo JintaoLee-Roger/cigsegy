@@ -696,47 +696,60 @@ void SegyIO::get_trace_keys_c(int *dst, const std::vector<int> &keys,
   }
 }
 
-void SegyIO::collect(float *data, int beg, int end) {
-  if (beg < 0) { // collect all traces
-    beg = 0;
-    end = m_metaInfo.trace_count;
-  }
-  if (end == 0) { // collect beg-th trace
-    end = beg + 1;
-  }
-  if (end < 0) { // collect beg to the last traces
-    end = m_metaInfo.trace_count;
-  }
-  if (beg >= end) {
-    throw std::runtime_error("invalid range: beg >= end");
-  }
-  if (end > m_metaInfo.trace_count) {
-    throw std::runtime_error("invalid range: end > trace_count");
-  }
+void SegyIO::collect(float *data, int beg, int end, int tbeg, int tend) {
+  // HACK: Remove all check into Pysegy?
+  // if (beg < 0) { // collect all traces
+  //   beg = 0;
+  //   end = m_metaInfo.trace_count;
+  // }
+  // if (end == 0) { // collect beg-th trace
+  //   end = beg + 1;
+  // }
+  // if (end < 0) { // collect beg to the last traces
+  //   end = m_metaInfo.trace_count;
+  // }
+  // if (beg >= end) {
+  //   throw std::runtime_error("invalid range: beg >= end");
+  // }
+  // if (end > m_metaInfo.trace_count) {
+  //   throw std::runtime_error("invalid range: end > trace_count");
+  // }
 
-  if (m_metaInfo.data_format == 4) {
-    throw std::runtime_error(
-        fmt::format("Don't support this data format {} now. So cigsegy cannot "
-                    "load the file.\n",
-                    m_metaInfo.data_format));
-  }
+  // if (tbeg < 0) {
+  //   tbeg = 0;
+  //   tend = m_metaInfo.sizeX;
+  // }
+  // if (tend == 0) {
+  //   tend = tbeg + 1;
+  // }
+  // if (tend < 0) {
+  //   tend = m_metaInfo.sizeX;
+  // }
+
+  // if (m_metaInfo.data_format == 4) {
+  //   throw std::runtime_error(
+  //       fmt::format("Don't support this data format {} now. So cigsegy cannot "
+  //                   "load the file.\n",
+  //                   m_metaInfo.data_format));
+  // }
 
   int total = end - beg;
+  int nele = tend - tbeg;
 
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
   const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
   for (int i = beg; i < end; i++) {
     CHECK_SIGNALS();
-    convert2np(data, source + i * trace_size + kTraceHeaderSize,
-               m_metaInfo.sizeX, m_metaInfo.data_format);
-    data += m_metaInfo.sizeX;
+    convert2np(data, source + i * trace_size + kTraceHeaderSize, nele, m_metaInfo.data_format);
+    data += nele;
   }
 }
 
-void SegyIO::collect(float *data, const int32_t *index, int n) {
+void SegyIO::collect(float *data, const int32_t *index, int n, int tbeg, int tend) {
   if (n <= 0) {
     throw std::runtime_error("invalid index size (must > 0)");
   }
+  int nele = tend - tbeg;
 
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
   const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
@@ -747,13 +760,12 @@ void SegyIO::collect(float *data, const int32_t *index, int n) {
         fmt::format("invalid index: {} > trace_count", index[i]));
     }
     if (index[i] < 0) {
-      std::fill(data, data + m_metaInfo.sizeX, 0);
+      std::fill(data, data + nele, 0);
     } else {
 
-    convert2np(data, source + index[i] * trace_size + kTraceHeaderSize,
-               m_metaInfo.sizeX, m_metaInfo.data_format);
+    convert2np(data, source + index[i] * trace_size + kTraceHeaderSize, nele, m_metaInfo.data_format);
     }
-    data += m_metaInfo.sizeX;
+    data += nele;
   }
 }
 
@@ -1099,7 +1111,7 @@ void SegyIO::read(float *dst) {
     scan();
   }
   if (m_metaInfo.isNormalSegy) {
-    collect(dst, -1, 0);
+    collect(dst, 0, trace_count(), 0, shape(0));
   } else {
     read_all_fast(dst);
   }

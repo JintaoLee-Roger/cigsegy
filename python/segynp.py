@@ -32,16 +32,19 @@ class SegyNP:
     >>> k = d[900] # the 900-th traces, output shape is (nt, )
     """
 
-    def __init__(self,
-                 filename: str,
-                 iline: int = None,
-                 xline: int = None,
-                 istep: int = None,
-                 xstep: int = None,
-                 xloc: int = None,
-                 yloc: int = None,
-                 as_2d: bool = False,
-                 as_unsorted: bool = False) -> None: # TODO: support unsorted?
+    def __init__(
+        self,
+        filename: str,
+        iline: int = None,
+        xline: int = None,
+        istep: int = None,
+        xstep: int = None,
+        xloc: int = None,
+        yloc: int = None,
+        as_2d: bool = False,
+        as_unsorted: bool = False,
+        ic=None,
+    ) -> None:  # TODO: support unsorted?
         disable_progressbar()
         np.set_printoptions(suppress=True)
         self.as_3d = not as_2d
@@ -50,12 +53,30 @@ class SegyNP:
         self.segy = Pysegy(str(filename))
         self.keylocs = None
         self._shape3d = None
-        if self.as_3d:
-            self._scan3d(iline, xline, istep, xstep, xloc, yloc)
+        self.metainfo = None
 
-        self.metainfo = self.segy.get_metaInfo()
+        # for coordinates transform
+        self._trans_matrix = None
+        self._geomety = None
+
+        if as_2d and as_unsorted:
+            warnings.warn("`as_2d` and `as_unsorted` can't be True at the same time, so as_unsorted will be ignored")
+            as_unsorted = False
+        self.as_unsorted = as_unsorted
+
+
         if self.as_3d:
+            if self.as_unsorted:
+                self._scan_unsorted(iline, xline, ic)
+            else:
+                try:
+                    self._scan3d(iline, xline, istep, xstep, xloc, yloc)
+                except Exception as e:
+                    raise RuntimeError(f"{str(e)}\n This SEG-Y file may be unsorted, you can pass `as_unsorted` to view it as unsorted file, but it may be slow") from e
+                self.metainfo = self.segy.get_metaInfo()
             self._shape3d = (self.metainfo.sizeZ, self.metainfo.sizeY, self.metainfo.sizeX)
+        else:
+            self.metainfo = self.segy.get_metaInfo()
 
         self._shape2d = (self.segy.trace_count, self.metainfo.sizeX)
         self._eval_range()
@@ -67,9 +88,51 @@ class SegyNP:
         else:
             self._scalar = self.metainfo.scalar
 
-        # for coordinates transform
-        self._trans_matrix = None
-        self._geomety = None
+    def _scan_unsorted(self, iline=None, xline=None, ic=None):
+        """scan the unsorted SEG-Y file and create the geometry"""
+        if ic is not None:
+            ic = np.array(ic)
+            if iline is not None or xline is not None:
+                warnings.warn("'ic' is provided, so 'iline' and 'xline' will be ignored.", UserWarning)
+            if ic.shape[0] != self.trace_count:
+                raise ValueError("The length of ic should be the same as the trace count")
+
+        elif iline is None or xline is None:
+            raise ValueError("When 'as_unsorted' is True, either 'iline' and 'xline' must both be set, or 'ic' must be provided.")
+
+        if ic is None:
+            ic = self.segy.get_trace_keys([iline, xline], [4]*2, 0, self.trace_count)
+
+        i0 = ic[:, 0].min()
+        ie = ic[:, 0].max()
+        diff = np.diff(np.sort(ic[:, 0]))
+        diff = diff[diff != 0]
+        istep = diff.min()
+        if (ie - i0) % istep != 0:
+            raise RuntimeError("can not create geomtry (error when determine iline/istep)")
+
+        x0 = ic[:, 1].min()
+        xe = ic[:, 1].max()
+        diff = np.diff(np.sort(ic[:, 1]))
+        diff = diff[diff != 0]
+        xstep = diff.min()
+        if (xe - x0) % xstep != 0:
+            raise RuntimeError("can not create geomtry (error when determine xline/xstep)")
+
+        ni = int((ie - i0) // istep + 1)
+        nx = int((xe - x0) // xstep + 1)
+        self.segy.setSteps(istep, xstep)
+        self.metainfo = self.segy.get_metaInfo()
+        self.metainfo.sizeZ = ni
+        self.metainfo.sizeY = nx
+        self.metainfo.min_inline = i0
+        self.metainfo.max_inline = ie
+        self.metainfo.min_crossline = x0
+        self.metainfo.max_crossline = xe
+        self.keylocs = [iline, xline, istep, xstep, 181, 185] # TODO: How to handle it?
+        self._shape3d = (ni, nx, self.metainfo.sizeX)
+        self.update_geometry(ic)
+
 
     def _scan3d(self, iline=None, xline=None, istep=None, xstep=None, xloc=None, yloc=None):
         [iline, xline, istep, xstep, xloc, yloc] = utils.guess(self.fname, iline, xline, istep, xstep, xloc, yloc)[0]
@@ -117,51 +180,54 @@ class SegyNP:
         else:
             return self._shape2d
 
-    def _read(self, ib, ie, xb, xe, tb, te) -> np.ndarray:
-        shape = [ie - ib, xe - xb, te - tb]
-        # if self._geomety is not None and shape[0]*shape[1] < 100: # TODO: how many?
-        #     # when the cube is small, it is very slow compare with using 2d collect
-        #     # so, if created geometry, using collect
-        #     x, y = np.meshgrid(np.arange(ib, ie), np.arange(xb, xe), indexing='ij')
-        #     d = self.read_traces_with_index(np.c_[x.flatten(), y.flatten()])
-        #     d = d[..., tb:te]
-        # else:
-        d = self.segy.read(ib, ie, xb, xe, tb, te)
+    def _read3d(self, idx):
+        num = idx[1::2].count(-1)
+        if num == 0 and not self.as_unsorted:
+            self._check_bound(*idx)
+            # HACK: when the cube is small, is it slow compare with using 2d collect? 
+            d = self.segy.read(*idx)
+        else:
+            if not self.is_create_geometry:
+                raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
+            ib, ie, xb, xe, tb, te = idx
+            x = ib if ie == -1 else np.arange(ib, ie)
+            y = xb if xe == -1 else np.arange(xb, xe)
+            # TODO: CHECK bound
+            x, y = np.meshgrid(x, y, indexing='ij')
+            shape = x.shape
+            if te == -1:
+                d = self.read_traces_with_index(np.c_[x.flatten(), y.flatten()]).reshape(*shape, -1)
+                d = d[:, :, tb]
+            else:
+                d = self.read_traces_with_index(np.c_[x.flatten(), y.flatten()], tb, te).reshape(*shape, -1)
+        
+        d = np.squeeze(d)
+        if d.ndim == 0:
+            d = float(d)
+        return d
 
-        if shape.count(1) == 3:
-            return d[0, 0, 0]
-        return np.squeeze(d)
+    def _read2d(self, idx):
+        tb = 0 if idx[-1] == -1 else idx[2]
+        te = self._shape2d[1] if idx[-1] == -1 else idx[3]
+
+        if idx[1] == -1:
+            assert idx[0].ndim == 1, "indices must be 1D array"
+            data = self.segy.collect(idx[0], tb, te)
+        else: # the first dimension is continuous
+            assert idx[0] < idx[1] and idx[0] >= 0 and idx[1] <= self.shape[0], "index out of range"
+            data = self.segy.collect(idx[0], idx[1], tb, te)
+
+        if idx[-1] == -1:
+            data = data[..., idx[-2]]
+
+        return data
 
     def __getitem__(self, slices) -> np.ndarray:
         idx = self._process_keys(slices)
-        num = idx.count(-1)
-        if num == 0:
-            self._check_bound(*idx)
-            if self.as_3d:
-                return self._read(*idx)
-            else:
-                data = self.segy.collect(idx[0], idx[1])
-                data = np.squeeze(data[:, idx[2]:idx[3]])
-                if data.ndim == 0:
-                    return float(data)
-                return data
+        if self.as_3d:
+            return self._read3d(idx)
         else:
-            if self.as_3d:
-                raise NotImplementedError("array/list indices only used when is 2d, TODO:")
-
-            if idx[1] == -1:
-                assert idx[0].ndim == 1, "indices must be 1D array"
-                data = self.read_traces_with_index(idx[0])
-            else: # the first dimension is continuous
-                data = self.segy.collect(idx[0], idx[1])
-
-            if idx[-1] == -1:
-                data = data[..., idx[-2]]
-            else:
-                assert idx[-2] < idx[-1] and idx[-2] >= 0 and idx[-1] <= self.shape[-1], "index out of range"
-                data = data[..., idx[-2]:idx[-1]]
-
-            return data
+            return self._read2d(idx)
 
     def _process_keys(self, key) -> List:
         if isinstance(key, (int, np.integer)):
@@ -212,7 +278,7 @@ class SegyNP:
                 elif isinstance(k, (List, np.ndarray)):
                     start_idx[i] = np.array(k)
                     end_idx[i] = -1
-                    # raise NotImplementedError("Not implemented yet: TODO:") 
+                    # raise NotImplementedError("Not implemented yet: TODO:")
                 else:
                     raise IndexError("Invalid index slices")
 
@@ -285,11 +351,17 @@ class SegyNP:
 
     def __array__(self):
         """To support np.array(SegyNP(xxx))"""
-        return self[...]
+        return self.to_numpy()
 
     def to_numpy(self):
         """like pandas"""
-        return self[...]
+        if self.as_3d:
+            if self.as_unsorted:
+                return self[...]
+            else:
+                return self.segy.read()
+        else:
+            return self.segy.collect()
 
     def __array_function__(self, func, types, args, kwargs):
         if func is np.nanmin:
@@ -429,14 +501,14 @@ class SegyNP:
 
         if ic is not None and ic.shape[0] != self.trace_count:
             raise ValueError("The length of ic should be the same as the trace count")
-        
+
         if ic is None:
             ic = self.segy.get_trace_keys(self.keylocs[:2], [2]*2, 0, self.trace_count)
         if ic.max() >= max(self._shape3d[:2]): # move ic to zero-origin
             ic[:, 0] = (ic[:, 0] - self.iline_range[0]) / self.keylocs[2]
             ic[:, 1] = (ic[:, 1] - self.xline_range[0]) / self.keylocs[3]
             ic = np.round(ic).astype(np.int32)
-        
+
         # check ic is in the range of (n1, n2)
         if ic[:, 0].min() < 0 or ic[:, 0].max() >= self._shape3d[0]:
             raise IndexError("the first dimension out of range")
@@ -446,19 +518,19 @@ class SegyNP:
         self._geomety = np.full(self.shape[:2], -1, dtype=np.int32) # (ni, nx), -1 means no trace
         self._geomety[ic[:, 0], ic[:, 1]] = np.arange(self.trace_count)
 
-    def read_traces_with_index(self, index):
-        index = np.array(index)
+    def read_traces_with_index(self, index, tbeg=-1, tend=0):
+        index = np.array(index).astype(np.int32)
 
         if index.ndim == 2 and index.shape[1] == 2:
             if not self.as_3d:
                 raise RuntimeError("The SEG-Y file is treat as 2D array, index must be 1D array. Call `to_3d()` to view as a 3D")
             if self._geomety is None:
                 raise RuntimeError("geometry is not created, Call `update_geometry` first")
-    
+
             index = self._geomety[index[:, 0], index[:, 1]]
 
         assert index.ndim == 1, "index must be 1D array or list"
-        return self.segy.collect(index)
+        return self.segy.collect(index, tbeg, tend)
 
     def map_to_index(self, index):
         if self._geomety is None:
@@ -512,5 +584,5 @@ class SegyNP:
 
         out, p = arbitray_line(self, points, di)
         if not return_path:
-            return out 
+            return out
         return out, p

@@ -140,7 +140,9 @@ class Pysegy():
 
     def collect(self,
                 beg: int = -1,
-                end: int = 0) -> numpy.ndarray[numpy.float32]:
+                end: int = 0,
+                tbeg: int = -1,
+                tend: int = 0) -> numpy.ndarray[numpy.float32]:
         """
         collect traces as a 2D data from the `segy_in` file in
         range of [beg, end), beg < 0 means collect all traces,
@@ -155,14 +157,18 @@ class Pysegy():
             the end index of traces (not include), < 0 means collect 
                 traces from beg to the last trace, == 0 means read 
                 the beg-th trace (one trace).
+        tbeg : int
+            the beg sample of time
+        tend : int
+            the end sample of time
 
         Returns
         -------
         numpy.ndarray :
-            its shape = (trace_count, n-time)
+            its shape = (trace_count, tend - tbeg)
         """
 
-    def collect(self, index: numpy.ndarray) -> numpy.ndarray:
+    def collect(self, index: numpy.ndarray, tbeg: int = -1, tend: int = 0) -> numpy.ndarray:
         """
         collect traces as a 2D data from the `segy_in` file with the index
 
@@ -170,11 +176,15 @@ class Pysegy():
         ----------
         index : ArrayLike, np.int32
             the trace index
+        tbeg : int
+            the beg sample of time
+        tend : int
+            the end sample of time
 
         Returns
         -------
         numpy.ndarray :
-            its shape = (len(index), n-time)
+            its shape = (len(index), tend - tbeg)
         """
 
     @typing.overload
