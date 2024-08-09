@@ -30,6 +30,12 @@ class SegyNP:
     >>> print(d.min(), d.max()) # NOTE: min and max are evalated by a small part of data
     >>> d.to_2d() # as a collection of traces, shape is like (trace_count, n-time)
     >>> k = d[900] # the 900-th traces, output shape is (nt, )
+    >>> d.to_3d()# back to 3d
+    >>> line = d.arbitray_line([[0, 0], [100, 100]]) # arbitray line
+    >>> d.xy_to_ic([555627, 998321]) # map X-Y to numpy array index
+    >>> d.xy_to_ic([555627, 998321], zero_origin=False) # map X-Y to inline/xline index
+    >>> d.ic_to_xy([10, 100]) # map numpy array index to X-Y
+    >>> d = SegyNP('test.sgy', iline=189, xline=193, as_unsorted=True) # load as unsorted SEG-Y file
     """
 
     def __init__(
@@ -44,7 +50,7 @@ class SegyNP:
         as_2d: bool = False,
         as_unsorted: bool = False,
         ic=None,
-    ) -> None:  # TODO: support unsorted?
+    ) -> None:  # TODO: support 4D gather?
         disable_progressbar()
         np.set_printoptions(suppress=True)
         self.as_3d = not as_2d
@@ -63,7 +69,6 @@ class SegyNP:
             warnings.warn("`as_2d` and `as_unsorted` can't be True at the same time, so as_unsorted will be ignored")
             as_unsorted = False
         self.as_unsorted = as_unsorted
-
 
         if self.as_3d:
             if self.as_unsorted:
@@ -278,7 +283,6 @@ class SegyNP:
                 elif isinstance(k, (List, np.ndarray)):
                     start_idx[i] = np.array(k)
                     end_idx[i] = -1
-                    # raise NotImplementedError("Not implemented yet: TODO:")
                 else:
                     raise IndexError("Invalid index slices")
 
