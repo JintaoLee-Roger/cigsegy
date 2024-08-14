@@ -158,7 +158,7 @@ public:
   void read_cross_slice(float *dst, int iY);
   void read_time_slice(float *dst, int iX);
   void read_trace(float *dst, int iY, int iZ);
-  void tofile(const std::string &binary_out_name);
+  void tofile(const std::string &binary_out_name, bool as_2d = false);
   void cut(const std::string &outname, int startX, int endX, int startY, int endY,
       int startZ, int endZ,
       const std::vector<std::string> &custom_info = std::vector<std::string>());
@@ -217,7 +217,7 @@ void read(const std::string &segy_name, float *dst,
 
 void tofile(const std::string &segy_name, const std::string &out_name,
             int iline = kDefaultInlineField, int xline = kDefaultCrosslineField,
-            int istep = 1, int xstep = 1);
+            int istep = 1, int xstep = 1, bool as_2d=false);
 
 void create_by_sharing_header(
     const std::string &segy_name, const std::string &header_segy,

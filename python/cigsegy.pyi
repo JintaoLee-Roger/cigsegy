@@ -455,7 +455,7 @@ class Pysegy():
             3200 bytes textual header
         """
 
-    def tofile(self, binary_out_name: str) -> None:
+    def tofile(self, binary_out_name: str, as_2d: bool = False) -> None:
         """ 
         read a segy file and convert it to a binary file.
 
@@ -463,6 +463,8 @@ class Pysegy():
         ----------
         binary_out_name : str
             the output binary file name
+        as_2d : bool
+            if True, just remove the header and convert data to IEEE 32 in litte endian
         """
 
     def close_file(self) -> None:
@@ -681,7 +683,8 @@ def tofile(segy_name: str,
            iline: int = 189,
            xline: int = 193,
            istep: int = 1,
-           xstep: int = 1) -> None:
+           xstep: int = 1,
+           as_2d: bool = False) -> None:
     """
     convert a segy file to a binary file
 
@@ -699,6 +702,8 @@ def tofile(segy_name: str,
         the step of inline numbers
     xstep : int
         the step of crossline numbers
+    as_2d : bool
+        if True, just remove the header and convert data to IEEE 32 in litte endian
     """
 
 

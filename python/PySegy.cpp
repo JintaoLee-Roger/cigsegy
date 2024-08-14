@@ -564,7 +564,7 @@ PYBIND11_MODULE(cigsegy, m) {
       .def("setSteps", &Pysegy::setSteps, py::arg("istep"), py::arg("xstep"))
       .def("setFillNoValue", &Pysegy::setFillNoValue, py::arg("fills"))
       .def("scan", &Pysegy::scan)
-      .def("tofile", &Pysegy::tofile, py::arg("binary_out_name"))
+      .def("tofile", &Pysegy::tofile, py::arg("binary_out_name"), py::arg("as_2d")=false)
       .def("collect", overload_cast_<int, int, int, int>()(&Pysegy::collect), "Load traces from beg to end as a 2D array",
           py::arg("beg") = -1, py::arg("end") = 0, py::arg("tbeg") = -1, py::arg("tend") = 0)
       .def("collect", overload_cast_<const npint32&, int, int>()(&Pysegy::collect), "Load traces with index as a 2D array", 
@@ -649,7 +649,7 @@ PYBIND11_MODULE(cigsegy, m) {
         py::arg("xline") = 193, py::arg("istep") = 1, py::arg("xstep") = 1);
   m.def("tofile", &segy::tofile, "convert to binary file", py::arg("segy_name"),
         py::arg("out_name"), py::arg("iline") = 189, py::arg("xline") = 193,
-        py::arg("istep") = 1, py::arg("xstep") = 1);
+        py::arg("istep") = 1, py::arg("xstep") = 1, py::arg("as_2d") = false);
   m.def("create_by_sharing_header",
         overload_cast_<const std::string &, const std::string &,
                        const npfloat &, int, int, int, int, const py::object &,
