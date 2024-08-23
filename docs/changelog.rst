@@ -7,6 +7,7 @@ Changelog
 v1.1.9
 --------
 - fixed a bug with out-of-int32 range offsets (occurred on Windows)
+- changed code for creating large files to speed things up
 - optimize ``SegyNP``
 
 

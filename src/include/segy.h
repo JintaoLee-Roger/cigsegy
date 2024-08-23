@@ -18,19 +18,6 @@
 #include "utils.h"
 #include <fmt/format.h>
 
-#ifdef USE_PYBIND11
-#include <pybind11/pybind11.h>
-
-inline void checkSignals() {
-    if (PyErr_CheckSignals() != 0) {
-        throw pybind11::error_already_set();
-    }
-}
-#define CHECK_SIGNALS() checkSignals()
-
-#else
-#define CHECK_SIGNALS() do {} while (0)
-#endif
 
 namespace segy {
 

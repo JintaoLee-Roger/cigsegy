@@ -16,18 +16,6 @@
 #include <stdexcept>
 #include <vector>
 
-// #ifdef WIN32
-// #include <fcntl.h>
-// #include <io.h>
-// #define open _open
-// #define lseek _lseek
-// #define close _close
-// #define write _write
-// #define O_RDWR _O_RDWR
-// #define O_CREAT _O_CREAT
-// #define O_TRUNC _O_TRUNC
-// #endif
-
 #include "mio.hpp"
 #include "progressbar.hpp"
 #include "utils.h"
@@ -1191,20 +1179,7 @@ void SegyIO::tofile(const std::string &binary_out_name, bool as_2d) {
     need_size = m_metaInfo.trace_count * m_metaInfo.sizeX * m_metaInfo.esize;
   }
 
-  std::ofstream ffst(binary_out_name, std::ios::binary);
-  if (!ffst) {
-    throw std::runtime_error("create file failed: Open file failed");
-  }
-  while (need_size > 0) {
-    uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
-    ffst.seekp(move_point - 1, std::ios_base::cur);
-    ffst.put(0);
-    need_size -= move_point;
-  }
-  if (need_size != 0) {
-    throw std::runtime_error("create file failed: Write space failed");
-  }
-  ffst.close();
+  create_file(binary_out_name, need_size);
 
   std::error_code error;
   mio::mmap_sink rw_mmap = mio::make_mmap_sink(binary_out_name, error);
@@ -1392,20 +1367,7 @@ void SegyIO::create(const std::string &segy_out_name, const float *src,
       kTextualHeaderSize + kBinaryHeaderSize +
       static_cast<uint64_t>(m_metaInfo.sizeY) * m_metaInfo.sizeZ *
           (m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize);
-  std::ofstream ffst(segy_out_name, std::ios::binary);
-  if (!ffst) {
-    throw std::runtime_error("create file failed: Open file failed");
-  }
-  while (need_size > 0) {
-    uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
-    ffst.seekp(move_point - 1, std::ios_base::cur);
-    ffst.put(0);
-    need_size -= move_point;
-  }
-  if (need_size != 0) {
-    throw std::runtime_error("create file failed: Write space failed");
-  }
-  ffst.close();
+  create_file(segy_out_name, need_size);
 
   std::error_code error;
   mio::mmap_sink rw_mmap = mio::make_mmap_sink(segy_out_name, error);
@@ -1702,21 +1664,10 @@ void create_by_sharing_header(const std::string &segy_name,
           sizeX));
     }
 
-    uint64_t need_size = kTextualHeaderSize + kBinaryHeaderSize + static_cast<uint64_t>(trace_count) * (sizeX * meta_info.esize + kTraceHeaderSize);
-    std::ofstream ffst(segy_name, std::ios::binary);
-    if (!ffst) {
-      throw std::runtime_error("create file failed: Open file failed");
-    }
-    while (need_size > 0) {
-      uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
-      ffst.seekp(move_point - 1, std::ios_base::cur);
-      ffst.put(0);
-      need_size -= move_point;
-    }
-    if (need_size != 0) {
-      throw std::runtime_error("create file failed: Write space failed");
-    }
-    ffst.close();
+    uint64_t need_size = kTextualHeaderSize + kBinaryHeaderSize +
+                         static_cast<uint64_t>(trace_count) *
+                             (sizeX * meta_info.esize + kTraceHeaderSize);
+    create_file(segy_name, need_size);
 
     mio::mmap_sink rw_mmap = mio::make_mmap_sink(segy_name, error);
     if (error) {
@@ -1740,7 +1691,7 @@ void create_by_sharing_header(const std::string &segy_name,
       throw std::runtime_error("size_{src} + offset > size_{header}");
     }
 
-  // clang-format off
+    // clang-format off
     uint64_t max_size = kTextualHeaderSize + kBinaryHeaderSize + static_cast<uint64_t>(kTraceHeaderSize + sizeX * meta_info.esize) * (sizeY * sizeZ);
     std::vector<char> outsegy(max_size, 0);
     char *outptr = outsegy.data();

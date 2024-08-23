@@ -67,10 +67,13 @@ class ScanMixin:
         self.segy.scan()
 
     def _eval_range(self):
+        if self.trace_count < 6000:
+            p0 = self.segy.collect(0, self.trace_count)
+            self._min = mi
+            self._max = ma
+            return
+
         s, e = self.trace_count - 4000, 4000
-        if self.trace_count < 4000:
-            e = self.trace_count
-            s = 0
         p0 = self.segy.collect(0, e)
         mi, ma = p0.min(), p0.max()
 
@@ -203,6 +206,18 @@ class GeometryMixin:
             self.update_trans_matrix()
         return np.round(apply_transform(ix, self._trans_matrix), 2).reshape(shape)
 
+    @property
+    def north(self):
+        if self._north is None:
+            xy1 = self.segy.get_trace_keys(self.keylocs[4:], [4]*2, int(self.trace_count//3), int(self.trace_count//3)+1) # yapf: disable
+            xy1 = xy1.flatten()
+            xy2 = xy1.copy()
+            xy2[1] += 1000
+            n = self.xy_to_ix([xy1, xy2])
+            di = n[1] - n[0]
+            self._north = di / np.linalg.norm(di)
+
+        return self._north
 
 
 class InterpMixin:
@@ -462,7 +477,11 @@ class InnerMixin:
             return self._read2d(idx)
 
     def __array_function__(self, func, types, args, kwargs):
-        if func is np.nanmin:
+        if func is np.min:
+            return self.min()
+        elif func is np.max:
+            return self.max()
+        elif func is np.nanmin:
             return self.min()
         elif func is np.nanmax:
             return self.max()
@@ -537,6 +556,7 @@ class SegyNP(InnerMixin, ScanMixin, GeometryMixin, InterpMixin, RWMixin):
         # for coordinates transform
         self._trans_matrix = None
         self._geomety = None
+        self._north = None
 
         if as_2d and as_unsorted:
             warnings.warn("`as_2d` and `as_unsorted` can't be True at the same time, so as_unsorted will be ignored")
@@ -568,11 +588,11 @@ class SegyNP(InnerMixin, ScanMixin, GeometryMixin, InterpMixin, RWMixin):
 
     @property
     def trace_count(self) -> int:
-        return self.segy.trace_count
+        return int(self.segy.trace_count)
 
     @property
     def scalar(self) -> float:
-        return self._scalar
+        return float(self._scalar)
 
     @scalar.setter
     def scalar(self, value):
@@ -618,27 +638,27 @@ class SegyNP(InnerMixin, ScanMixin, GeometryMixin, InterpMixin, RWMixin):
     def iline_range(self):
         if self._shape3d is None:
             raise NotImplementedError("Need scan the file first, please call `to_3d` first") # HACK: need to be optimized when as_2d
-        return self.metainfo.min_inline, self.metainfo.max_inline
+        return int(self.metainfo.min_inline), int(self.metainfo.max_inline)
 
     @property
     def xline_range(self):
         if self._shape3d is None:
             raise NotImplementedError("Need scan the file first, please call `to_3d` first") # HACK: need to be optimized when as_2d
-        return self.metainfo.min_crossline, self.metainfo.max_crossline
+        return int(self.metainfo.min_crossline), int(self.metainfo.max_crossline)
 
     @property
     def time_start(self):
         """
         Get the start time of the SEG-Y file, unit in ms
         """
-        return self.metainfo.start_time
+        return int(self.metainfo.start_time)
 
     @property
     def dt(self):
         """
         Get the sample interval of the SEG-Y file, unit in ms
         """
-        return self.metainfo.sample_interval / 1000
+        return float(self.metainfo.sample_interval) / 1000
 
     @property
     def interval(self):
@@ -647,7 +667,7 @@ class SegyNP(InnerMixin, ScanMixin, GeometryMixin, InterpMixin, RWMixin):
         """
         di = np.round(self.metainfo.Z_interval * self.scalar, 2)
         dx = np.round(self.metainfo.Y_interval * self.scalar, 2)
-        return (di, dx, self.dt)
+        return (float(di), float(dx), self.dt)
 
     @property
     def is_create_geometry(self):

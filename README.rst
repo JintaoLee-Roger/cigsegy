@@ -181,8 +181,8 @@ BibTex
     
     @misc{cigsegy,
     author = {Li, Jintao},
-    title = {CIGSEGY: A tool for exchanging data between SEG-Y format and NumPy array inside Python environment},
-    url = {\url{https://github.com/JintaoLee-Roger/cigsegy}},
+    title = {{CIGSEGY}: A tool for exchanging data between SEG-Y format and NumPy array inside Python environment},
+    howpublished = {\url{https://github.com/JintaoLee-Roger/cigsegy}},
     }
 
 
