@@ -19,6 +19,7 @@
 
 #ifdef _WIN32
 #define NOMINMAX
+#undef max
 #include <windows.h>
 #else
 #include <fcntl.h>
