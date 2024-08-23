@@ -18,7 +18,27 @@
 #include <utility>
 
 #ifdef _WIN32
-#undef max
+#define NOMINMAX
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
+#ifdef USE_PYBIND11
+#include <pybind11/pybind11.h>
+
+inline void checkSignals() {
+  if (PyErr_CheckSignals() != 0) {
+    throw pybind11::error_already_set();
+  }
+}
+#define CHECK_SIGNALS() checkSignals()
+
+#else
+#define CHECK_SIGNALS()                                                        \
+  do {                                                                         \
+  } while (0)
 #endif
 
 using uchar = unsigned char;
@@ -28,6 +48,7 @@ namespace segy {
 // const size
 const int kTextualHeaderSize = 3200;
 const int kBinaryHeaderSize = 400;
+const int kTraceHeaderStart = 3600;
 const int kTraceHeaderSize = 240;
 const int kTextualColumns = 80;
 const int kTextualRows = 40;
@@ -413,7 +434,8 @@ const std::map<int, const char *> kTraceSortingHelp = {
 const uint64_t kMaxLSeekSize = std::numeric_limits<long>::max();
 
 // NOTE: only support SEGY-v1
-const std::map<int, int> kElementSize = {{1, 4}, {2, 4}, {3, 2}, {4, 4}, {5, 4}, {8, 1}};
+const std::map<int, int> kElementSize = {{1, 4}, {2, 4}, {3, 2},
+                                         {4, 4}, {5, 4}, {8, 1}};
 
 inline void swap_endian_inplace(void *dst, const void *src, int n) {
   uchar *_dst = static_cast<uchar *>(dst);
@@ -607,8 +629,8 @@ inline void read_one_trace_header(void *dst, const void *src) {
   }
 }
 
-
-template <typename T> void convert2npT(float *dst, const void *src, int size, int dformat) {
+template <typename T>
+void convert2npT(float *dst, const void *src, int size, int dformat) {
   const T *_src = static_cast<const T *>(src);
   for (int i = 0; i < size; ++i) {
     if (dformat == 1) {
@@ -619,19 +641,27 @@ template <typename T> void convert2npT(float *dst, const void *src, int size, in
   }
 }
 
-
 inline void convert2np(float *dst, const char *src, int size, int dformat) {
-  if (dformat == 1) convert2npT<float>(dst, src, size, dformat);
-  else if (dformat == 2) convert2npT<int32_t>(dst, src, size, dformat);
-  else if (dformat == 3) convert2npT<int16_t>(dst, src, size, dformat);
-  else if (dformat == 5) convert2npT<float>(dst, src, size, dformat);
-  else if (dformat == 8) convert2npT<int8_t>(dst, src, size, dformat);
-  else if (dformat == 10) convert2npT<uint32_t>(dst, src, size, dformat);
-  else if (dformat == 11) convert2npT<uint16_t>(dst, src, size, dformat);
-  else if (dformat == 16) convert2npT<uint8_t>(dst, src, size, dformat);
+  if (dformat == 1)
+    convert2npT<float>(dst, src, size, dformat);
+  else if (dformat == 2)
+    convert2npT<int32_t>(dst, src, size, dformat);
+  else if (dformat == 3)
+    convert2npT<int16_t>(dst, src, size, dformat);
+  else if (dformat == 5)
+    convert2npT<float>(dst, src, size, dformat);
+  else if (dformat == 8)
+    convert2npT<int8_t>(dst, src, size, dformat);
+  else if (dformat == 10)
+    convert2npT<uint32_t>(dst, src, size, dformat);
+  else if (dformat == 11)
+    convert2npT<uint16_t>(dst, src, size, dformat);
+  else if (dformat == 16)
+    convert2npT<uint8_t>(dst, src, size, dformat);
 }
 
-template <typename T> void float2sgyT(void *dst, const float *src, int size, int dformat) {
+template <typename T>
+void float2sgyT(void *dst, const float *src, int size, int dformat) {
   T *_dst = static_cast<T *>(dst);
 
   for (int i = 0; i < size; ++i) {
@@ -644,16 +674,56 @@ template <typename T> void float2sgyT(void *dst, const float *src, int size, int
 }
 
 inline void float2sgy(char *dst, const float *src, int size, int dformat) {
-  if (dformat == 1) float2sgyT<float>(dst, src, size, dformat);
-  else if (dformat == 2) float2sgyT<int32_t>(dst, src, size, dformat);
-  else if (dformat == 3) float2sgyT<int16_t>(dst, src, size, dformat);
-  else if (dformat == 5) float2sgyT<float>(dst, src, size, dformat);
-  else if (dformat == 8) float2sgyT<int8_t>(dst, src, size, dformat);
-  else if (dformat == 10) float2sgyT<uint32_t>(dst, src, size, dformat);
-  else if (dformat == 11) float2sgyT<uint16_t>(dst, src, size, dformat);
-  else if (dformat == 16) float2sgyT<uint8_t>(dst, src, size, dformat);
+  if (dformat == 1)
+    float2sgyT<float>(dst, src, size, dformat);
+  else if (dformat == 2)
+    float2sgyT<int32_t>(dst, src, size, dformat);
+  else if (dformat == 3)
+    float2sgyT<int16_t>(dst, src, size, dformat);
+  else if (dformat == 5)
+    float2sgyT<float>(dst, src, size, dformat);
+  else if (dformat == 8)
+    float2sgyT<int8_t>(dst, src, size, dformat);
+  else if (dformat == 10)
+    float2sgyT<uint32_t>(dst, src, size, dformat);
+  else if (dformat == 11)
+    float2sgyT<uint16_t>(dst, src, size, dformat);
+  else if (dformat == 16)
+    float2sgyT<uint8_t>(dst, src, size, dformat);
 }
 
+// ofstream is very slow on out disk, so we use low-level I/O functions
+inline void create_file(const std::string &file_name, uint64_t file_size) {
+#ifdef _WIN32
+  HANDLE file = CreateFile(file_name.c_str(), GENERIC_WRITE, 0, NULL,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) {
+    throw std::runtime_error("Failed to create file");
+  }
+
+  LARGE_INTEGER size;
+  size.QuadPart = file_size;
+  if (SetFilePointerEx(file, size, NULL, FILE_BEGIN) == 0 ||
+      SetEndOfFile(file) == 0) {
+    CloseHandle(file);
+    throw std::runtime_error("Failed to set file size");
+  }
+
+  CloseHandle(file);
+#else
+  int fd = open(file_name.c_str(), O_CREAT | O_RDWR, 0666);
+  if (fd < 0) {
+    throw std::runtime_error("Failed to create file");
+  }
+
+  if (ftruncate(fd, file_size) != 0) {
+    close(fd);
+    throw std::runtime_error("Failed to set file size");
+  }
+
+  close(fd);
+#endif
+}
 
 } // namespace segy
 

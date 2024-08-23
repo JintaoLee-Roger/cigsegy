@@ -16,18 +16,6 @@
 #include <stdexcept>
 #include <vector>
 
-// #ifdef WIN32
-// #include <fcntl.h>
-// #include <io.h>
-// #define open _open
-// #define lseek _lseek
-// #define close _close
-// #define write _write
-// #define O_RDWR _O_RDWR
-// #define O_CREAT _O_CREAT
-// #define O_TRUNC _O_TRUNC
-// #endif
-
 #include "mio.hpp"
 #include "progressbar.hpp"
 #include "utils.h"
@@ -258,6 +246,7 @@ static int64_t copy_traces(const mio::mmap_source &header,
 
   uint64_t trace_size = kTraceHeaderSize + sizeX * meta_info.esize;
   uint64_t trace_size_ori = kTraceHeaderSize + meta_info.sizeX * meta_info.esize;
+  uint64_t sizeXY = static_cast<uint64_t>(sizeY) * sizeX;
 
   // iz: numpy sub volume
   // izo: numpy full volume
@@ -267,7 +256,7 @@ static int64_t copy_traces(const mio::mmap_source &header,
     }
     CHECK_SIGNALS();
 
-    const float *srcopy = src + iz * sizeY * sizeX;
+    const float *srcopy = src + iz * sizeXY;
 
     int izo = iz + offsetZ;
 
@@ -661,7 +650,7 @@ void SegyIO::get_trace_full(int n, uchar *trace, bool raw) {
   const char *src = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize +
                     (m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize) *
                         static_cast<uint64_t>(n);
-  int tracesize = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
+  uint64_t tracesize = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
 
   if (raw) {
     memcpy(trace, src, tracesize);
@@ -696,40 +685,76 @@ void SegyIO::get_trace_keys_c(int *dst, const std::vector<int> &keys,
   }
 }
 
-void SegyIO::collect(float *data, int beg, int end) {
-  if (beg < 0) { // collect all traces
-    beg = 0;
-    end = m_metaInfo.trace_count;
-  }
-  if (end == 0) { // collect beg-th trace
-    end = beg + 1;
-  }
-  if (end < 0) { // collect beg to the last traces
-    end = m_metaInfo.trace_count;
-  }
-  if (beg >= end) {
-    throw std::runtime_error("invalid range: beg >= end");
-  }
-  if (end > m_metaInfo.trace_count) {
-    throw std::runtime_error("invalid range: end > trace_count");
-  }
+void SegyIO::collect(float *data, int beg, int end, int tbeg, int tend) {
+  // HACK: Remove all check into Pysegy?
+  // if (beg < 0) { // collect all traces
+  //   beg = 0;
+  //   end = m_metaInfo.trace_count;
+  // }
+  // if (end == 0) { // collect beg-th trace
+  //   end = beg + 1;
+  // }
+  // if (end < 0) { // collect beg to the last traces
+  //   end = m_metaInfo.trace_count;
+  // }
+  // if (beg >= end) {
+  //   throw std::runtime_error("invalid range: beg >= end");
+  // }
+  // if (end > m_metaInfo.trace_count) {
+  //   throw std::runtime_error("invalid range: end > trace_count");
+  // }
 
-  if (m_metaInfo.data_format == 4) {
-    throw std::runtime_error(
-        fmt::format("Don't support this data format {} now. So cigsegy cannot "
-                    "load the file.\n",
-                    m_metaInfo.data_format));
-  }
+  // if (tbeg < 0) {
+  //   tbeg = 0;
+  //   tend = m_metaInfo.sizeX;
+  // }
+  // if (tend == 0) {
+  //   tend = tbeg + 1;
+  // }
+  // if (tend < 0) {
+  //   tend = m_metaInfo.sizeX;
+  // }
+
+  // if (m_metaInfo.data_format == 4) {
+  //   throw std::runtime_error(
+  //       fmt::format("Don't support this data format {} now. So cigsegy cannot "
+  //                   "load the file.\n",
+  //                   m_metaInfo.data_format));
+  // }
 
   int total = end - beg;
+  int nele = tend - tbeg;
 
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
   const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
   for (int i = beg; i < end; i++) {
     CHECK_SIGNALS();
-    convert2np(data, source + i * trace_size + kTraceHeaderSize,
-               m_metaInfo.sizeX, m_metaInfo.data_format);
-    data += m_metaInfo.sizeX;
+    convert2np(data, source + i * trace_size + kTraceHeaderSize, nele, m_metaInfo.data_format);
+    data += nele;
+  }
+}
+
+void SegyIO::collect(float *data, const int32_t *index, int n, int tbeg, int tend) {
+  if (n <= 0) {
+    throw std::runtime_error("invalid index size (must > 0)");
+  }
+  int nele = tend - tbeg;
+
+  uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
+  const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
+  for (int i = 0; i < n; i++) {
+    CHECK_SIGNALS();
+    if (index[i] >= m_metaInfo.trace_count) {
+      throw std::runtime_error(
+        fmt::format("invalid index: {} > trace_count", index[i]));
+    }
+    if (index[i] < 0) {
+      std::fill(data, data + nele, 0);
+    } else {
+
+    convert2np(data, source + index[i] * trace_size + kTraceHeaderSize, nele, m_metaInfo.data_format);
+    }
+    data += nele;
   }
 }
 
@@ -994,6 +1019,7 @@ void SegyIO::read(float *dst, int startX, int endX, int startY, int endY,
   int sizeY = endY - startY;
   int sizeZ = endZ - startZ;
   int offset = startX * m_metaInfo.esize + kTraceHeaderSize;
+  uint64_t sizeXY = sizeX * sizeY;
 
   int step = sizeZ >= 100 ? 1 : 100 / sizeZ + 1;
   int nbar = sizeZ >= 100 ? sizeZ : step * sizeZ;
@@ -1006,14 +1032,14 @@ void SegyIO::read(float *dst, int startX, int endX, int startY, int endY,
     CHECK_SIGNALS();
     // init start trace in iZ line
     int istart = startY;
-    float *dstline = dst + static_cast<uint64_t>(iZ - startZ) * sizeX * sizeY;
+    float *dstline = dst + (iZ - startZ) * sizeXY;
     uint64_t trace_start = m_metaInfo.isNormalSegy ? iZ * m_metaInfo.sizeY
                                                    : m_lineInfo[iZ].trace_start;
     const char *sourceline = source + trace_start * trace_size;
 
     // line is missing
     if (m_lineInfo[iZ].count == 0) {
-      std::fill(dstline, dstline + sizeX * sizeY, m_metaInfo.fillNoValue);
+      std::fill(dstline, dstline + sizeXY, m_metaInfo.fillNoValue);
       continue;
     }
 
@@ -1075,7 +1101,7 @@ void SegyIO::read(float *dst) {
     scan();
   }
   if (m_metaInfo.isNormalSegy) {
-    collect(dst, -1, 0);
+    collect(dst, 0, trace_count(), 0, shape(0));
   } else {
     read_all_fast(dst);
   }
@@ -1091,7 +1117,8 @@ void SegyIO::read(float *dst, int sizeY, int sizeZ, int minY, int minZ) {
 
   int Ystep = m_metaInfo.crossline_step;
   int Zstep = m_metaInfo.inline_step;
-  uint64_t sizeX = m_metaInfo.sizeX;
+  int sizeX = m_metaInfo.sizeX;
+  uint64_t sizeXY = sizeX * sizeY;
   int trace_count = m_metaInfo.trace_count;
   const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
@@ -1108,9 +1135,8 @@ void SegyIO::read(float *dst, int sizeY, int sizeZ, int minY, int minZ) {
       throw std::runtime_error("Index out of range");
     }
 
-    float *dstl = dst + il * sizeY * sizeX + xl * sizeX;
-    convert2np(dstl, source + i * trace_size + kTraceHeaderSize, (int)sizeX,
-               m_metaInfo.data_format);
+    float *dstl = dst + il * sizeXY + xl * sizeX;
+    convert2np(dstl, source + i * trace_size + kTraceHeaderSize, sizeX, m_metaInfo.data_format);
   }
 }
 
@@ -1142,34 +1168,32 @@ void SegyIO::read_trace(float *dst, int iY, int iZ) {
   read(dst, 0, m_metaInfo.sizeX, iY, iY + 1, iZ, iZ + 1);
 }
 
-void SegyIO::tofile(const std::string &binary_out_name) {
-  if (!isScan) {
+void SegyIO::tofile(const std::string &binary_out_name, bool as_2d) {
+  if (!isScan and !as_2d) {
     scan();
   }
-  uint64_t need_size = static_cast<uint64_t>(m_metaInfo.sizeX) *
-                       m_metaInfo.sizeY * m_metaInfo.sizeZ * m_metaInfo.esize;
-  std::ofstream ffst(binary_out_name, std::ios::binary);
-  if (!ffst) {
-    throw std::runtime_error("create file failed: Open file failed");
+  uint64_t need_size = 0;
+  if (!as_2d) {
+    need_size = static_cast<uint64_t>(m_metaInfo.sizeX) * m_metaInfo.sizeY * m_metaInfo.sizeZ * m_metaInfo.esize;
+  } else {
+    need_size = m_metaInfo.trace_count * m_metaInfo.sizeX * m_metaInfo.esize;
   }
-  while (need_size > 0) {
-    uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
-    ffst.seekp(move_point - 1, std::ios_base::cur);
-    ffst.put(0);
-    need_size -= move_point;
-  }
-  if (need_size != 0) {
-    throw std::runtime_error("create file failed: Write space failed");
-  }
-  ffst.close();
+
+  create_file(binary_out_name, need_size);
 
   std::error_code error;
   mio::mmap_sink rw_mmap = mio::make_mmap_sink(binary_out_name, error);
   if (error) {
     throw std::runtime_error("mmap fail when write data");
   }
+
   // or need split into serveral chunks?
-  read(reinterpret_cast<float *>(rw_mmap.data()));
+  if (!as_2d) {
+    read(reinterpret_cast<float *>(rw_mmap.data()));
+  } else {
+    collect(reinterpret_cast<float *>(rw_mmap.data()), 0, (int)m_metaInfo.trace_count, 0, m_metaInfo.sizeX);
+  }
+
   rw_mmap.unmap();
 }
 
@@ -1343,20 +1367,7 @@ void SegyIO::create(const std::string &segy_out_name, const float *src,
       kTextualHeaderSize + kBinaryHeaderSize +
       static_cast<uint64_t>(m_metaInfo.sizeY) * m_metaInfo.sizeZ *
           (m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize);
-  std::ofstream ffst(segy_out_name, std::ios::binary);
-  if (!ffst) {
-    throw std::runtime_error("create file failed: Open file failed");
-  }
-  while (need_size > 0) {
-    uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
-    ffst.seekp(move_point - 1, std::ios_base::cur);
-    ffst.put(0);
-    need_size -= move_point;
-  }
-  if (need_size != 0) {
-    throw std::runtime_error("create file failed: Write space failed");
-  }
-  ffst.close();
+  create_file(segy_out_name, need_size);
 
   std::error_code error;
   mio::mmap_sink rw_mmap = mio::make_mmap_sink(segy_out_name, error);
@@ -1377,6 +1388,7 @@ void SegyIO::create(const std::string &segy_out_name, const float *src,
   progressbar bar(nbar);
 
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
+  uint64_t sizeXY = m_metaInfo.sizeX * m_metaInfo.sizeY;
   // #pragma omp parallel for
   for (int iZ = 0; iZ < m_metaInfo.sizeZ; iZ++) {
     CHECK_SIGNALS();
@@ -1389,9 +1401,7 @@ void SegyIO::create(const std::string &segy_out_name, const float *src,
 
       // copy data
       // float *dstdata = reinterpret_cast<float *>(dstline + kTraceHeaderSize);
-      const float *srcline =
-          src + static_cast<uint64_t>(iY) * m_metaInfo.sizeX +
-          static_cast<uint64_t>(iZ) * m_metaInfo.sizeX * m_metaInfo.sizeY;
+      const float *srcline = src + iY * m_metaInfo.sizeX + iZ * sizeXY;
       float2sgy(dstline + kTraceHeaderSize, srcline, m_metaInfo.sizeX,
                 m_metaInfo.data_format);
 
@@ -1548,6 +1558,7 @@ void SegyIO::read_all_fast(float *dst) {
   int trace_count = m_metaInfo.trace_count;
   const char *source = m_source.data() + kTextualHeaderSize + kBinaryHeaderSize;
   uint64_t trace_size = m_metaInfo.sizeX * m_metaInfo.esize + kTraceHeaderSize;
+  uint64_t sizeXY = sizeX * sizeY;
 
   int step = sizeZ >= 100 ? 1 : 100 / sizeZ + 1;
   int nbar = sizeZ >= 100 ? sizeZ : step * sizeZ;
@@ -1559,12 +1570,12 @@ void SegyIO::read_all_fast(float *dst) {
       updatebar(bar, step);
     }
 
-    float *dstline = dst + iZ * sizeX * sizeY;
+    float *dstline = dst + iZ * sizeXY;
     const char *srcline = source + m_lineInfo[iZ].trace_start * trace_size;
 
     // line is missing
     if (m_lineInfo[iZ].count == 0) {
-      std::fill(dstline, dstline + sizeX * sizeY, m_metaInfo.fillNoValue);
+      std::fill(dstline, dstline + sizeXY, m_metaInfo.fillNoValue);
       continue;
     }
 
@@ -1608,13 +1619,15 @@ void read(const std::string &segy_name, float *dst, int iline, int xline,
 }
 
 void tofile(const std::string &segy_name, const std::string &out_name,
-            int iline, int xline, int istep, int xstep) {
+            int iline, int xline, int istep, int xstep, bool as_2d) {
   SegyIO segy_data(segy_name);
-  segy_data.setInlineLocation(iline);
-  segy_data.setCrosslineLocation(xline);
-  segy_data.setSteps(istep, xstep);
-  segy_data.scan();
-  segy_data.tofile(out_name);
+  if (!as_2d) {
+    segy_data.setInlineLocation(iline);
+    segy_data.setCrosslineLocation(xline);
+    segy_data.setSteps(istep, xstep);
+    segy_data.scan();
+  }
+  segy_data.tofile(out_name, as_2d);
   segy_data.close_file();
 }
 
@@ -1651,23 +1664,10 @@ void create_by_sharing_header(const std::string &segy_name,
           sizeX));
     }
 
-    uint64_t need_size =
-        kTextualHeaderSize + kBinaryHeaderSize +
-        (uint64_t)trace_count * (sizeX * meta_info.esize + kTraceHeaderSize);
-    std::ofstream ffst(segy_name, std::ios::binary);
-    if (!ffst) {
-      throw std::runtime_error("create file failed: Open file failed");
-    }
-    while (need_size > 0) {
-      uint64_t move_point = need_size > kMaxLSeekSize ? kMaxLSeekSize : need_size;
-      ffst.seekp(move_point - 1, std::ios_base::cur);
-      ffst.put(0);
-      need_size -= move_point;
-    }
-    if (need_size != 0) {
-      throw std::runtime_error("create file failed: Write space failed");
-    }
-    ffst.close();
+    uint64_t need_size = kTextualHeaderSize + kBinaryHeaderSize +
+                         static_cast<uint64_t>(trace_count) *
+                             (sizeX * meta_info.esize + kTraceHeaderSize);
+    create_file(segy_name, need_size);
 
     mio::mmap_sink rw_mmap = mio::make_mmap_sink(segy_name, error);
     if (error) {
@@ -1691,39 +1691,34 @@ void create_by_sharing_header(const std::string &segy_name,
       throw std::runtime_error("size_{src} + offset > size_{header}");
     }
 
-    uint64_t max_size = kTextualHeaderSize + kBinaryHeaderSize + (uint64_t)(kTraceHeaderSize + sizeX * meta_info.esize) * (sizeY * sizeZ);
+    // clang-format off
+    uint64_t max_size = kTextualHeaderSize + kBinaryHeaderSize + static_cast<uint64_t>(kTraceHeaderSize + sizeX * meta_info.esize) * (sizeY * sizeZ);
     std::vector<char> outsegy(max_size, 0);
     char *outptr = outsegy.data();
-    int start_time =
-        meta_info.start_time + offsetX * meta_info.sample_interval / 1000;
+    int start_time = meta_info.start_time + offsetX * meta_info.sample_interval / 1000;
     MetaInfo msub = meta_info;
     msub.sizeX = sizeX;
     msub.sizeY = sizeY;
     msub.sizeZ = sizeZ;
     msub.start_time = start_time;
     msub.min_inline = meta_info.min_inline + offsetZ * meta_info.inline_step;
-    msub.min_crossline =
-        meta_info.min_crossline + offsetY * meta_info.crossline_step;
+    msub.min_crossline = meta_info.min_crossline + offsetY * meta_info.crossline_step;
     msub.max_inline = msub.min_inline + (sizeZ - 1) * meta_info.inline_step;
-    msub.max_crossline =
-        msub.min_crossline + (sizeY - 1) * meta_info.crossline_step;
+    msub.max_crossline = msub.min_crossline + (sizeY - 1) * meta_info.crossline_step;
 
-    std::string textual_header =
-        create_textual_header(msub, segy_name, custom_info);
+    std::string textual_header = create_textual_header(msub, segy_name, custom_info);
     memcpy(outptr, textual_header.c_str(), kTextualHeaderSize);
     outptr += kTextualHeaderSize;
 
     // copy binary header & modify sample count
     memcpy(outptr, m_source.data() + kTextualHeaderSize, kBinaryHeaderSize);
     int16_t *int16ptr = reinterpret_cast<int16_t *>(outptr);
-    int16ptr[(kBSampleCountField - 1) / 2] =
-        swap_endian(static_cast<int16_t>(sizeX));
+    int16ptr[(kBSampleCountField - 1) / 2] = swap_endian(static_cast<int16_t>(sizeX));
     int16ptr = nullptr;
     outptr += kBinaryHeaderSize;
 
-    uint64_t size =
-        copy_traces(m_source, line_info, meta_info, src, outptr, sizeX, sizeY,
-                    sizeZ, offsetX, offsetY, offsetZ, start_time);
+    uint64_t size = copy_traces(m_source, line_info, meta_info, src, outptr, sizeX, sizeY, sizeZ, offsetX, offsetY, offsetZ, start_time);
+    // clang-format on
 
     outsegy.resize(kTextualHeaderSize + kBinaryHeaderSize + size);
 
@@ -1797,7 +1792,7 @@ void load_prestack3D(float *dst, const std::string &segy_name, int sizeX,
                data_format);
   }
 
-  int trace_size = kTraceHeaderSize + sizeX * esize;
+  uint64_t trace_size = kTraceHeaderSize + sizeX * esize;
 
   int sizeZ = (max_inline - min_inline) / inline_step + 1;
   int step = sizeZ >= 100 ? 1 : 100 / sizeZ + 1;

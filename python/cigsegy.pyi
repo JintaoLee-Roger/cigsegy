@@ -140,7 +140,9 @@ class Pysegy():
 
     def collect(self,
                 beg: int = -1,
-                end: int = 0) -> numpy.ndarray[numpy.float32]:
+                end: int = 0,
+                tbeg: int = -1,
+                tend: int = 0) -> numpy.ndarray[numpy.float32]:
         """
         collect traces as a 2D data from the `segy_in` file in
         range of [beg, end), beg < 0 means collect all traces,
@@ -155,11 +157,34 @@ class Pysegy():
             the end index of traces (not include), < 0 means collect 
                 traces from beg to the last trace, == 0 means read 
                 the beg-th trace (one trace).
+        tbeg : int
+            the beg sample of time
+        tend : int
+            the end sample of time
 
         Returns
         -------
         numpy.ndarray :
-            its shape = (trace_count, n-time)
+            its shape = (trace_count, tend - tbeg)
+        """
+
+    def collect(self, index: numpy.ndarray, tbeg: int = -1, tend: int = 0) -> numpy.ndarray:
+        """
+        collect traces as a 2D data from the `segy_in` file with the index
+
+        Parameters
+        ----------
+        index : ArrayLike, np.int32
+            the trace index
+        tbeg : int
+            the beg sample of time
+        tend : int
+            the end sample of time
+
+        Returns
+        -------
+        numpy.ndarray :
+            its shape = (len(index), tend - tbeg)
         """
 
     @typing.overload
@@ -430,7 +455,7 @@ class Pysegy():
             3200 bytes textual header
         """
 
-    def tofile(self, binary_out_name: str) -> None:
+    def tofile(self, binary_out_name: str, as_2d: bool = False) -> None:
         """ 
         read a segy file and convert it to a binary file.
 
@@ -438,6 +463,8 @@ class Pysegy():
         ----------
         binary_out_name : str
             the output binary file name
+        as_2d : bool
+            if True, just remove the header and convert data to IEEE 32 in litte endian
         """
 
     def close_file(self) -> None:
@@ -656,7 +683,8 @@ def tofile(segy_name: str,
            iline: int = 189,
            xline: int = 193,
            istep: int = 1,
-           xstep: int = 1) -> None:
+           xstep: int = 1,
+           as_2d: bool = False) -> None:
     """
     convert a segy file to a binary file
 
@@ -674,6 +702,8 @@ def tofile(segy_name: str,
         the step of inline numbers
     xstep : int
         the step of crossline numbers
+    as_2d : bool
+        if True, just remove the header and convert data to IEEE 32 in litte endian
     """
 
 

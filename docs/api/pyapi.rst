@@ -8,17 +8,29 @@ Core functions
     :members:
 
 
-SegyNP class
-==============
-.. automodule:: cigsegy.segynp
-    :members:
-
 
 Tools
 =====
 
 .. automodule:: cigsegy.tools
     :members:
+
+
+
+Transform
+============
+
+.. automodule:: cigsegy.transform
+    :members:
+
+
+
+Interp
+============
+
+.. automodule:: cigsegy.interp
+    :members:
+
 
 
 Pysegy class

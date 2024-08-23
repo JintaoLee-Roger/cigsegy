@@ -17,6 +17,7 @@
 
 namespace py = pybind11;
 using npfloat = py::array_t<float, py::array::c_style | py::array::forcecast>;
+using npint32 = py::array_t<int32_t, py::array::c_style | py::array::forcecast>;
 
 class Pysegy : public segy::SegyIO {
 public:
@@ -37,7 +38,8 @@ public:
   py::array_t<uchar> get_trace(int n, bool raw = false);
   py::array_t<int> get_trace_keys(const py::list &keys, const py::list &length, int beg, int end);
 
-  py::array_t<float> collect(int beg = -1, int end = 0);
+  py::array_t<float> collect(int beg = -1, int end = 0, int tbeg = -1, int tend = 0);
+  py::array_t<float> collect(const npint32 &index, int tbeg = -1, int tend = 0);
 
   py::array_t<float> read(int startZ, int endZ, int startY, int endY,
                           int startX, int endX);
@@ -107,7 +109,7 @@ py::array_t<int> Pysegy::get_trace_keys(const py::list &keys, const py::list &le
   return out;
 }
 
-py::array_t<float> Pysegy::collect(int beg, int end) {
+py::array_t<float> Pysegy::collect(int beg, int end, int tbeg, int tend) {
   int need = 0;
   if (beg < 0) {
     need = trace_count();
@@ -121,15 +123,62 @@ py::array_t<float> Pysegy::collect(int beg, int end) {
     }
   }
 
-  if (need <= 0) {
-    throw std::runtime_error("Invalid input (end <= beg)");
+  int nt = 0;
+  if (tbeg < 0) {
+    nt = shape(0);
+  } else {
+    if (tend == 0) {
+      nt = 1;
+    } else if (tend < 0) {
+      nt = shape(0) - tbeg;
+    } else {
+      nt = tend - tbeg;
+    }
   }
 
-  auto data = py::array_t<float>({need, shape(0)});
+  if (need <= 0 || nt <= 0) {
+    throw std::runtime_error("Invalid input (end <= beg) or (tend <= tbeg)");
+  }
+
+  auto data = py::array_t<float>({need, nt});
   auto buff = data.request();
   float *ptr = static_cast<float *>(buff.ptr);
 
-  collect(ptr, beg, end);
+  collect(ptr, beg, end, tbeg, tend);
+
+  return data;
+}
+
+py::array_t<float> Pysegy::collect(const npint32&index, int tbeg, int tend) {
+  auto buff = index.request();
+  if (buff.ndim != 1) {
+    throw std::runtime_error("Input index must be a 1D data.");
+  }
+  int N = index.shape()[0];
+  int32_t *idx = static_cast<int32_t *>(buff.ptr);
+
+
+  int nt = 0;
+  if (tbeg < 0) {
+    nt = shape(0);
+  } else {
+    if (tend == 0) {
+      nt = 1;
+    } else if (tend < 0) {
+      nt = shape(0) - tbeg;
+    } else {
+      nt = tend - tbeg;
+    }
+  }
+  if (nt <= 0) {
+    throw std::runtime_error("Invalid input (tend <= tbeg)");
+  }
+
+  auto data = py::array_t<float>({N, nt});
+  auto buff2 = data.request();
+  float *ptr = static_cast<float *>(buff2.ptr);
+
+  collect(ptr, idx, N, tbeg, tend);
 
   return data;
 }
@@ -515,9 +564,11 @@ PYBIND11_MODULE(cigsegy, m) {
       .def("setSteps", &Pysegy::setSteps, py::arg("istep"), py::arg("xstep"))
       .def("setFillNoValue", &Pysegy::setFillNoValue, py::arg("fills"))
       .def("scan", &Pysegy::scan)
-      .def("tofile", &Pysegy::tofile, py::arg("binary_out_name"))
-      .def("collect", overload_cast_<int, int>()(&Pysegy::collect), "Load traces from beg to end as a 2D array",
-          py::arg("beg") = -1, py::arg("end") = 0)
+      .def("tofile", &Pysegy::tofile, py::arg("binary_out_name"), py::arg("as_2d")=false)
+      .def("collect", overload_cast_<int, int, int, int>()(&Pysegy::collect), "Load traces from beg to end as a 2D array",
+          py::arg("beg") = -1, py::arg("end") = 0, py::arg("tbeg") = -1, py::arg("tend") = 0)
+      .def("collect", overload_cast_<const npint32&, int, int>()(&Pysegy::collect), "Load traces with index as a 2D array", 
+          py::arg("index"), py::arg("tbeg") = -1, py::arg("tend") = 0)
       .def("read", overload_cast_<>()(&Pysegy::read), "read hole volume")
       .def("read",
            overload_cast_<int, int, int, int, int, int>()(&Pysegy::read),
@@ -598,7 +649,7 @@ PYBIND11_MODULE(cigsegy, m) {
         py::arg("xline") = 193, py::arg("istep") = 1, py::arg("xstep") = 1);
   m.def("tofile", &segy::tofile, "convert to binary file", py::arg("segy_name"),
         py::arg("out_name"), py::arg("iline") = 189, py::arg("xline") = 193,
-        py::arg("istep") = 1, py::arg("xstep") = 1);
+        py::arg("istep") = 1, py::arg("xstep") = 1, py::arg("as_2d") = false);
   m.def("create_by_sharing_header",
         overload_cast_<const std::string &, const std::string &,
                        const npfloat &, int, int, int, int, const py::object &,

@@ -18,19 +18,6 @@
 #include "utils.h"
 #include <fmt/format.h>
 
-#ifdef USE_PYBIND11
-#include <pybind11/pybind11.h>
-
-inline void checkSignals() {
-    if (PyErr_CheckSignals() != 0) {
-        throw pybind11::error_already_set();
-    }
-}
-#define CHECK_SIGNALS() checkSignals()
-
-#else
-#define CHECK_SIGNALS() do {} while (0)
-#endif
 
 namespace segy {
 
@@ -145,7 +132,8 @@ public:
   void get_trace_full(int n, uchar *trace, bool raw = false);
   void get_trace_keys_c(int *dst, const std::vector<int>& keys, const std::vector<int>& length, int beg, int end);
 
-  void collect(float *data, int beg = -1, int end = 0);
+  void collect(float *data, int beg, int end, int tbeg, int tend);
+  void collect(float *data, const int32_t *index, int n, int tbeg, int tend);
 
   // read segy
   void scan();
@@ -157,7 +145,7 @@ public:
   void read_cross_slice(float *dst, int iY);
   void read_time_slice(float *dst, int iX);
   void read_trace(float *dst, int iY, int iZ);
-  void tofile(const std::string &binary_out_name);
+  void tofile(const std::string &binary_out_name, bool as_2d = false);
   void cut(const std::string &outname, int startX, int endX, int startY, int endY,
       int startZ, int endZ,
       const std::vector<std::string> &custom_info = std::vector<std::string>());
@@ -216,7 +204,7 @@ void read(const std::string &segy_name, float *dst,
 
 void tofile(const std::string &segy_name, const std::string &out_name,
             int iline = kDefaultInlineField, int xline = kDefaultCrosslineField,
-            int istep = 1, int xstep = 1);
+            int istep = 1, int xstep = 1, bool as_2d=false);
 
 void create_by_sharing_header(
     const std::string &segy_name, const std::string &header_segy,

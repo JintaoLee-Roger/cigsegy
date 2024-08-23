@@ -17,7 +17,9 @@ from . import utils
 
 def collect(segy_in: str,
             beg: int = -1,
-            end: int = 0) -> np.ndarray:
+            end: int = 0,
+            tbeg: int = -1,
+            tend: int = 0,) -> np.ndarray:
     """
     collect traces as a 2D data from the `segy_in` file in
     range of [beg, end), beg < 0 means collect all traces,
@@ -41,7 +43,7 @@ def collect(segy_in: str,
         its shape = (trace_count, n-time)
     """
     segy = Pysegy(str(segy_in))
-    d = segy.collect(beg, end)
+    d = segy.collect(beg, end, tbeg, tend)
     segy.close_file()
     return d
 

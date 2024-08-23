@@ -190,7 +190,6 @@ def get_trace_keys2(segy: Union[str, Pysegy],
         length = [force]
         raw = True
 
-    print(keyloc, length, beg, end)
     out = segyc.get_trace_keys(keyloc, length, beg, end)
 
     if isinstance(segy, (str, Path)):
@@ -603,3 +602,36 @@ def metainfo_to_dict(metainfo: MetaInfo, apply_scalar: bool = False) -> Dict:
     out['fills'] = metainfo.fillNoValue
 
     return out
+
+
+def scan_4D(segy, iline, xline, offset=37, scan_all=False):
+    """
+    scan pre-stack gather (a 4D array)
+
+    """
+    need_close = False
+    if not isinstance(segy, Pysegy):
+        segy = Pysegy(segy)
+        need_close = True
+
+    keys = [iline, xline, offset]
+    lens = [4] * 3
+    nt = segy.nt
+    count = segy.trace_count
+
+    # shape is (ni, nx, no, nt)
+    # ib, ie, xb, xe, ob, oe
+
+    def _scan_4D_all():
+        arr = segy.get_trace_keys(keys, lens, 0, count)
+
+    def _scan_4D_part():
+        ib = segy.get_trace_keys([iline], [4], 0, 1)
+        ie = segy.get_trace_keys([iline], [4], count-1, count)
+
+
+
+    if need_close:
+        segy.close_file()
+
+    raise NotImplementedError("TODO: not implement")

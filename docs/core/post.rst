@@ -211,7 +211,7 @@ Arbitrary slicing and extration
 .. Note::
 
     Use ``cigsegy.SegyNP`` class is a more efficient way, which treats the SEG-Y file as a 3D/2D numpy array.
-    Please see :ref:`SegyNP` for more details. (From version 1.1.7)
+    Please see ``SegyNP`` for more details. (From version 1.1.7)
 
 
 Use ``Pysegy`` class to read arbitrary sub-volumes, slices, traces.
