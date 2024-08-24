@@ -6,12 +6,13 @@
 ** @File: utils.h
 ** @Description :
 *********************************************************************/
-#ifndef CIG_UTILS_H
-#define CIG_UTILS_H
+#ifndef CIG_sUTILS_H
+#define CIG_sUTILS_H
 
 #include <algorithm>
 #include <cctype>
 #include <climits>
+#include <cstring>
 #include <limits>
 #include <map>
 #include <string.h>
@@ -60,6 +61,7 @@ const int kMaxSizeOneDimemsion = 100000;
 const int kBSampleIntervalField = 17;
 const int kBSampleCountField = 21;
 const int kBSampleFormatField = 25;
+const int kBTraceSortingCodeField = 29;
 
 // const trace header field
 const int kTStartTimeField = 105; // in ms
@@ -77,144 +79,144 @@ const int kDefaultYField = 77;
 
 // const int kMaxThreadsNum = 8;
 
-#pragma pack(push, 1)
-struct BinaryHeader {
-  int32_t jobID;                       // 1-4
-  int32_t line_number;                 // 5-8
-  int32_t reel_number;                 // 9-12
-  int16_t num_traces_per_ensemble;     // 13-14
-  int16_t num_aux_traces_per_ensemble; // 15-16
-  int16_t sample_interval;             // 17-18
-  int16_t sample_interval_orig;        // 19-20
-  int16_t trace_length;                // 21-22
-  int16_t trace_length_orig;           // 23-24
-  int16_t data_format;                 // 25-26
-  int16_t ensemble_fold;               // 27-28
-  int16_t trace_sorting_code;          // 29-30
-  int16_t v_sum_code;                  // 31-32
-  int16_t sweep_freq_start;            // 33-34
-  int16_t sweep_freq_end;              // 35-36
-  int16_t sweep_length;                // 37-38
-  int16_t sweep_type_code;             // 39-40
-  int16_t trace_num_sweep_channel;     // 41-42
-  int16_t sweep_trace_taper_start;     // 43-44
-  int16_t sweep_trace_taper_end;       // 45-46
-  int16_t taper_type;                  // 47-48
-  int16_t correlated_data_trace;       // 49-50
-  int16_t bin_gain_recover;            // 51-52
-  int16_t amplitude_recover_method;    // 53-54
-  int16_t measurement_system;          // 55-56
-  int16_t impulse_signal_polarity;     // 57-58
-  int16_t vibratory_polarity_code;     // 59-60
-  int32_t extend_num_data_tarces;      // 61-64
-  int32_t extend_num_aux_data_tarces;  // 65-68
-  int32_t extend_trace_length;         // 69-72
-  double extend_sample_intervel;       // 73-80
-  double extend_sample_intervel_orig;  // 81-88
-  int32_t extend_trace_length_orig;    // 89-92
-  int32_t extend_ensement_fold;        // 93-96
-  int32_t const_1;                     // 97-100
-  uchar dummy[200];                    // 101-300
-  unsigned char major_version;         // 301
-  unsigned char minor_version;         // 302
-  int16_t fixed_length_trace;          // 303-304
-  int16_t extend_textual_header;       // 305-306
-  int32_t max_extend_trace_header;     // 307-310
-  int16_t time_bias_code;              // 311-312
-  uint64_t num_traces;                 // 313-320
-  uint64_t byte_offset;                // 321-328
-  int32_t num_trailer_stanza;          // 329-332
-  uchar dummy2[68];                    // 333-400
-};
+// #pragma pack(push, 1)
+// struct BinaryHeader {
+//   int32_t jobID;                       // 1-4
+//   int32_t line_number;                 // 5-8
+//   int32_t reel_number;                 // 9-12
+//   int16_t num_traces_per_ensemble;     // 13-14
+//   int16_t num_aux_traces_per_ensemble; // 15-16
+//   int16_t sample_interval;             // 17-18
+//   int16_t sample_interval_orig;        // 19-20
+//   int16_t trace_length;                // 21-22
+//   int16_t trace_length_orig;           // 23-24
+//   int16_t data_format;                 // 25-26
+//   int16_t ensemble_fold;               // 27-28
+//   int16_t trace_sorting_code;          // 29-30
+//   int16_t v_sum_code;                  // 31-32
+//   int16_t sweep_freq_start;            // 33-34
+//   int16_t sweep_freq_end;              // 35-36
+//   int16_t sweep_length;                // 37-38
+//   int16_t sweep_type_code;             // 39-40
+//   int16_t trace_num_sweep_channel;     // 41-42
+//   int16_t sweep_trace_taper_start;     // 43-44
+//   int16_t sweep_trace_taper_end;       // 45-46
+//   int16_t taper_type;                  // 47-48
+//   int16_t correlated_data_trace;       // 49-50
+//   int16_t bin_gain_recover;            // 51-52
+//   int16_t amplitude_recover_method;    // 53-54
+//   int16_t measurement_system;          // 55-56
+//   int16_t impulse_signal_polarity;     // 57-58
+//   int16_t vibratory_polarity_code;     // 59-60
+//   int32_t extend_num_data_tarces;      // 61-64
+//   int32_t extend_num_aux_data_tarces;  // 65-68
+//   int32_t extend_trace_length;         // 69-72
+//   double extend_sample_intervel;       // 73-80
+//   double extend_sample_intervel_orig;  // 81-88
+//   int32_t extend_trace_length_orig;    // 89-92
+//   int32_t extend_ensement_fold;        // 93-96
+//   int32_t const_1;                     // 97-100
+//   uchar dummy[200];                    // 101-300
+//   unsigned char major_version;         // 301
+//   unsigned char minor_version;         // 302
+//   int16_t fixed_length_trace;          // 303-304
+//   int16_t extend_textual_header;       // 305-306
+//   int32_t max_extend_trace_header;     // 307-310
+//   int16_t time_bias_code;              // 311-312
+//   uint64_t num_traces;                 // 313-320
+//   uint64_t byte_offset;                // 321-328
+//   int32_t num_trailer_stanza;          // 329-332
+//   uchar dummy2[68];                    // 333-400
+// };
 
-struct TraceHeader {
-  int32_t trace_sequence_number_in_line; // 1-4
-  int32_t trace_sequence_number_in_file; // 5-8
-  int32_t orig_field_num;                // 9-12
-  int32_t trace_num_in_orig;             // 13-16
-  int32_t source_point_num;              // 17-20
-  int32_t ensemble_num;                  // 21-24
-  int32_t trace_num_in_ensemble;         // 25-28
-  int16_t trace_ID_code;                 // 29-30
-  int16_t num_v_summed_traces;           // 31-32
-  int16_t num_h_stacked_tarces;          // 33-34
-  int16_t data_used_for;                 // 35-36
-  int32_t distance_from_center;          // 37-40
-  int32_t elevation_rev;                 // 41-44
-  int32_t surface_elevation_source;      // 45-48
-  int32_t source_depth;                  // 49-52
-  int32_t seis_datum_elevation_rev;      // 53-56
-  int32_t seis_datum_elevation_source;   // 57-60
-  int32_t water_col_height_source;       // 61-64
-  int32_t water_col_height_rev;          // 65-68
-  int16_t scalar_for_elev_and_depth;     // 69-70
-  int16_t scalar_for_coord;              // 71-72
-  int32_t source_coord_X;                // 73-76
-  int32_t source_coord_Y;                // 77-80
-  int32_t group_coord_X;                 // 81-84
-  int32_t group_coord_Y;                 // 85-88
-  int16_t coord_units;                   // 89-90
-  int16_t weather_vel;                   // 91-92
-  int16_t subweather_vel;                // 93-94
-  int16_t uphole_time_source;            // 95-96
-  int16_t uphole_time_rev;               // 97-98
-  int16_t source_static_corr;            // 99-100
-  int16_t group_static_corr;             // 101-102
-  int16_t total_static;                  // 103-104
-  int16_t lag_time_A;                    // 105-106
-  int16_t lag_time_B;                    // 107-108
-  int16_t delay_record_time;             // 109-110
-  int16_t mute_time_start;               // 111-112
-  int16_t mute_time_end;                 // 113-114
-  int16_t num_sample;                    // 115-116
-  int16_t sample_interval;               // 117-118
-  int16_t gain_type;                     // 119-120
-  int16_t instrument_gain_constant;      // 121-122
-  int16_t instrument_early;              // 123-124
-  int16_t correlated;                    // 125-126
-  int16_t sweep_freq_start;              // 127-128
-  int16_t sweep_freq_end;                // 129-130
-  int16_t sweep_length;                  // 131-132
-  int16_t sweep_type_code;               // 133-134
-  int16_t sweep_trace_taper_start;       // 135-136
-  int16_t sweep_trace_taper_end;         // 137-138
-  int16_t taper_type;                    // 139-140
-  int16_t alias_filter_freq;             // 141-142
-  int16_t alias_filter_slope;            // 143-144
-  int16_t notch_filter_freq;             // 145-146
-  int16_t notch_filter_slope;            // 147-148
-  int16_t lowcut_freq;                   // 149-150
-  int16_t highcut_freq;                  // 151-152
-  int16_t lowcut_scope;                  // 153-154
-  int16_t highcut_scope;                 // 155-156
-  int16_t years;                         // 157-158
-  int16_t day;                           // 159-160
-  int16_t hour;                          // 161-162
-  int16_t minute;                        // 163-164
-  int16_t secend;                        // 165-166
-  int16_t time_basis;                    // 167-168
-  int16_t trace_weight_factor;           // 169-170
-  int16_t geophone[3];                   // 171-176
-  int16_t gap_size;                      // 177-178
-  int16_t down_or_up;                    // 179-180
-  int32_t X;                             // 181-184
-  int32_t Y;                             // 185-188
-  int32_t inline_num;                    // 189-192
-  int32_t crossline_num;                 // 193-196
-  int32_t shotpoint_num;                 // 197-200
-  int16_t scalar_for_shotpoint;          // 201-202
-  int16_t trace_value_measurement_uint;  // 203-204
-  uchar transduction[6];                 // 205-210
-  int16_t transduction_unit;             // 211-212
-  int16_t traceID;                       // 213-214
-  int16_t scalar_for_95;                 // 215-216
-  int16_t source_type;                   // 217-218
-  uchar source_energy_direction[6];      // 219-224
-  uchar source_measurement[6];           // 225-230
-  int16_t source_measu_unit;             // 231-232
-  int64_t dummy;                         // 233-240
-};
-#pragma pack(pop)
+// struct TraceHeader {
+//   int32_t trace_sequence_number_in_line; // 1-4
+//   int32_t trace_sequence_number_in_file; // 5-8
+//   int32_t orig_field_num;                // 9-12
+//   int32_t trace_num_in_orig;             // 13-16
+//   int32_t source_point_num;              // 17-20
+//   int32_t ensemble_num;                  // 21-24
+//   int32_t trace_num_in_ensemble;         // 25-28
+//   int16_t trace_ID_code;                 // 29-30
+//   int16_t num_v_summed_traces;           // 31-32
+//   int16_t num_h_stacked_tarces;          // 33-34
+//   int16_t data_used_for;                 // 35-36
+//   int32_t distance_from_center;          // 37-40
+//   int32_t elevation_rev;                 // 41-44
+//   int32_t surface_elevation_source;      // 45-48
+//   int32_t source_depth;                  // 49-52
+//   int32_t seis_datum_elevation_rev;      // 53-56
+//   int32_t seis_datum_elevation_source;   // 57-60
+//   int32_t water_col_height_source;       // 61-64
+//   int32_t water_col_height_rev;          // 65-68
+//   int16_t scalar_for_elev_and_depth;     // 69-70
+//   int16_t scalar_for_coord;              // 71-72
+//   int32_t source_coord_X;                // 73-76
+//   int32_t source_coord_Y;                // 77-80
+//   int32_t group_coord_X;                 // 81-84
+//   int32_t group_coord_Y;                 // 85-88
+//   int16_t coord_units;                   // 89-90
+//   int16_t weather_vel;                   // 91-92
+//   int16_t subweather_vel;                // 93-94
+//   int16_t uphole_time_source;            // 95-96
+//   int16_t uphole_time_rev;               // 97-98
+//   int16_t source_static_corr;            // 99-100
+//   int16_t group_static_corr;             // 101-102
+//   int16_t total_static;                  // 103-104
+//   int16_t lag_time_A;                    // 105-106
+//   int16_t lag_time_B;                    // 107-108
+//   int16_t delay_record_time;             // 109-110
+//   int16_t mute_time_start;               // 111-112
+//   int16_t mute_time_end;                 // 113-114
+//   int16_t num_sample;                    // 115-116
+//   int16_t sample_interval;               // 117-118
+//   int16_t gain_type;                     // 119-120
+//   int16_t instrument_gain_constant;      // 121-122
+//   int16_t instrument_early;              // 123-124
+//   int16_t correlated;                    // 125-126
+//   int16_t sweep_freq_start;              // 127-128
+//   int16_t sweep_freq_end;                // 129-130
+//   int16_t sweep_length;                  // 131-132
+//   int16_t sweep_type_code;               // 133-134
+//   int16_t sweep_trace_taper_start;       // 135-136
+//   int16_t sweep_trace_taper_end;         // 137-138
+//   int16_t taper_type;                    // 139-140
+//   int16_t alias_filter_freq;             // 141-142
+//   int16_t alias_filter_slope;            // 143-144
+//   int16_t notch_filter_freq;             // 145-146
+//   int16_t notch_filter_slope;            // 147-148
+//   int16_t lowcut_freq;                   // 149-150
+//   int16_t highcut_freq;                  // 151-152
+//   int16_t lowcut_scope;                  // 153-154
+//   int16_t highcut_scope;                 // 155-156
+//   int16_t years;                         // 157-158
+//   int16_t day;                           // 159-160
+//   int16_t hour;                          // 161-162
+//   int16_t minute;                        // 163-164
+//   int16_t secend;                        // 165-166
+//   int16_t time_basis;                    // 167-168
+//   int16_t trace_weight_factor;           // 169-170
+//   int16_t geophone[3];                   // 171-176
+//   int16_t gap_size;                      // 177-178
+//   int16_t down_or_up;                    // 179-180
+//   int32_t X;                             // 181-184
+//   int32_t Y;                             // 185-188
+//   int32_t inline_num;                    // 189-192
+//   int32_t crossline_num;                 // 193-196
+//   int32_t shotpoint_num;                 // 197-200
+//   int16_t scalar_for_shotpoint;          // 201-202
+//   int16_t trace_value_measurement_uint;  // 203-204
+//   uchar transduction[6];                 // 205-210
+//   int16_t transduction_unit;             // 211-212
+//   int16_t traceID;                       // 213-214
+//   int16_t scalar_for_95;                 // 215-216
+//   int16_t source_type;                   // 217-218
+//   uchar source_energy_direction[6];      // 219-224
+//   uchar source_measurement[6];           // 225-230
+//   int16_t source_measu_unit;             // 231-232
+//   int64_t dummy;                         // 233-240
+// };
+// #pragma pack(pop)
 
 // A key map that convert EBCDIC to ASCII format
 const std::map<unsigned char, char> kEBCDICtoASCIImap = {
@@ -434,7 +436,7 @@ const std::map<int, const char *> kTraceSortingHelp = {
 
 const uint64_t kMaxLSeekSize = std::numeric_limits<long>::max();
 
-// NOTE: only support SEGY-v1
+// NOTE: only support SEGY-v1 //  TODO: remove {4, 4}
 const std::map<int, int> kElementSize = {{1, 4}, {2, 4}, {3, 2},
                                          {4, 4}, {5, 4}, {8, 1}};
 
@@ -630,67 +632,34 @@ inline void read_one_trace_header(void *dst, const void *src) {
   }
 }
 
-template <typename T>
-void convert2npT(float *dst, const void *src, int size, int dformat) {
-  const T *_src = static_cast<const T *>(src);
+template <typename T> void convert2npT(float *dst, const char *src, int size) {
+  const T *_src = reinterpret_cast<const T *>(src);
   for (int i = 0; i < size; ++i) {
-    if (dformat == 1) {
-      dst[i] = ibm_to_ieee(_src[i], true);
-    } else {
-      dst[i] = float(swap_endian<T>(_src[i]));
-    }
+    dst[i] = ibm_to_ieee(_src[i], true);
   }
 }
 
-inline void convert2np(float *dst, const char *src, int size, int dformat) {
-  if (dformat == 1)
-    convert2npT<float>(dst, src, size, dformat);
-  else if (dformat == 2)
-    convert2npT<int32_t>(dst, src, size, dformat);
-  else if (dformat == 3)
-    convert2npT<int16_t>(dst, src, size, dformat);
-  else if (dformat == 5)
-    convert2npT<float>(dst, src, size, dformat);
-  else if (dformat == 8)
-    convert2npT<int8_t>(dst, src, size, dformat);
-  else if (dformat == 10)
-    convert2npT<uint32_t>(dst, src, size, dformat);
-  else if (dformat == 11)
-    convert2npT<uint16_t>(dst, src, size, dformat);
-  else if (dformat == 16)
-    convert2npT<uint8_t>(dst, src, size, dformat);
-}
-
-template <typename T>
-void float2sgyT(void *dst, const float *src, int size, int dformat) {
-  T *_dst = static_cast<T *>(dst);
-
+inline void convert2npibm(float *dst, const char *src, int size) {
+  const float *_src = reinterpret_cast<const float *>(src);
   for (int i = 0; i < size; ++i) {
-    if (dformat == 1) {
-      _dst[i] = ieee_to_ibm(src[i], true);
-    } else {
-      _dst[i] = swap_endian<T>(T(src[i]));
-    }
+    dst[i] = ibm_to_ieee(_src[i], true);
   }
 }
 
-inline void float2sgy(char *dst, const float *src, int size, int dformat) {
-  if (dformat == 1)
-    float2sgyT<float>(dst, src, size, dformat);
-  else if (dformat == 2)
-    float2sgyT<int32_t>(dst, src, size, dformat);
-  else if (dformat == 3)
-    float2sgyT<int16_t>(dst, src, size, dformat);
-  else if (dformat == 5)
-    float2sgyT<float>(dst, src, size, dformat);
-  else if (dformat == 8)
-    float2sgyT<int8_t>(dst, src, size, dformat);
-  else if (dformat == 10)
-    float2sgyT<uint32_t>(dst, src, size, dformat);
-  else if (dformat == 11)
-    float2sgyT<uint16_t>(dst, src, size, dformat);
-  else if (dformat == 16)
-    float2sgyT<uint8_t>(dst, src, size, dformat);
+template <typename T> void float2sgyT(char *dst, const float *src, int size) {
+  float *_dst = reinterpret_cast<float *>(dst);
+
+  for (int i = 0; i < size; ++i) {
+    _dst[i] = swap_endian<T>(T(src[i]));
+  }
+}
+
+inline void float2sgyibm(char *dst, const float *src, int size) {
+  float *_dst = reinterpret_cast<float *>(dst);
+
+  for (int i = 0; i < size; ++i) {
+    _dst[i] = ieee_to_ibm(src[i], true);
+  }
 }
 
 // ofstream is very slow on out disk, so we use low-level I/O functions
@@ -724,6 +693,117 @@ inline void create_file(const std::string &file_name, uint64_t file_size) {
 
   close(fd);
 #endif
+}
+
+inline void append_to_file(const std::string &file_name, uint64_t size_to_add) {
+#ifdef _WIN32
+  HANDLE file = CreateFile(file_name.c_str(), GENERIC_WRITE, 0, NULL,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) {
+    throw std::runtime_error("Failed to open file");
+  }
+
+  LARGE_INTEGER current_size;
+  if (!GetFileSizeEx(file, &current_size)) {
+    CloseHandle(file);
+    throw std::runtime_error("Failed to get file size");
+  }
+
+  LARGE_INTEGER new_size;
+  new_size.QuadPart = current_size.QuadPart + size_to_add;
+
+  if (SetFilePointerEx(file, new_size, NULL, FILE_BEGIN) == 0 ||
+      SetEndOfFile(file) == 0) {
+    CloseHandle(file);
+    throw std::runtime_error("Failed to append to file");
+  }
+
+  CloseHandle(file);
+#else
+  int fd = open(file_name.c_str(), O_RDWR);
+  if (fd < 0) {
+    throw std::runtime_error("Failed to open file");
+  }
+
+  off_t current_size = lseek(fd, 0, SEEK_END);
+  if (current_size == (off_t)-1) {
+    close(fd);
+    throw std::runtime_error("Failed to get file size");
+  }
+
+  off_t new_size = current_size + size_to_add;
+  if (ftruncate(fd, new_size) != 0) {
+    close(fd);
+    throw std::runtime_error("Failed to append to file");
+  }
+
+  close(fd);
+#endif
+}
+
+inline void truncate_file(const std::string &file_name,
+                          uint64_t size_to_remove) {
+#ifdef _WIN32
+  HANDLE file = CreateFile(file_name.c_str(), GENERIC_WRITE, 0, NULL,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) {
+    throw std::runtime_error("Failed to open file");
+  }
+
+  LARGE_INTEGER current_size;
+  if (!GetFileSizeEx(file, &current_size)) {
+    CloseHandle(file);
+    throw std::runtime_error("Failed to get file size");
+  }
+
+  LARGE_INTEGER new_size;
+  new_size.QuadPart = current_size.QuadPart > size_to_remove
+                          ? current_size.QuadPart - size_to_remove
+                          : 0;
+
+  if (SetFilePointerEx(file, new_size, NULL, FILE_BEGIN) == 0 ||
+      SetEndOfFile(file) == 0) {
+    CloseHandle(file);
+    throw std::runtime_error("Failed to truncate file");
+  }
+
+  CloseHandle(file);
+#else
+  int fd = open(file_name.c_str(), O_RDWR);
+  if (fd < 0) {
+    throw std::runtime_error("Failed to open file");
+  }
+
+  off_t current_size = lseek(fd, 0, SEEK_END);
+  if (current_size == (off_t)-1) {
+    close(fd);
+    throw std::runtime_error("Failed to get file size");
+  }
+
+  off_t new_size =
+      current_size > size_to_remove ? current_size - size_to_remove : 0;
+
+  if (ftruncate(fd, new_size) != 0) {
+    close(fd);
+    throw std::runtime_error("Failed to truncate file");
+  }
+
+  close(fd);
+#endif
+}
+
+// modify header keys function, for cut, create_by_sharing_header
+inline void set_bkeyi2(char *bheader, int loc, int16_t val) {
+  *reinterpret_cast<int16_t *>(bheader + loc - 1) = swap_endian<int16_t>(val);
+}
+inline void set_bkeyi4(char *bheader, int loc, int32_t val) {
+  *reinterpret_cast<int32_t *>(bheader + loc - 1) = swap_endian<int32_t>(val);
+}
+inline void set_keyi2(char *theader, int loc, int16_t val) {
+  *reinterpret_cast<int16_t *>(theader + loc - 1) = swap_endian<int16_t>(val);
+}
+inline void set_keyi4(char *theader, int loc, int32_t val) {
+  *reinterpret_cast<int32_t *>(theader + loc - 1) = swap_endian<int32_t>(val);
 }
 
 } // namespace segy
