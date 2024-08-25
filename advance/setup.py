@@ -1,22 +1,21 @@
-# Copyright (c) 2023 Jintao Li.
+# Copyright (c) 2024 Jintao Li.
 # Computational and Interpretation Group (CIG),
 # University of Science and Technology of China (USTC).
 # All rights reserved.
 
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup, find_packages
-
-
+import geoimpluse
 package_name = "segy"
 
 description = "segy"
 
 ext_modules = [
     Pybind11Extension(
-        "segy._CXX_SEGYR",  # 模块名称
-        ["segy/pysegyr.cpp"],  # 源文件路径
+        "segy.cpp._CXX_SEGY",  # 模块名称
+        ["segy/cpp/segywrap.cpp"],  # 源文件路径
         # 可以在这里添加其他需要的编译器和链接器标志
-        # extra_compile_args=['-O3', '-Wall'],
+        extra_compile_args=['-O3'],
     ),
 ]
 

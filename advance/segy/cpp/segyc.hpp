@@ -7,8 +7,8 @@
 
 #ifndef CIG_SEGY_CREATE_H
 #define CIG_SEGY_CREATE_H
-#include "segybase.hpp"
-#include "sutils.h"
+#include "segybase.h"
+#include "sutils.hpp"
 #include <vector>
 
 namespace segy {
@@ -18,7 +18,6 @@ public:
   explicit SegyC(const std::string &segyname, int ntrace, int nt);
   explicit SegyC(const std::string &segyname, int ni, int nx, int nt);
   explicit SegyC(const std::string &segyname, int ni, int nx, int no, int nt);
-  ~SegyC() override;
 
   void setSampleInterval(int interval) { m_meta.dt = interval; }
   void setDataFormatCode(int dformat) {
@@ -36,33 +35,9 @@ public:
   void copy_bheader_from(const std::string &segyname);
   void copy_theader_from(const std::string &segyname);
 
-  void set_bkeyi2(int loc, int16_t val);
-  void set_bkeyi4(int loc, int32_t val);
-  void set_bkeyi8(int loc, int64_t val);
-
-  void set_keyi2(int n, int loc, int16_t val);
-  void set_keyi4(int n, int loc, int32_t val);
-  void set_keyi8(int n, int loc, int64_t val);
-
-  inline void set_iline(int n, int32_t val) { set_keyi4(n, m_keys.iline, val); }
-  inline void set_xline(int n, int32_t val) { set_keyi4(n, m_keys.xline, val); }
-  inline void set_offset(int n, int32_t val) {
-    set_keyi4(n, m_keys.offset, val);
-  }
-  inline void set_coordx(int n, int32_t val) { set_keyi4(n, m_keys.xloc, val); }
-  inline void set_coordy(int n, int32_t val) { set_keyi4(n, m_keys.yloc, val); }
-
   void add_trace(const float *src, int idx, int iline, int xline,
                  int offset = 0);
   void create(const float *src, const int32_t *xyico);
-
-protected:
-  mio::mmap_sink m_sink;
-  inline char *bwheader() { return m_sink.data() + kTextualHeaderSize; }
-  inline char *twheader(int n) {
-    return m_sink.data() + kTraceHeaderStart + n * m_meta.tracesize;
-  }
-  inline char *twDataStart(int n) { return twheader(n) + kTraceHeaderSize; }
 
 private:
   int m_ndim;
@@ -114,12 +89,6 @@ inline SegyC::SegyC(const std::string &segyname, int ni, int nx, int no, int nt)
   m_data_ptr = this->m_sink.data();
   m_ndim = 4;
   init_info(ni, nx, no, nt);
-}
-
-inline SegyC::~SegyC() {
-  if (m_sink.is_mapped()) {
-    m_sink.unmap();
-  }
 }
 
 inline uint64_t SegyC::_need_size(int ni, int nx, int no, int nt) {

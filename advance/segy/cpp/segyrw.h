@@ -1,5 +1,5 @@
 /*********************************************************************
-** Copyright (c) 2023 Jintao Li.
+** Copyright (c) 2024 Jintao Li.
 ** Computational and Interpretation Group (CIG),
 ** University of Science and Technology of China (USTC).
 ** All rights reserved.
@@ -16,8 +16,8 @@ So, if you want to use this class in other place, you should check the boundary.
 #define CIG_SEGY_RW_H
 
 #include "mio.hpp"
-#include "segybase.hpp"
-#include "sutils.h"
+#include "segybase.h"
+#include "sutils.hpp"
 
 #include <fstream>
 #include <stdexcept>
@@ -52,11 +52,11 @@ struct LineInfo {
 class SegyRW : public SegyBase {
 public:
   explicit SegyRW(const std::string &segyname);
-  ~SegyRW() override;
 
   void set_segy_type(int ndim);
   void scan();
-  std::vector<int> shape();
+  std::vector<int> shape() const;
+  inline int ndim() const { return m_ndim; }
 
   // R mode
   void read4d(float *dst, int is, int ie, int xs, int xe, int os, int oe,
@@ -77,49 +77,19 @@ public:
                                 bool is2d = false,
                                 const std::string &textual = "");
 
-  // W mode
-  void set_bkeyi2(int loc, int16_t val);
-  void set_bkeyi4(int loc, int32_t val);
-  // void set_bkeyi8(int loc, int64_t val);
-
-  void set_keyi2(int n, int loc, int16_t val);
-  void set_keyi4(int n, int loc, int32_t val);
-  // void set_keyi8(int n, int loc, int64_t val);
-
-  inline void set_iline(int n, int32_t val) { set_keyi4(n, m_keys.iline, val); }
-  inline void set_xline(int n, int32_t val) { set_keyi4(n, m_keys.xline, val); }
-  inline void set_offset(int n, int32_t val) {
-    set_keyi4(n, m_keys.offset, val);
-  }
-  inline void set_coordx(int n, int32_t val) { set_keyi4(n, m_keys.xloc, val); }
-  inline void set_coordy(int n, int32_t val) { set_keyi4(n, m_keys.yloc, val); }
-
-  void set_trace_keys(const int *dst, const std::vector<int> &keys,
-                      const std::vector<int> &length, int beg, int end);
-
-  void write_itrace(const float *data, int n);
-  void write_traces(const float *data, int beg, int end, int tbeg, int tend);
-  void write_traces(const float *data, const int32_t *index, int n, int tbeg,
-                    int tend);
-
+  // write mode
   void write(const float *data);
   void write3d(const float *data, int is, int ie, int xs, int xe, int ts,
                int te);
   void write4d(const float *data, int is, int ie, int xs, int xe, int os,
                int oe, int ts, int te);
 
+  // Geometry view?
+
 protected:
-  mio::mmap_source m_src;
-  mio::mmap_sink m_sink;
   std::vector<LineInfo> m_iinfos;
   int m_ndim = 2;
   void scanBinaryHeader();
-
-  inline char *bwheader() { return m_sink.data() + kTextualHeaderSize; }
-  inline char *twheader(int n) {
-    return m_sink.data() + kTraceHeaderStart + n * m_meta.tracesize;
-  }
-  inline char *twDataStart(int n) { return twheader(n) + kTraceHeaderSize; }
 
 private:
   bool isScan = false;

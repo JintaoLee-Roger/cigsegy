@@ -1,3 +1,10 @@
+/*********************************************************************
+** Copyright (c) 2024 Jintao Li.
+** Computational and Interpretation Group (CIG),
+** University of Science and Technology of China (USTC).
+** All rights reserved.
+*********************************************************************/
+
 #include "segyrw.h"
 
 namespace segy {
@@ -12,27 +19,12 @@ inline static void set_keyi2(char *theader, int loc, int16_t val) {
 
 SegyRW::SegyRW(const std::string &segyname) : SegyBase(segyname) {
   std::error_code error;
-  this->m_src.map(segyname, error);
-  if (error) {
-    throw std::runtime_error("Cannot mmap the file as R mode: " + segyname);
-  }
-
-  m_data_ptr = m_src.data();
-  this->scanBinaryHeader();
-
   this->m_sink.map(segyname, error);
   if (error) {
     throw std::runtime_error("Cannot mmap the file as RW mode: " + segyname);
   }
-}
-
-SegyRW::~SegyRW() {
-  if (m_src.is_mapped()) {
-    m_src.unmap();
-  }
-  if (m_sink.is_mapped()) {
-    m_sink.unmap();
-  }
+  m_data_ptr = this->m_sink.data();
+  this->scanBinaryHeader();
 }
 
 void SegyRW::set_segy_type(int ndim) {
@@ -300,7 +292,7 @@ void SegyRW::scan() {
   }
 }
 
-std::vector<int> SegyRW::shape() {
+std::vector<int> SegyRW::shape() const {
   if (m_ndim == 2) {
     return {(int)m_meta.ntrace, m_meta.nt};
   } else if (m_ndim == 3) {
@@ -680,14 +672,14 @@ void SegyRW::scanBinaryHeader() {
   if (it != kElementSize.end()) {
     m_meta.esize = it->second;
   } else {
-    throw std::runtime_error(fmt::format("Unknown data format {}.\n", dformat));
+    throw std::runtime_error("Unknown data format");
   }
   m_meta.dformat = dformat;
 
   m_meta.nt = bkeyi2(kBSampleCountField);
   m_meta.tracesize = kTraceHeaderSize + m_meta.nt * m_meta.esize;
   m_meta.dt = bkeyi2(kBSampleIntervalField);
-  m_meta.ntrace = (m_src.size() - kTraceHeaderStart) / m_meta.tracesize;
+  m_meta.ntrace = (m_sink.size() - kTraceHeaderStart) / m_meta.tracesize;
 
   m_meta.trace_sorting_code = bkeyi2(kBTraceSortingCodeField);
   setRWFunc(m_meta.dformat);
@@ -839,33 +831,5 @@ void SegyRW::create_by_sharing_header(const std::string &segy_name,
   const float *src = reinterpret_cast<const float *>(float_file.data());
   create_by_sharing_header(segy_name, src, ranges, is2d, textual);
 }
-
-/*  write mode   */
-
-void SegyRW::set_bkeyi2(int loc, int16_t val) {
-  *reinterpret_cast<int16_t *>(bwheader() + loc - 1) =
-      swap_endian<int16_t>(val);
-}
-void SegyRW::set_bkeyi4(int loc, int32_t val) {
-  *reinterpret_cast<int32_t *>(bwheader() + loc - 1) =
-      swap_endian<int32_t>(val);
-}
-// void SegyRW::set_bkeyi8(int loc, int64_t val) {
-//   *reinterpret_cast<int64_t *>(bwheader() + loc - 1) =
-//       swap_endian<int64_t>(val);
-// }
-
-void SegyRW::set_keyi2(int n, int loc, int16_t val) {
-  *reinterpret_cast<int16_t *>(twheader(n) + loc - 1) =
-      swap_endian<int16_t>(val);
-}
-void SegyRW::set_keyi4(int n, int loc, int32_t val) {
-  *reinterpret_cast<int32_t *>(twheader(n) + loc - 1) =
-      swap_endian<int32_t>(val);
-}
-// void SegyRW::set_keyi8(int n, int loc, int64_t val) {
-//   *reinterpret_cast<int64_t *>(twheader(n) + loc - 1) =
-//       swap_endian<int64_t>(val);
-// }
 
 } // namespace segy
