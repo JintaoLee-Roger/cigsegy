@@ -1,3 +1,10 @@
+/*********************************************************************
+** Copyright (c) 2023 Jintao Li.
+** Computational and Interpretation Group (CIG),
+** University of Science and Technology of China (USTC).
+** All rights reserved.
+*********************************************************************/
+
 #ifndef CIG_SEGY_CREATE_H
 #define CIG_SEGY_CREATE_H
 #include "segybase.hpp"
@@ -21,19 +28,13 @@ public:
   void setStartTime(int start_time) { m_meta.start_time = start_time; };
   void setInlineInterval(float di) { m_meta.di = di; }
   void setCrosslineInterval(float dx) { m_meta.dx = dx; }
-  void setMinInline(int il) { m_meta.start_iline = il; }
-  void setMinCrossline(int xl) { m_meta.start_offset = xl; }
-  void setMinOffset(int of) { m_meta.start_offset = of; }
+  void setStartInline(int il) { m_meta.start_iline = il; }
+  void setStartCrossline(int xl) { m_meta.start_offset = xl; }
+  void setStartOffset(int of) { m_meta.start_offset = of; }
 
   void copy_textual_from(const std::string &segyname);
   void copy_bheader_from(const std::string &segyname);
   void copy_theader_from(const std::string &segyname);
-
-  inline char *bwheader() { return m_sink.data() + kTextualHeaderSize; }
-  inline char *twheader(int n) {
-    return m_sink.data() + kTraceHeaderStart + n * m_meta.tracesize;
-  }
-  inline char *twDataStart(int n) { return twheader(n) + kTraceHeaderSize; }
 
   void set_bkeyi2(int loc, int16_t val);
   void set_bkeyi4(int loc, int32_t val);
@@ -57,6 +58,11 @@ public:
 
 protected:
   mio::mmap_sink m_sink;
+  inline char *bwheader() { return m_sink.data() + kTextualHeaderSize; }
+  inline char *twheader(int n) {
+    return m_sink.data() + kTraceHeaderStart + n * m_meta.tracesize;
+  }
+  inline char *twDataStart(int n) { return twheader(n) + kTraceHeaderSize; }
 
 private:
   int m_ndim;

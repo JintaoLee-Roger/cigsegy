@@ -1,143 +1,50 @@
-#ifndef CIG_SEGY_nd_H
-#define CIG_SEGY_nd_H
-#define FMT_HEADER_ONLY
-
-#include "mio.hpp"
-#include "progressbar.hpp"
-#include "segybase.hpp"
-#include "sutils.h"
-
-#include <fmt/format.h>
-#include <fstream>
-#include <stdexcept>
-#include <vector>
-
-#define MMAX(a, b) ((a) > (b) ? (a) : (b))
-#define MMIN(a, b) ((a) < (b) ? (a) : (b))
+#include "segyrw.h"
 
 namespace segy {
 
-struct XLineInfo {
-  int xline;
-  int xtstart; // xline start trace index
-  int xtend;   // xlind end trace index
-  int count;   // the number of traces for this xline
-  int ostart;  // offset start index
-  int oend;    // offset end index
+// modify header keys function, for cut, create_by_sharing_header
+inline static void set_bkeyi2(char *bheader, int loc, int16_t val) {
+  *reinterpret_cast<int16_t *>(bheader + loc - 1) = swap_endian<int16_t>(val);
+}
+inline static void set_keyi2(char *theader, int loc, int16_t val) {
+  *reinterpret_cast<int16_t *>(theader + loc - 1) = swap_endian<int16_t>(val);
+}
 
-  // offset trace index of this xline,
-  // only used when this xline is not continous, such as
-  // 2, 3, 4, x, x, 7, 8, 9. oend - ostart + 1 = 8, but count=6
-  std::vector<int> oidx;
-};
-
-struct LineInfo {
-  int iline;
-  int itstart; // inline trace start index
-  int itend;   // inline trace end index
-  int count;   // the number of traces for this line
-  int xstart;  // xline start index
-  int xend;    // xline end index
-  std::vector<XLineInfo> xinfos;
-
-  // xline trace index of this line,
-  // only used when this line is not continous and is 3D, such as
-  // 2, 3, 4, x, x, 7, 8, 9. xend - xstart + 1 = 8, but count=6
-  std::vector<int> xidx;
-};
-
-class SegyND : public SegyBase {
-public:
-  explicit SegyND(const std::string &segyname);
-  ~SegyND() override;
-
-  void set_segy_type(int ndim);
-  void scan();
-  std::vector<int> shape();
-  void read4d(float *dst, int is, int ie, int xs, int xe, int os, int oe,
-              int ts, int te);
-  void read3d(float *dst, int is, int ie, int xs, int xe, int ts, int te);
-  void read(float *dst);
-  void tofile(const std::string &binary_out_name, bool is2d = false);
-  void cut(const std::string &outname, const std::vector<int> &ranges,
-           bool is2d = false, const std::string &textual = "");
-  void create_by_sharing_header(const std::string &segy_name, const float *src,
-                                const std::vector<int> &ranges,
-                                bool is2d = false,
-                                const std::string &textual = "");
-  void create_by_sharing_header(const std::string &segy_name,
-                                const std::string &src_name,
-                                const std::vector<int> &shape,
-                                const std::vector<int> &ranges,
-                                bool is2d = false,
-                                const std::string &textual = "");
-
-protected:
-  mio::mmap_source m_src;
-  std::vector<LineInfo> m_iinfos;
-  int m_ndim = 2;
-  void scanBinaryHeader();
-
-private:
-  bool isScan = false;
-  uint64_t m_sizeL = 1;
-
-  bool isPreStack();
-  inline int il2ii(int il) { return (il - m_meta.start_iline) / m_keys.istep; }
-  inline int ii2il(int ii) { return ii * m_keys.istep + m_meta.start_iline; }
-  inline int xl2ix(int xl) { return (xl - m_meta.start_xline) / m_keys.xstep; }
-  inline int ix2xl(int ix) { return ix * m_keys.xstep + m_meta.start_xline; }
-  inline int of2io(int of) { return (of - m_meta.start_offset) / m_keys.ostep; }
-  inline int io2of(int io) { return io * m_keys.ostep + m_meta.start_offset; }
-  bool isCtnX(LineInfo &linfo);
-  bool isCtnO(XLineInfo &xinfo);
-  void find_idxX(std::array<int32_t, 4> &idx, LineInfo &linfo, int xs, int xe);
-  void find_idxO(std::array<int32_t, 4> &idx, XLineInfo &xinfo, int os, int oe);
-
-  void _read3d_x(float *dst, LineInfo &linfo, int xs, int xe, int ts, int te);
-  void _read4d_o(float *dst, XLineInfo &xinfo, int os, int oe, int ts, int te);
-  void _read4d_xo(float *dst, LineInfo &linfo, int xs, int xe, int os, int oe,
-                  int ts, int te);
-  uint64_t _copy3d_x(char *dst, const float *src, LineInfo &linfo, int xs,
-                     int xe, int ts, int te, bool fromsrc);
-  uint64_t _copy4d_o(char *dst, const float *src, XLineInfo &xinfo, int os,
-                     int oe, int ts, int te, bool fromsrc);
-  uint64_t _copy4d_xo(char *dst, const float *src, LineInfo &linfo, int xs,
-                      int xe, int os, int oe, int ts, int te, bool fromsrc);
-  void _create_from_segy(const std::string &outname, const float *src,
-                         const std::vector<int> &ranges, bool is2d,
-                         const std::string &textual, bool fromsrc);
-
-  uint64_t _need_size_b(int ndim = -1);
-  uint64_t _need_size_s(uint64_t ntrace);
-};
-
-inline SegyND::SegyND(const std::string &segyname) : SegyBase(segyname) {
+SegyRW::SegyRW(const std::string &segyname) : SegyBase(segyname) {
   std::error_code error;
   this->m_src.map(segyname, error);
   if (error) {
-    throw std::runtime_error("Cannot mmap segy file");
+    throw std::runtime_error("Cannot mmap the file as R mode: " + segyname);
   }
 
   m_data_ptr = m_src.data();
   this->scanBinaryHeader();
-}
 
-inline SegyND::~SegyND() {
-  if (m_src.is_mapped()) {
-    m_src.unmap();
+  this->m_sink.map(segyname, error);
+  if (error) {
+    throw std::runtime_error("Cannot mmap the file as RW mode: " + segyname);
   }
 }
 
-inline void SegyND::set_segy_type(int ndim) {
+SegyRW::~SegyRW() {
+  if (m_src.is_mapped()) {
+    m_src.unmap();
+  }
+  if (m_sink.is_mapped()) {
+    m_sink.unmap();
+  }
+}
+
+void SegyRW::set_segy_type(int ndim) {
   if (ndim < 2 || ndim > 4) {
-    std::runtime_error(
-        "Error SEG-Y type, 2 for 2D, 3 for poststack, 4 for prestack");
+    std::runtime_error("Error SEG-Y type, 2 for 2D, 3 for poststack, 4 for "
+                       "prestack. But now is " +
+                       std::to_string(ndim));
   }
   m_ndim = ndim;
 }
 
-inline void SegyND::scan() {
+void SegyRW::scan() {
   m_meta.start_time = keyi2(0, kTStartTimeField);
   m_meta.scalar = keyi2(0, kTScalarField);
 
@@ -146,11 +53,11 @@ inline void SegyND::scan() {
   int xstep = m_keys.xstep;
   int ostep = m_keys.ostep;
 
-  // inline range
+  // range
   int is = iline(0);
   int ie = iline(m_meta.ntrace - 1);
   int ni = (is - ie) / m_keys.istep + 1;
-  m_iinfos.resize(ni);
+  m_iinfos.resize(ni, LineInfo(true));
 
   // global xline range and offset range
   int gxstart = xline(0);
@@ -180,7 +87,7 @@ inline void SegyND::scan() {
 
     // when missing line
     if (skipi > 0) {
-      linfo.iline = m_iinfos[ii - 1].iline + istep;
+      linfo.line = m_iinfos[ii - 1].line + istep;
       linfo.count = 0;
       skipi--;
       continue;
@@ -215,11 +122,11 @@ inline void SegyND::scan() {
 
     // assign lineInfo
     int xend = xline(it - 1);
-    linfo.iline = iiline;
+    linfo.line = iiline;
     linfo.itstart = itstart;
     linfo.itend = it - 1;
-    linfo.xstart = xs;
-    linfo.xend = xend;
+    linfo.lstart = xs;
+    linfo.lend = xend;
     linfo.count = it - itstart;
 
     // update global xline range
@@ -229,15 +136,15 @@ inline void SegyND::scan() {
     if (is4D) {
       // assert (m_iinfos[ii].xend - xs) % xstep == 0
       int nx = (xend - xs) / xstep + 1;
-      linfo.xinfos.resize(nx);
+      linfo.set_xinfos(nx);
       int xt = itstart;
       int xtmax = it;
 
       for (size_t ix = 0; ix < nx; ix++) {
-        XLineInfo &xinfo = linfo.xinfos[ix];
+        LineInfo &xinfo = linfo.xinfos[ix];
         // when missing xline
         if (skipx > 0) {
-          xinfo.xline = linfo.xinfos[ix - 1].xline + xstep;
+          xinfo.line = linfo.xinfos[ix - 1].line + xstep;
           xinfo.count = 0;
           skipx--;
           continue;
@@ -270,11 +177,11 @@ inline void SegyND::scan() {
 
         // assign xline info
         int oend = offset(xt - 1);
-        xinfo.xline = xxline;
-        xinfo.xtstart = xtstart;
-        xinfo.xtend = xt - 1;
-        xinfo.ostart = ostart;
-        xinfo.oend = oend;
+        xinfo.line = xxline;
+        xinfo.itstart = xtstart;
+        xinfo.itend = xt - 1;
+        xinfo.lstart = ostart;
+        xinfo.lend = oend;
         xinfo.count = xt - xtstart;
 
         // update global offset range
@@ -286,7 +193,7 @@ inline void SegyND::scan() {
           skipx = xline(xt) - (xxline + xstep);
           if (skipx % xstep != 0) {
             throw std::runtime_error(
-                "Cannot analysis this segy file, may inline step != 1");
+                "Cannot analysis this segy file, may step != 1");
           }
           skipx /= xstep;
         }
@@ -298,7 +205,7 @@ inline void SegyND::scan() {
       skipi = xline(it) - (iiline + istep);
       if (skipi % istep != 0) {
         throw std::runtime_error(
-            "Cannot analysis this segy file, may inline step != 1");
+            "Cannot analysis this segy file, may step != 1");
       }
       skipi /= istep;
     }
@@ -327,14 +234,14 @@ inline void SegyND::scan() {
       if (linfo.count == 0) {
         continue;
       }
-      if (linfo.count == (linfo.xend - linfo.xstart) / m_keys.xstep + 1) {
+      if (linfo.count == (linfo.lend - linfo.lstart) / m_keys.xstep + 1) {
         continue;
       }
 
       // we set count = -1 for not continous line
-      linfo.xidx.resize(m_meta.nx, -1);
+      linfo.idx.resize(m_meta.nx, -1);
       for (size_t xt = linfo.itstart; xt < linfo.itend + 1; xt++) {
-        linfo.xidx[xl2ix(xline(xt))] = xt;
+        linfo.idx[xl2ix(xline(xt))] = xt;
       }
       linfo.count = -1;
     } else {
@@ -342,14 +249,14 @@ inline void SegyND::scan() {
         if (xinfo.count == 0) {
           continue;
         }
-        if (xinfo.count == (xinfo.oend - xinfo.ostart) / m_keys.ostep + 1) {
+        if (xinfo.count == (xinfo.lend - xinfo.lstart) / m_keys.ostep + 1) {
           continue;
         }
 
         // we set count = -1 for not continous xline
-        xinfo.oidx.resize(m_meta.no, -1);
-        for (size_t ot = xinfo.xtstart; ot < xinfo.xtend + 1; ot++) {
-          xinfo.oidx[of2io(offset(ot))] = ot;
+        xinfo.idx.resize(m_meta.no, -1);
+        for (size_t ot = xinfo.itstart; ot < xinfo.itend + 1; ot++) {
+          xinfo.idx[of2io(offset(ot))] = ot;
         }
         xinfo.count = -1;
       }
@@ -393,7 +300,7 @@ inline void SegyND::scan() {
   }
 }
 
-inline std::vector<int> SegyND::shape() {
+std::vector<int> SegyRW::shape() {
   if (m_ndim == 2) {
     return {(int)m_meta.ntrace, m_meta.nt};
   } else if (m_ndim == 3) {
@@ -403,13 +310,12 @@ inline std::vector<int> SegyND::shape() {
   }
 }
 
-inline void SegyND::read4d(float *dst, int is, int ie, int xs, int xe, int os,
-                           int oe, int ts, int te) {
+void SegyRW::read4d(float *dst, int is, int ie, int xs, int xe, int os, int oe,
+                    int ts, int te) {
   if (!isScan || m_ndim != 4) {
     throw std::runtime_error("Not scan or is not a 4d pretrack SEG-Y");
   }
 
-  int ni = ie - is;
   int nx = xe - xs;
   int no = oe - os;
   int nt = te - ts;
@@ -428,21 +334,12 @@ inline void SegyND::read4d(float *dst, int is, int ie, int xs, int xe, int os,
   }
 }
 
-inline void SegyND::read3d(float *dst, int is, int ie, int xs, int xe, int ts,
-                           int te) {
+void SegyRW::read3d(float *dst, int is, int ie, int xs, int xe, int ts,
+                    int te) {
   if (!isScan || m_ndim != 3) {
     throw std::runtime_error("Not scan or is not a 3d SEG-Y");
   }
 
-  if (is >= ie || xs >= xe || ts >= te) {
-    throw std::runtime_error("Index 'end' must large than 'start'");
-  }
-  if (is < 0 || ie > m_meta.ni || xs < 0 || xe > m_meta.nx || ts < 0 ||
-      te > m_meta.nt) {
-    throw std::runtime_error("Index out of range");
-  }
-
-  int ni = ie - is;
   int nx = xe - xs;
   int nt = te - ts;
   uint64_t sizeXT = nx * nt;
@@ -459,11 +356,11 @@ inline void SegyND::read3d(float *dst, int is, int ie, int xs, int xe, int ts,
 
     LineInfo &linfo = m_iinfos[ii];
     float *dstiline = dst + (ii - is) * sizeXT;
-    _read3d_x(dstiline, linfo, xs, xe, ts, te);
+    _read_inner(dstiline, linfo, xs, xe, ts, te);
   }
 }
 
-inline void SegyND::read(float *dst) {
+void SegyRW::read(float *dst) {
   if (m_ndim == 2) {
     collect(dst, 0, m_meta.ntrace, 0, m_meta.nt);
   } else if (m_ndim == 3) {
@@ -473,7 +370,7 @@ inline void SegyND::read(float *dst) {
   }
 }
 
-inline void SegyND::tofile(const std::string &binary_out_name, bool is2d) {
+void SegyRW::tofile(const std::string &binary_out_name, bool is2d) {
   if (!is2d && m_ndim == 2) {
     throw std::runtime_error("Not a 3D or 4D SEG-Y");
   }
@@ -509,22 +406,22 @@ inline void SegyND::tofile(const std::string &binary_out_name, bool is2d) {
 }
 
 /*   priviate function for reading */
-inline void SegyND::_read3d_x(float *dst, LineInfo &linfo, int xs, int xe,
-                              int ts, int te) {
+void SegyRW::_read_inner(float *dst, LineInfo &linfo, int ks, int ke, int ts,
+                         int te) {
   int nt = te - ts;
-  int nx = xe - xs;
-  uint64_t sizeXT = nt * nx;
+  int nk = ke - ks;
+  uint64_t sizeKT = nt * nk;
 
   /* no data to copy, just fill */
-  if (linfo.count == 0 || xs > xl2ix(linfo.xend) || xe <= xl2ix(linfo.xstart)) {
-    std::fill(dst, dst + sizeXT, m_meta.fillNoValue);
+  if (linfo.count == 0 || NoOverlap(linfo, ks, ke)) {
+    std::fill(dst, dst + sizeKT, m_meta.fillNoValue);
     return;
   }
 
   /* line is not continuous */
   else if (linfo.count == -1) {
-    for (size_t ix = xs; ix < xe; ix++) {
-      int it = linfo.xidx[ix];
+    for (size_t ik = ks; ik < ke; ik++) {
+      int it = linfo.idx[ik];
       if (it == -1) {
         std::fill(dst, dst + nt, m_meta.fillNoValue);
       } else {
@@ -536,9 +433,9 @@ inline void SegyND::_read3d_x(float *dst, LineInfo &linfo, int xs, int xe,
   }
 
   /* continuous line TODO: remove if confition?*/
-  else if (linfo.count > 0 && isCtnX(linfo)) {
+  else if (linfo.count > 0 && isCtnL(linfo)) {
     std::array<int32_t, 4> idx;
-    find_idxX(idx, linfo, xs, xe);
+    find_idx(idx, linfo, ks, ke);
 
     if (idx[0] > 0) {
       std::fill(dst, dst + idx[0] * nt, m_meta.fillNoValue);
@@ -558,56 +455,8 @@ inline void SegyND::_read3d_x(float *dst, LineInfo &linfo, int xs, int xe,
   }
 }
 
-inline void SegyND::_read4d_o(float *dst, XLineInfo &xinfo, int os, int oe,
-                              int ts, int te) {
-  int nt = te - ts;
-  int no = oe - os;
-  uint64_t sizeOT = nt * no;
-
-  /* no data to copy, just fill */
-  if (xinfo.count == 0 || os > of2io(xinfo.oend) || oe <= of2io(xinfo.ostart)) {
-    std::fill(dst, dst + sizeOT, m_meta.fillNoValue);
-    return;
-  }
-
-  /* xline is not continuous */
-  else if (xinfo.count == -1) {
-    for (size_t io = os; io < oe; io++) {
-      int it = xinfo.oidx[io];
-      if (it == -1) {
-        std::fill(dst, dst + nt, m_meta.fillNoValue);
-      } else {
-        m_readfunc(dst, trDataStart(it) + ts, nt);
-      }
-      dst += nt;
-    }
-    return;
-  }
-
-  /* continuous xline */
-  else if (xinfo.count > 0 && isCtnO(xinfo)) {
-
-    std::array<int32_t, 4> idx;
-    find_idxO(idx, xinfo, os, oe);
-
-    if (idx[0] > 0) {
-      std::fill(dst, dst + idx[0] * nt, m_meta.fillNoValue);
-      dst += idx[0] * nt;
-    }
-    collect(dst, idx[2], idx[3], ts, te);
-    dst += (idx[3] - idx[2]) * nt;
-
-    if (idx[1] > 0) {
-      std::fill(dst, dst + idx[1] * nt, m_meta.fillNoValue);
-    }
-
-    // assert
-    return;
-  }
-}
-
-inline void SegyND::_read4d_xo(float *dst, LineInfo &linfo, int xs, int xe,
-                               int os, int oe, int ts, int te) {
+void SegyRW::_read4d_xo(float *dst, LineInfo &linfo, int xs, int xe, int os,
+                        int oe, int ts, int te) {
   int nt = te - ts;
   int no = oe - os;
   int nx = xe - xs;
@@ -615,13 +464,13 @@ inline void SegyND::_read4d_xo(float *dst, LineInfo &linfo, int xs, int xe,
   uint64_t sizeXOT = nx * sizeOT;
 
   /* no data to copy, just fill */
-  if (linfo.count == 0 || xs > xl2ix(linfo.xend) || xe <= xl2ix(linfo.xstart)) {
+  if (linfo.count == 0 || NoOverlap(linfo, xs, xe)) {
     std::fill(dst, dst + sizeXOT, m_meta.fillNoValue);
     return;
   }
 
   std::array<int32_t, 4> idx;
-  find_idxX(idx, linfo, xs, xe);
+  find_idx(idx, linfo, xs, xe);
 
   // fill the left
   if (idx[0] > 0) {
@@ -631,7 +480,7 @@ inline void SegyND::_read4d_xo(float *dst, LineInfo &linfo, int xs, int xe,
 
   // read, when is 4D, xlines are always continuous as we filled
   for (size_t ix = idx[2]; ix < idx[3]; ix++) {
-    _read4d_o(dst, linfo.xinfos[ix], os, oe, ts, te);
+    _read_inner(dst, linfo.xinfos[ix], os, oe, ts, te);
     dst += sizeOT;
   }
 
@@ -643,32 +492,29 @@ inline void SegyND::_read4d_xo(float *dst, LineInfo &linfo, int xs, int xe,
   // assert
 }
 
-inline uint64_t SegyND::_copy3d_x(char *dst, const float *src, LineInfo &linfo,
-                                  int xs, int xe, int ts, int te,
-                                  bool fromsrc) {
+uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
+                             int ks, int ke, int ts, int te, bool fromsrc) {
   char *odst = dst;
   int nt = te - ts;
-  int nx = xe - xs;
   bool tchanged = nt == m_meta.nt ? false : true;
-  uint64_t sizeXT = nt * nx;
 
   /* no data to copy, just fill */
-  if (linfo.count == 0 || xs > xl2ix(linfo.xend) || xe <= xl2ix(linfo.xstart)) {
+  if (linfo.count == 0 || NoOverlap(linfo, ks, ke)) {
     return 0;
   }
 
   /* line is not continuous */
   else if (linfo.count == -1) {
-    for (size_t ix = xs; ix < xe; ix++) {
-      int it = linfo.xidx[ix];
+    for (size_t ik = ks; ik < ke; ik++) {
+      int it = linfo.idx[ik];
       if (it >= 0) {
         // copy trace header
         memcpy(dst, trheader(it), kTraceHeaderSize);
         if (tchanged) {
           if (ts > 0) { // TODO: ts need *1000 ?
-            set_keyi2(dst, kTStartTimeField, ts);
+            segy::set_keyi2(dst, kTStartTimeField, ts);
           }
-          set_keyi2(dst, kTSampleCountField, nt);
+          segy::set_keyi2(dst, kTSampleCountField, nt);
         }
         dst += kTraceHeaderSize;
 
@@ -678,7 +524,7 @@ inline uint64_t SegyND::_copy3d_x(char *dst, const float *src, LineInfo &linfo,
           memcpy(dst, trDataStart(it) + ts, nt * m_meta.esize);
         } else {
           // copy from data, i.e., create_by_sharing_header
-          m_wfunc(dst, src + (ix - xs) * nt, nt);
+          m_wfunc(dst, src + (ik - ks) * nt, nt);
         }
         dst += nt * m_meta.esize;
       }
@@ -687,9 +533,9 @@ inline uint64_t SegyND::_copy3d_x(char *dst, const float *src, LineInfo &linfo,
   }
 
   /* continuous line TODO: remove if confition?*/
-  else if (linfo.count > 0 && isCtnX(linfo)) {
+  else if (linfo.count > 0 && isCtnL(linfo)) {
     std::array<int32_t, 4> idx;
-    find_idxX(idx, linfo, xs, xe);
+    find_idx(idx, linfo, ks, ke);
     const float *srcf = src + idx[0] * nt;
 
     for (size_t tx = idx[2]; tx < idx[3]; tx++) {
@@ -697,9 +543,9 @@ inline uint64_t SegyND::_copy3d_x(char *dst, const float *src, LineInfo &linfo,
       memcpy(dst, trheader(tx), kTraceHeaderSize);
       if (tchanged) {
         if (ts > 0) { // TODO: ts need *1000 ?
-          set_keyi2(dst, kTStartTimeField, ts);
+          segy::set_keyi2(dst, kTStartTimeField, ts);
         }
-        set_keyi2(dst, kTSampleCountField, nt);
+        segy::set_keyi2(dst, kTSampleCountField, nt);
       }
       dst += kTraceHeaderSize;
 
@@ -720,112 +566,32 @@ inline uint64_t SegyND::_copy3d_x(char *dst, const float *src, LineInfo &linfo,
   }
 }
 
-inline uint64_t SegyND::_copy4d_o(char *dst, const float *src, XLineInfo &xinfo,
-                                  int os, int oe, int ts, int te,
-                                  bool fromsrc) {
-  char *odst = dst;
-  int nt = te - ts;
-  int no = oe - os;
-  bool tchanged = nt == m_meta.nt ? false : true;
-  uint64_t sizeOT = nt * no;
-
-  /* no data to copy, just fill */
-  if (xinfo.count == 0 || os > of2io(xinfo.oend) || oe <= of2io(xinfo.ostart)) {
-    return 0;
-  }
-
-  /* xline is not continuous */
-  else if (xinfo.count == -1) {
-    for (size_t io = os; io < oe; io++) {
-      int it = xinfo.oidx[io];
-      if (it >= 0) {
-        // copy trace header
-        memcpy(dst, trheader(it), kTraceHeaderSize);
-        if (tchanged) {
-          if (ts > 0) { // TODO: ts need *1000 ?
-            set_keyi2(dst, kTStartTimeField, ts);
-          }
-          set_keyi2(dst, kTSampleCountField, nt);
-        }
-        dst += kTraceHeaderSize;
-
-        // copy trace
-        if (fromsrc) {
-          // copy from src, i.e., cut
-          memcpy(dst, trDataStart(it) + ts, nt * m_meta.esize);
-        } else {
-          // copy from data, i.e., create_by_sharing_header
-          m_wfunc(dst, src + (io - os) * nt, nt);
-        }
-        dst += nt * m_meta.esize;
-      }
-    }
-    return dst - odst;
-  }
-
-  /* continuous xline */
-  else if (xinfo.count > 0 && isCtnO(xinfo)) {
-
-    std::array<int32_t, 4> idx;
-    find_idxO(idx, xinfo, os, oe);
-    const float *srcf = src + idx[0] * nt;
-
-    for (size_t to = idx[2]; to < idx[3]; to++) {
-      // copy trace header
-      memcpy(dst, trheader(to), kTraceHeaderSize);
-      if (tchanged) {
-        if (ts > 0) { // TODO: ts need *1000 ?
-          set_keyi2(dst, kTStartTimeField, ts);
-        }
-        set_keyi2(dst, kTSampleCountField, nt);
-      }
-      dst += kTraceHeaderSize;
-
-      // copy data
-      if (fromsrc) {
-        // copy from src, i.e., cut
-        memcpy(dst, trDataStart(to) + ts, nt * m_meta.esize);
-      } else {
-        // copy from data, i.e., create_by_sharing_header
-        m_wfunc(dst, srcf + (to - idx[2]) * nt, nt);
-      }
-      dst += nt * m_meta.esize;
-    }
-
-    // assert
-    return dst - odst;
-  } else {
-    throw std::runtime_error("error");
-  }
-}
-
-inline uint64_t SegyND::_copy4d_xo(char *dst, const float *src, LineInfo &linfo,
-                                   int xs, int xe, int os, int oe, int ts,
-                                   int te, bool fromsrc) {
+uint64_t SegyRW::_copy4d_xo(char *dst, const float *src, LineInfo &linfo,
+                            int xs, int xe, int os, int oe, int ts, int te,
+                            bool fromsrc) {
   char *odst = dst;
   int nt = te - ts;
   int no = oe - os;
   int nx = xe - xs;
-  bool tchanged = nt == m_meta.nt ? false : true;
   uint64_t sizeOT = nt * no;
   uint64_t sizeXOT = nx * sizeOT;
 
   /* no data to copy, just fill */
-  if (linfo.count == 0 || xs > xl2ix(linfo.xend) || xe <= xl2ix(linfo.xstart)) {
+  if (linfo.count == 0 || NoOverlap(linfo, xs, xe)) {
     return 0;
   }
 
   uint64_t jump = 0;
 
   std::array<int32_t, 4> idx;
-  find_idxX(idx, linfo, xs, xe);
+  find_idx(idx, linfo, xs, xe);
 
   const float *srcf = src + idx[0] * sizeXOT;
 
   // read, when is 4D, xlines are always continuous as we filled
   for (size_t ix = idx[2]; ix < idx[3]; ix++) {
-    jump = _copy4d_o(dst, srcf + (ix - idx[2]) * sizeXOT, linfo.xinfos[ix], os,
-                     oe, ts, te, fromsrc);
+    jump = _copy_inner(dst, srcf + (ix - idx[2]) * sizeXOT, linfo.xinfos[ix],
+                       os, oe, ts, te, fromsrc);
     dst += jump;
   }
 
@@ -833,7 +599,7 @@ inline uint64_t SegyND::_copy4d_xo(char *dst, const float *src, LineInfo &linfo,
   // assert
 }
 
-inline bool SegyND::isPreStack() {
+bool SegyRW::isPreStack() {
   int o0 = offset(0);
   int n = m_meta.ntrace < 500 ? m_meta.ntrace : 500;
   for (size_t i = 1; i < n; i++) {
@@ -844,14 +610,15 @@ inline bool SegyND::isPreStack() {
   return false;
 }
 
-inline bool SegyND::isCtnX(LineInfo &linfo) {
-  return linfo.count == ((linfo.xend - linfo.xstart) / m_keys.xstep + 1);
-}
-inline bool SegyND::isCtnO(XLineInfo &xinfo) {
-  return xinfo.count == ((xinfo.oend - xinfo.ostart) / m_keys.ostep + 1);
+bool SegyRW::isCtnL(LineInfo &linfo) {
+  if (linfo.isline) {
+    return linfo.count == ((linfo.lend - linfo.lstart) / m_keys.xstep + 1);
+  } else {
+    return linfo.count == ((linfo.lend - linfo.lstart) / m_keys.ostep + 1);
+  }
 }
 
-inline uint64_t SegyND::_need_size_b(int ndim) {
+uint64_t SegyRW::_need_size_b(int ndim) {
   uint64_t need_size = 0;
   if (ndim == -1) {
     ndim = m_ndim;
@@ -871,16 +638,30 @@ inline uint64_t SegyND::_need_size_b(int ndim) {
   return need_size * sizeof(float);
 }
 
-inline uint64_t SegyND::_need_size_s(uint64_t ntrace) {
+uint64_t SegyRW::_need_size_s(uint64_t ntrace) {
   return kTraceHeaderStart + m_meta.tracesize * ntrace;
 }
 
+bool SegyRW::NoOverlap(LineInfo &linfo, int s, int e) {
+  if (linfo.isline) {
+    return s > xl2ix(linfo.lend) || e <= xl2ix(linfo.lstart);
+  } else {
+    return s > of2io(linfo.lend) || e <= of2io(linfo.lstart);
+  }
+}
+
 // Use only if xs/xe and xinfo have overlapped parts
-inline void SegyND::find_idxX(std::array<int32_t, 4> &idx, LineInfo &linfo,
-                              int xs, int xe) {
+void SegyRW::find_idx(std::array<int32_t, 4> &idx, LineInfo &linfo, int xs,
+                      int xe) {
   memset(&idx, 0, 4 * 4);
-  int start = xl2ix(linfo.xstart);
-  int end = xl2ix(linfo.xend) + 1;
+  int start, end;
+  if (linfo.isline) {
+    start = xl2ix(linfo.lstart);
+    end = xl2ix(linfo.lend) + 1;
+  } else {
+    start = of2io(linfo.lstart);
+    end = of2io(linfo.lend) + 1;
+  }
   if (xs < start) {
     idx[0] = start - xs;
     xs = start;
@@ -893,25 +674,7 @@ inline void SegyND::find_idxX(std::array<int32_t, 4> &idx, LineInfo &linfo,
   idx[3] = idx[2] + (xe - xs);
 }
 
-// Use only if os/oe and xinfo have overlapped parts
-inline void SegyND::find_idxO(std::array<int32_t, 4> &idx, XLineInfo &xinfo,
-                              int os, int oe) {
-  memset(&idx, 0, 4 * 4);
-  int start = of2io(xinfo.ostart);
-  int end = of2io(xinfo.oend);
-  if (os < start) {
-    idx[0] = start - os;
-    os = start;
-  }
-  if (oe > end) {
-    idx[1] = oe - end;
-    oe = end;
-  }
-  idx[2] = xinfo.xtstart + (os - start);
-  idx[3] = idx[2] + (oe - os);
-}
-
-inline void SegyND::scanBinaryHeader() {
+void SegyRW::scanBinaryHeader() {
   int dformat = bkeyi2(kBSampleFormatField);
   auto it = kElementSize.find(dformat);
   if (it != kElementSize.end()) {
@@ -930,11 +693,9 @@ inline void SegyND::scanBinaryHeader() {
   setRWFunc(m_meta.dformat);
 }
 
-inline void SegyND::_create_from_segy(const std::string &outname,
-                                      const float *src,
-                                      const std::vector<int> &ranges, bool is2d,
-                                      const std::string &textual,
-                                      bool fromsrc) {
+void SegyRW::_create_from_segy(const std::string &outname, const float *src,
+                               const std::vector<int> &ranges, bool is2d,
+                               const std::string &textual, bool fromsrc) {
 
   int tstart, tend, is, ie, xs, xe, os, oe, ts, te;
   uint64_t maxsize = 0, tracesize = 0;
@@ -946,60 +707,39 @@ inline void SegyND::_create_from_segy(const std::string &outname,
     tend = ranges[1];
     ts = ranges[2];
     te = ranges[3];
-    if (tstart < 0 || tend > m_meta.ntrace) {
-      throw std::runtime_error("error ranges");
-    }
     tracesize = kTraceHeaderSize + (te - ts) * m_meta.esize;
     maxsize = kTraceHeaderStart + tracesize * (tend - tstart);
 
-  } else if (m_ndim == 3) {
-    if (ranges.size() != 6) {
-      throw std::runtime_error("error ranges");
-    }
+  } else {
     is = ranges[0];
     ie = ranges[1];
     xs = ranges[2];
     xe = ranges[3];
-    ts = ranges[4];
-    te = ranges[5];
-    tracesize = kTraceHeaderSize + (te - ts) * m_meta.esize;
-    maxsize = kTraceHeaderStart + tracesize * (ie - is) * (xe - xs);
-  } else if (m_ndim == 4) {
-    if (ranges.size() != 8) {
-      throw std::runtime_error("error ranges");
-    }
-    is = ranges[0];
-    ie = ranges[1];
-    xs = ranges[2];
-    xe = ranges[3];
-    os = ranges[4];
-    oe = ranges[5];
-    ts = ranges[6];
-    te = ranges[7];
-    if (os < 0 || oe > m_meta.no) {
-      throw std::runtime_error("error ranges");
-    }
-    tracesize = kTraceHeaderSize + (te - ts) * m_meta.esize;
-    maxsize = kTraceHeaderStart + tracesize * (ie - is) * (xe - xs) * (oe - os);
-  }
 
-  if (ts < 0 || te > m_meta.nt) {
-    throw std::runtime_error("error ranges");
-  }
-  if (!is2d and m_ndim > 2) {
-    if (is < 0 || ie > m_meta.ni) {
-      throw std::runtime_error("error ranges");
-    }
-    if (xs < 0 || xe > m_meta.nx) {
-      throw std::runtime_error("error ranges");
+    if (m_ndim == 3) {
+      if (ranges.size() != 8) {
+        throw std::runtime_error("error ranges");
+      }
+      ts = ranges[4];
+      te = ranges[5];
+      tracesize = kTraceHeaderSize + (te - ts) * m_meta.esize;
+      maxsize = kTraceHeaderStart + tracesize * (ie - is) * (xe - xs);
+    } else {
+      if (ranges.size() != 8) {
+        throw std::runtime_error("error ranges");
+      }
+      os = ranges[4];
+      oe = ranges[5];
+      ts = ranges[6];
+      te = ranges[7];
+      tracesize = kTraceHeaderSize + (te - ts) * m_meta.esize;
+      maxsize =
+          kTraceHeaderStart + tracesize * (ie - is) * (xe - xs) * (oe - os);
     }
   }
 
   // set dimension
   int nt = te - ts;
-  int no = oe - os;
-  int nx = xe - xs;
-  int ni = ie - is;
 
   bool tchanged = nt == m_meta.nt ? false : true;
 
@@ -1028,7 +768,7 @@ inline void SegyND::_create_from_segy(const std::string &outname,
   // copy binary header
   memcpy(outptr, brheader(), kBinaryHeaderSize);
   if (tchanged) {
-    set_bkeyi2(outptr, kBSampleCountField, te - ts);
+    segy::set_bkeyi2(outptr, kBSampleCountField, te - ts);
   }
   outptr += kBinaryHeaderSize;
 
@@ -1039,9 +779,9 @@ inline void SegyND::_create_from_segy(const std::string &outname,
       memcpy(outptr, trheader(it), kTraceHeaderSize);
       if (tchanged) {
         if (ts > 0) { // TODO: ts need *1000 ?
-          set_keyi2(outptr, kTStartTimeField, ts);
+          segy::set_keyi2(outptr, kTStartTimeField, ts);
         }
-        set_keyi2(outptr, kTSampleCountField, nt);
+        segy::set_keyi2(outptr, kTSampleCountField, nt);
       }
       outptr += kTraceHeaderSize;
       memcpy(outptr, trDataStart(it) + ts, nt * m_meta.esize);
@@ -1056,7 +796,7 @@ inline void SegyND::_create_from_segy(const std::string &outname,
         continue;
       }
       if (m_ndim == 3) {
-        jump = _copy3d_x(outptr, src, linfo, xs, xe, ts, te, fromsrc);
+        jump = _copy_inner(outptr, src, linfo, xs, xe, ts, te, fromsrc);
         outptr += jump;
       } else {
         jump = _copy4d_xo(outptr, src, linfo, xs, xe, os, oe, ts, te, fromsrc);
@@ -1072,26 +812,23 @@ inline void SegyND::_create_from_segy(const std::string &outname,
   }
 }
 
-inline void SegyND::cut(const std::string &segy_name,
-                        const std::vector<int> &ranges, bool is2d,
-                        const std::string &textual) {
+void SegyRW::cut(const std::string &segy_name, const std::vector<int> &ranges,
+                 bool is2d, const std::string &textual) {
   _create_from_segy(segy_name, nullptr, ranges, is2d, textual, true);
 }
 
-inline void SegyND::create_by_sharing_header(const std::string &segy_name,
-                                             const float *src,
-                                             const std::vector<int> &ranges,
-                                             bool is2d,
-                                             const std::string &textual) {
+void SegyRW::create_by_sharing_header(const std::string &segy_name,
+                                      const float *src,
+                                      const std::vector<int> &ranges, bool is2d,
+                                      const std::string &textual) {
   _create_from_segy(segy_name, src, ranges, is2d, textual, false);
 }
 
-inline void SegyND::create_by_sharing_header(const std::string &segy_name,
-                                             const std::string &src_name,
-                                             const std::vector<int> &shape,
-                                             const std::vector<int> &ranges,
-                                             bool is2d,
-                                             const std::string &textual) {
+void SegyRW::create_by_sharing_header(const std::string &segy_name,
+                                      const std::string &src_name,
+                                      const std::vector<int> &shape,
+                                      const std::vector<int> &ranges, bool is2d,
+                                      const std::string &textual) {
   std::error_code error;
   mio::mmap_source float_file;
   float_file.map(src_name, error);
@@ -1103,5 +840,32 @@ inline void SegyND::create_by_sharing_header(const std::string &segy_name,
   create_by_sharing_header(segy_name, src, ranges, is2d, textual);
 }
 
+/*  write mode   */
+
+void SegyRW::set_bkeyi2(int loc, int16_t val) {
+  *reinterpret_cast<int16_t *>(bwheader() + loc - 1) =
+      swap_endian<int16_t>(val);
+}
+void SegyRW::set_bkeyi4(int loc, int32_t val) {
+  *reinterpret_cast<int32_t *>(bwheader() + loc - 1) =
+      swap_endian<int32_t>(val);
+}
+// void SegyRW::set_bkeyi8(int loc, int64_t val) {
+//   *reinterpret_cast<int64_t *>(bwheader() + loc - 1) =
+//       swap_endian<int64_t>(val);
+// }
+
+void SegyRW::set_keyi2(int n, int loc, int16_t val) {
+  *reinterpret_cast<int16_t *>(twheader(n) + loc - 1) =
+      swap_endian<int16_t>(val);
+}
+void SegyRW::set_keyi4(int n, int loc, int32_t val) {
+  *reinterpret_cast<int32_t *>(twheader(n) + loc - 1) =
+      swap_endian<int32_t>(val);
+}
+// void SegyRW::set_keyi8(int n, int loc, int64_t val) {
+//   *reinterpret_cast<int64_t *>(twheader(n) + loc - 1) =
+//       swap_endian<int64_t>(val);
+// }
+
 } // namespace segy
-#endif

@@ -1,9 +1,7 @@
 #ifndef CIG_SEGY_BASE_H
 #define CIG_SEGY_BASE_H
-#define FMT_HEADER_ONLY
 
 #include "mio.hpp"
-#include "progressbar.hpp"
 #include "sutils.h"
 
 #include <fmt/format.h>
@@ -159,7 +157,9 @@ inline std::string SegyBase::textual_header(char coding) {
   if (coding == 'a') {
     isEBCDIC = false;
   } else if (coding == 'u') {
-    bool isEBCDIC = isTextInEBCDICFormat(src, kTextualHeaderSize);
+    isEBCDIC = isTextInEBCDICFormat(src, kTextualHeaderSize);
+  } else {
+    throw std::invalid_argument("Only support 'a' and 'u'");
   }
   for (int iRow = 0; iRow < kTextualRows; iRow++) {
     int offset = iRow * kTextualColumns;

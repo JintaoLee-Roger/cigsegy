@@ -792,20 +792,6 @@ inline void truncate_file(const std::string &file_name,
 #endif
 }
 
-// modify header keys function, for cut, create_by_sharing_header
-inline void set_bkeyi2(char *bheader, int loc, int16_t val) {
-  *reinterpret_cast<int16_t *>(bheader + loc - 1) = swap_endian<int16_t>(val);
-}
-inline void set_bkeyi4(char *bheader, int loc, int32_t val) {
-  *reinterpret_cast<int32_t *>(bheader + loc - 1) = swap_endian<int32_t>(val);
-}
-inline void set_keyi2(char *theader, int loc, int16_t val) {
-  *reinterpret_cast<int16_t *>(theader + loc - 1) = swap_endian<int16_t>(val);
-}
-inline void set_keyi4(char *theader, int loc, int32_t val) {
-  *reinterpret_cast<int32_t *>(theader + loc - 1) = swap_endian<int32_t>(val);
-}
-
 } // namespace segy
 
 #endif
