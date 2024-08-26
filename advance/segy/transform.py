@@ -2,6 +2,12 @@
 # Computational and Interpretation Group (CIG),
 # University of Science and Technology of China (USTC).
 # All rights reserved.
+"""
+Coordinate transformations between inline-xline and geodetic (x, y) coordinates.
+
+This module provides functions for converting between seismic survey coordinates (inline-xline) 
+and geodetic coordinates (x, y). 
+"""
 
 import numpy as np
 

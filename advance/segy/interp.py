@@ -2,6 +2,13 @@
 # Computational and Interpretation Group (CIG),
 # University of Science and Technology of China (USTC).
 # All rights reserved.
+"""
+Interpolation functions for extracting arbitrary lines, resampling data, and data fusion.
+
+This module provides a set of interpolation functions that are essential for handling seismic data 
+and other geophysical datasets. These functions enable the extraction of arbitrary lines from data grids, 
+resampling of data to different resolutions, and the fusion of multiple datasets.
+"""
 
 import numpy as np
 

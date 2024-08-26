@@ -180,6 +180,51 @@ public:
             {"fillNoValue", pybind11::float_(m_meta.fillNoValue)},
             {"ndim", pybind11::int_(m_ndim)}};
   }
+
+  npint32 get_lineInfo() {
+    if (m_ndim == 2) {
+      throw std::runtime_error("get_lineInfo function valid when ndim > 2");
+    }
+    py::array_t<int> out;
+    if (m_ndim == 3) {
+      out = py::array_t<int>({m_meta.ni, 3});
+    } else {
+      out = py::array_t<int>({m_meta.ni, m_meta.nx, 4});
+    }
+    int *ptr = out.mutable_data();
+
+    if (m_ndim == 3) {
+      for (auto linfo : m_iinfos) {
+        ptr[0] = linfo.line;
+        if (linfo.count == 0) {
+          ptr[1] = -1;
+          ptr[2] = -1;
+        } else {
+          ptr[1] = linfo.itstart;
+          ptr[2] = linfo.itend;
+        }
+        ptr += 3;
+      }
+    } else {
+      for (auto linfo : m_iinfos) {
+        // TODO: fill
+        for (auto xinfo : linfo.xinfos) {
+          ptr[0] = linfo.line;
+          ptr[1] = xinfo.line;
+          if (xinfo.count == 0) {
+            ptr[2] = -1;
+            ptr[3] = -1;
+          } else {
+            ptr[2] = xinfo.itstart;
+            ptr[3] = xinfo.itend;
+          }
+          ptr += 4;
+        }
+      }
+    }
+
+    return out;
+  }
 };
 
 // class SegyCpy : public segy::SegyC {
@@ -289,6 +334,7 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       // meta info
       .def("get_keylocs", &Pysegy::get_keylocs)
       .def("get_metainfo", &Pysegy::get_metainfo)
+      .def("get_lineInfo", &Pysegy::get_lineInfo)
 
       // read
       .def("set_segy_type", &Pysegy::set_segy_type, py::arg("ndim"))
@@ -332,8 +378,7 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       .def("set_coordx", &Pysegy::set_coordx, py::arg("n"), py::arg("val"))
       .def("set_coordy", &Pysegy::set_coordy, py::arg("n"), py::arg("val"))
 
-      .def("write_itrace", &Pysegy::write_itrace, py::arg("data"),
-           py::arg("n"))
+      .def("write_itrace", &Pysegy::write_itrace, py::arg("data"), py::arg("n"))
       .def("write_traces",
            overload_cast_<const npfloat &, int, int, int, int>()(
                &Pysegy::write_traces),

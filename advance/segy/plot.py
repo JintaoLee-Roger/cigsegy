@@ -1,3 +1,17 @@
+# Copyright (c) 2024 Jintao Li.
+# Computational and Interpretation Group (CIG),
+# University of Science and Technology of China (USTC).
+# All rights reserved.
+"""
+Plotting functions for visualizing survey coordinates, trace header keys, and other SEG-Y related data.
+
+This module provides a collection of plotting functions tailored for geophysical data visualization. 
+These functions are designed to help users graphically represent various aspects of SEG-Y files, 
+such as survey coordinates and trace header keys. 
+
+**The module may require additional dependencies for full functionality.**
+"""
+
 import numpy as np
 from typing import Tuple
 from pathlib import Path

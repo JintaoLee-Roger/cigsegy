@@ -2,6 +2,23 @@
 # Computational and Interpretation Group (CIG),
 # University of Science and Technology of China (USTC).
 # All rights reserved.
+"""
+_CXX_SEGY: A C++ core library for SEG-Y file operations, exposed to Python using pybind11.
+
+This module provides high-performance, low-level functionality for handling SEG-Y files, a common format for geophysical data storage. The library is written in C++ for efficiency and is wrapped with pybind11 to be accessible from Python.
+
+Key Features:
+--------------
+- **Scan SEG-Y Files**: Quickly scan SEG-Y files to extract metadata and other essential information without loading the entire file into memory.
+  
+- **Read SEG-Y Files**: Efficiently read seismic data and headers from SEG-Y files, allowing for fast data access.
+  
+- **Write SEG-Y Files**: Modify SEG-Y files with full control over file headers and format specifications (including header and data).
+  
+- **Create SEG-Y Files**: Initialize new SEG-Y files, specifying headers, formats, and data structures according to industry standards.
+
+- **Efficient Functions**: data converting between IBM and IEEE floating-point formats.
+"""
 
 from typing import List, Tuple, overload
 
@@ -9,6 +26,26 @@ import numpy as np
 
 
 class Pysegy:
+    """
+    Pysegy: A Python class for scanning, accessing, reading, and modifying SEG-Y file headers and data.
+
+    The `Pysegy` class provides a high-level interface for working with SEG-Y files, which are widely used in the geophysical and seismic industries. 
+    This class is implemented in C++ for performance reasons and is exposed to Python using pybind11, making it both powerful and easy to use.
+    
+    Example:
+    --------
+    ```python
+    from cigsegy import Pysegy
+    # from cigsegy.cpp._CXX_SEGY import Pysegy
+
+    segy_file = Pysegy("example.segy")
+    segy_file.setLocations(189, 193)
+    segy_file.scan()
+    # read the entire SEG-Y file
+    d = segy_file.read()
+    d.close()
+    ```
+    """
 
     def __init__(self, segy_name: str) -> None:
         ...

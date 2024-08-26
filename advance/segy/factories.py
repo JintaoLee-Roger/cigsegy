@@ -2,11 +2,20 @@
 # Computational and Interpretation Group (CIG),
 # University of Science and Technology of China (USTC).
 # All rights reserved.
+"""
+Core functions for easy and direct access to common SEG-Y file operations.
+
+This module provides a set of factory functions that offer a simplified interface for working with SEG-Y files. 
+These functions are designed for quick and direct usage, allowing you to perform essential operations 
+like header reading, file scanning, data retrieval, and file creation using a convenient `cigsegy.xxx` syntax.
+"""
 
 import warnings
 import numpy as np
 from segy.cpp import _CXX_SEGY
 from segy.constinfo import kBinaryHeaderHelp, kTraceHeaderHelp
+from segy.tools import get_metaInfo
+from segy.utils import parse_metainfo
 
 
 def textual_header(segy_name: str, coding: str = None) -> None:
@@ -43,6 +52,7 @@ def metaInfo(
     ostep: int = None,
     xloc: int = None,
     yloc: int = None,
+    apply_scalar: bool = False,
 ) -> None:
     """
     print meta info of `segy_name` file
@@ -63,15 +73,9 @@ def metaInfo(
         cdp y (real world) value location in trace header
     """
 
-    segy = _CXX_SEGY.Pysegy(str(segy_name))
-    segy.setLocations(iline, xline, offset)
-    segy.setSteps(istep, xstep, ostep)
-    segy.setXYLocations(xloc, yloc)
-    segy.scan()
-    keys = segy.get_keylocs()
-    meta = segy.get_metainfo()
-    # TODO
-    segy.close()
+    meta = get_metaInfo(segy_name, iline, xline, offset, istep, xstep, ostep, xloc, yloc, apply_scalar) # yapf: disable
+    out = parse_metainfo(meta)
+    print(out)
 
 
 def fromfile(

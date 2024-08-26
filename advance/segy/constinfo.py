@@ -1,3 +1,15 @@
+# Copyright (c) 2024 Jintao Li.
+# Computational and Interpretation Group (CIG),
+# University of Science and Technology of China (USTC).
+# All rights reserved.
+"""
+Common SEG-Y file information, including header parsing details and encoding conversion dictionaries.
+
+This module contains essential constants and information related to SEG-Y files, which are 
+widely used in geophysical and seismic data storage. It provides details for parsing SEG-Y headers 
+and includes conversion dictionaries for ASCII and EBCDIC encodings.
+"""
+
 # fmt: off
 kBinaryHeaderHelp = {
     1: ("Job ID", 4),

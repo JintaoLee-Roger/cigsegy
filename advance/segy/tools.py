@@ -46,7 +46,7 @@ def read_header(fname: str, type, n=0, printstr=True):
 
 
 def get_metaInfo(
-    segy_name: str,
+    segyname: str,
     iline: int = None,
     xline: int = None,
     offset: int = None,
@@ -58,11 +58,11 @@ def get_metaInfo(
     apply_scalar: bool = False,
 ) -> Dict:
     """
-    get metainfo dict of `segy_name` file
+    get metainfo dict of `segyname` file
 
     Parameters
     ----------
-    segy_name : str
+    segyname : str
         input segy file
     iline : int
         iline location in trace header
@@ -84,6 +84,21 @@ def get_metaInfo(
     Dict
         Dict of meta information 
     """
+    segy = Pysegy(segyname)
+    segy.setLocations(iline, xline, offset)
+    segy.setSteps(istep, xstep, ostep)
+    segy.setXYLocations(xloc, yloc)
+    segy.scan()
+    keys = segy.get_keylocs()
+    meta = segy.get_metainfo()
+    out = {**keys, **meta}
+    if apply_scalar:
+        if meta['scalar'] == 0:
+            meta['scalar'] = 1
+        scalar = -1 / meta['scalar'] if meta['scalar'] < 0 else meta['scalar']
+        meta['di'] *= scalar
+        meta['dx'] *= scalar
+    return out
 
 
 def trace_count(fname: str) -> int:

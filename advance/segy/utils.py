@@ -300,8 +300,46 @@ def eval_offset(segyname, offset=37):
     return dif.min()
 
 
-def parse_metainfo():
-    pass
+def parse_metainfo(meta: dict):
+    out = ""
+
+    # shape information
+    shapeinfo = "shape: "
+    if meta['ndim'] == 2:
+        shapeinfo += f"(n-trace, n-time) = ({meta['ntrace']}, {meta['nt']})"
+    elif meta['ndim'] == 3:
+        shapeinfo += f"(n-inline, n-crossline, n-time) = ({meta['ni']}, {meta['nx']}, {meta['nt']})"
+    else:
+        shapeinfo += f"(n-inline, n-crossline, n-offset, n-time) = ({meta['ni']}, {meta['nx']}, {meta['no']}, {meta['nt']})"
+
+    out += shapeinfo + "\n"
+
+    # interval
+    intervalinfo = "interval: "
+    if meta['ndim'] == 2:
+        intervalinfo += f"dt = {meta['dt']} us"
+    else:
+        intervalinfo += f"di(iline) = {meta['di']:.2f}, dx(xline) = {meta['dx']:.2f}, dt = {meta['dt']} us"
+    out += intervalinfo + "\n"
+
+    # range
+    rangeinfo = "range: "
+    end_time = meta['start_time'] + (meta['nt'] - 1) * meta['dt'] / 1000
+    timer = f"t: {meta['start_time']} - {end_time} ms"
+    if meta['ndim'] > 3:
+        rangeinfo += f"inline: {meta['start_iline']} - {meta['end_iline']}, crossline: {meta['start_xline']} - {meta['end_xline']}, "
+    if meta['ndim'] == 4:
+        rangeinfo += f"offset: {meta['start_offset']} - {meta['end_offset']}, "
+    rangeinfo += timer
+    out += rangeinfo + "\n"
+
+    tracesort = "trace sorting code: " + kTraceSortingHelp[meta['trace_sorting_code']] # yapf: disable
+    out += tracesort + "\n"
+
+    dformat = f"scalar: {meta['scalar']}, data format: " + kDataSampleFormatHelp[meta['dformat']] # yapf: disable
+    out += dformat + "\n"
+
+    return out
 
 
 ############# Internal functions #############
