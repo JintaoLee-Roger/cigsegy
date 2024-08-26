@@ -17,7 +17,7 @@ using npfloat = py::array_t<float, py::array::c_style | py::array::forcecast>;
 using npint32 = py::array_t<int32_t, py::array::c_style | py::array::forcecast>;
 using npuchar = py::array_t<uchar, py::array::c_style | py::array::forcecast>;
 
-class SegyRWpy : public segy::SegyRW {
+class Pysegy : public segy::SegyRW {
 public:
   using segy::SegyRW::create_by_sharing_header;
   using segy::SegyRW::SegyRW;
@@ -242,118 +242,118 @@ template <typename... Args>
 using overload_cast_ = pybind11::detail::overload_cast_impl<Args...>;
 
 PYBIND11_MODULE(_CXX_SEGY, m) {
-  py::class_<SegyRWpy>(m, "SegyRWpy")
+  py::class_<Pysegy>(m, "Pysegy")
       .def(py::init<std::string>())
-      .def("close", &SegyRWpy::close_file)
+      .def("close", &Pysegy::close_file)
 
       // location
-      .def("setLocations", &SegyRWpy::setLocations, py::arg("iline"),
+      .def("setLocations", &Pysegy::setLocations, py::arg("iline"),
            py::arg("xline"), py::arg("offset") = 37)
-      .def("setInlineLocation", &SegyRWpy::setInlineLocation, py::arg("iline"))
-      .def("setCrosslineLocation", &SegyRWpy::setCrosslineLocation,
+      .def("setInlineLocation", &Pysegy::setInlineLocation, py::arg("iline"))
+      .def("setCrosslineLocation", &Pysegy::setCrosslineLocation,
            py::arg("xline"))
-      .def("setOffsetLocation", &SegyRWpy::setOffsetLocation, py::arg("offset"))
-      .def("setXLocation", &SegyRWpy::setXLocation, py::arg("xloc"))
-      .def("setYLocation", &SegyRWpy::setYLocation, py::arg("yloc"))
-      .def("setXYLocations", &SegyRWpy::setXYLocations, py::arg("xloc"),
+      .def("setOffsetLocation", &Pysegy::setOffsetLocation, py::arg("offset"))
+      .def("setXLocation", &Pysegy::setXLocation, py::arg("xloc"))
+      .def("setYLocation", &Pysegy::setYLocation, py::arg("yloc"))
+      .def("setXYLocations", &Pysegy::setXYLocations, py::arg("xloc"),
            py::arg("yloc"))
-      .def("setInlineStep", &SegyRWpy::setInlineStep, py::arg("istep"))
-      .def("setCrosslineStep", &SegyRWpy::setCrosslineStep, py::arg("xstep"))
-      .def("setOffsetStep", &SegyRWpy::setOffsetStep, py::arg("ostep"))
-      .def("setSteps", &SegyRWpy::setSteps, py::arg("istep"), py::arg("xstep"),
+      .def("setInlineStep", &Pysegy::setInlineStep, py::arg("istep"))
+      .def("setCrosslineStep", &Pysegy::setCrosslineStep, py::arg("xstep"))
+      .def("setOffsetStep", &Pysegy::setOffsetStep, py::arg("ostep"))
+      .def("setSteps", &Pysegy::setSteps, py::arg("istep"), py::arg("xstep"),
            py::arg("ostep") = 1)
-      .def("setFill", &SegyRWpy::setFill, py::arg("fill"))
+      .def("setFill", &Pysegy::setFill, py::arg("fill"))
 
       // read func base
-      .def("textual_header", &SegyRWpy::textual_header, py::arg("coding") = 'u')
-      .def("bkeyi2", &SegyRWpy::bkeyi2, py::arg("loc"))
-      .def("bkeyi4", &SegyRWpy::bkeyi4, py::arg("loc"))
-      .def("keyi2", &SegyRWpy::keyi2, py::arg("n"), py::arg("loc"))
-      .def("keyi4", &SegyRWpy::keyi4, py::arg("n"), py::arg("loc"))
-      .def("iline", &SegyRWpy::iline, py::arg("n"))
-      .def("xline", &SegyRWpy::xline, py::arg("n"))
-      .def("offset", &SegyRWpy::offset, py::arg("n"))
-      .def("coordx", &SegyRWpy::coordx, py::arg("n"))
-      .def("coordy", &SegyRWpy::coordy, py::arg("n"))
-      .def("get_binary_header", &SegyRWpy::get_binary_header)
-      .def("get_trace_header", &SegyRWpy::get_trace_header, py::arg("n"))
-      .def("get_trace_keys", &SegyRWpy::get_trace_keys, py::arg("leys"),
+      .def("textual_header", &Pysegy::textual_header, py::arg("coding") = 'u')
+      .def("bkeyi2", &Pysegy::bkeyi2, py::arg("loc"))
+      .def("bkeyi4", &Pysegy::bkeyi4, py::arg("loc"))
+      .def("keyi2", &Pysegy::keyi2, py::arg("n"), py::arg("loc"))
+      .def("keyi4", &Pysegy::keyi4, py::arg("n"), py::arg("loc"))
+      .def("iline", &Pysegy::iline, py::arg("n"))
+      .def("xline", &Pysegy::xline, py::arg("n"))
+      .def("offset", &Pysegy::offset, py::arg("n"))
+      .def("coordx", &Pysegy::coordx, py::arg("n"))
+      .def("coordy", &Pysegy::coordy, py::arg("n"))
+      .def("get_binary_header", &Pysegy::get_binary_header)
+      .def("get_trace_header", &Pysegy::get_trace_header, py::arg("n"))
+      .def("get_trace_keys", &Pysegy::get_trace_keys, py::arg("leys"),
            py::arg("length"), py::arg("beg"), py::arg("end"))
-      .def("itrace", &SegyRWpy::itrace, py::arg("n"))
+      .def("itrace", &Pysegy::itrace, py::arg("n"))
       .def("collect",
-           overload_cast_<const npint32 &, int, int>()(&SegyRWpy::collect),
+           overload_cast_<const npint32 &, int, int>()(&Pysegy::collect),
            py::arg("index"), py::arg("tbeg"), py::arg("tend"))
-      .def("collect", overload_cast_<int, int, int, int>()(&SegyRWpy::collect),
+      .def("collect", overload_cast_<int, int, int, int>()(&Pysegy::collect),
            py::arg("beg"), py::arg("end"), py::arg("tbeg"), py::arg("tend"))
 
       // meta info
-      .def("get_keylocs", &SegyRWpy::get_keylocs)
-      .def("get_metainfo", &SegyRWpy::get_metainfo)
+      .def("get_keylocs", &Pysegy::get_keylocs)
+      .def("get_metainfo", &Pysegy::get_metainfo)
 
       // read
-      .def("set_segy_type", &SegyRWpy::set_segy_type, py::arg("ndim"))
-      .def("scan", &SegyRWpy::scan)
-      .def("read4d", &SegyRWpy::read4d, py::arg("ib"), py::arg("ie"),
+      .def("set_segy_type", &Pysegy::set_segy_type, py::arg("ndim"))
+      .def("scan", &Pysegy::scan)
+      .def("read4d", &Pysegy::read4d, py::arg("ib"), py::arg("ie"),
            py::arg("xb"), py::arg("xe"), py::arg("ob"), py::arg("oe"),
            py::arg("tb"), py::arg("te"))
-      .def("read3d", &SegyRWpy::read3d, py::arg("ib"), py::arg("ie"),
+      .def("read3d", &Pysegy::read3d, py::arg("ib"), py::arg("ie"),
            py::arg("xb"), py::arg("xe"), py::arg("tb"), py::arg("te"))
-      .def("read", &SegyRWpy::read)
-      .def("tofile", &SegyRWpy::tofile, py::arg("binary_out_name"),
+      .def("read", &Pysegy::read)
+      .def("tofile", &Pysegy::tofile, py::arg("binary_out_name"),
            py::arg("as_2d") = false)
-      .def("cut", &SegyRWpy::cut, py::arg("outname"), py::arg("ranges"),
+      .def("cut", &Pysegy::cut, py::arg("outname"), py::arg("ranges"),
            py::arg("is2d") = false, py::arg("textual") = "")
       .def("create_by_sharing_header",
            overload_cast_<const std::string &, const npfloat &,
                           const py::list &, bool, const std::string &>()(
-               &SegyRWpy::create_by_sharing_header),
+               &Pysegy::create_by_sharing_header),
            py::arg("segy_name"), py::arg("src"), py::arg("ranges"),
            py::arg("is2d") = false, py::arg("textual") = "")
       .def("create_by_sharing_header",
            overload_cast_<const std::string &, const std::string &,
                           const std::vector<int> &, const std::vector<int> &,
                           bool, const std::string &>()(
-               &SegyRWpy::create_by_sharing_header))
+               &Pysegy::create_by_sharing_header))
 
       // for write
-      .def("set_bkeyi2", &SegyRWpy::set_bkeyi2, py::arg("loc"), py::arg("val"))
-      .def("set_bkeyi4", &SegyRWpy::set_bkeyi4, py::arg("loc"), py::arg("val"))
-      //  .def("set_bkeyi8", &SegyRWpy::set_bkeyi8, py::arg("loc"),
+      .def("set_bkeyi2", &Pysegy::set_bkeyi2, py::arg("loc"), py::arg("val"))
+      .def("set_bkeyi4", &Pysegy::set_bkeyi4, py::arg("loc"), py::arg("val"))
+      //  .def("set_bkeyi8", &Pysegy::set_bkeyi8, py::arg("loc"),
       //  py::arg("val"))
-      .def("set_keyi2", &SegyRWpy::set_keyi2, py::arg("n"), py::arg("loc"),
+      .def("set_keyi2", &Pysegy::set_keyi2, py::arg("n"), py::arg("loc"),
            py::arg("val"))
-      .def("set_keyi4", &SegyRWpy::set_keyi4, py::arg("n"), py::arg("loc"),
+      .def("set_keyi4", &Pysegy::set_keyi4, py::arg("n"), py::arg("loc"),
            py::arg("val"))
-      //  .def("set_keyi8", &SegyRWpy::set_keyi8, py::arg("n"), py::arg("loc"),
+      //  .def("set_keyi8", &Pysegy::set_keyi8, py::arg("n"), py::arg("loc"),
       //       py::arg("val"))
-      .def("set_iline", &SegyRWpy::set_iline, py::arg("n"), py::arg("val"))
-      .def("set_xline", &SegyRWpy::set_xline, py::arg("n"), py::arg("val"))
-      .def("set_offset", &SegyRWpy::set_offset, py::arg("n"), py::arg("val"))
-      .def("set_coordx", &SegyRWpy::set_coordx, py::arg("n"), py::arg("val"))
-      .def("set_coordy", &SegyRWpy::set_coordy, py::arg("n"), py::arg("val"))
+      .def("set_iline", &Pysegy::set_iline, py::arg("n"), py::arg("val"))
+      .def("set_xline", &Pysegy::set_xline, py::arg("n"), py::arg("val"))
+      .def("set_offset", &Pysegy::set_offset, py::arg("n"), py::arg("val"))
+      .def("set_coordx", &Pysegy::set_coordx, py::arg("n"), py::arg("val"))
+      .def("set_coordy", &Pysegy::set_coordy, py::arg("n"), py::arg("val"))
 
-      .def("write_itrace", &SegyRWpy::write_itrace, py::arg("data"),
+      .def("write_itrace", &Pysegy::write_itrace, py::arg("data"),
            py::arg("n"))
       .def("write_traces",
            overload_cast_<const npfloat &, int, int, int, int>()(
-               &SegyRWpy::write_traces),
+               &Pysegy::write_traces),
            py::arg("data"), py::arg("beg"), py::arg("end"), py::arg("tbeg"),
            py::arg("tend"))
       .def("write_traces",
            overload_cast_<const npfloat &, const npint32 &, int, int>()(
-               &SegyRWpy::write_traces),
+               &Pysegy::write_traces),
            py::arg("data"), py::arg("index"), py::arg("tbeg"), py::arg("tend"))
-      .def("write", &SegyRWpy::write, py::arg("data"))
-      .def("write3d", &SegyRWpy::write3d, py::arg("data"), py::arg("ib"),
+      .def("write", &Pysegy::write, py::arg("data"))
+      .def("write3d", &Pysegy::write3d, py::arg("data"), py::arg("ib"),
            py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("tb"),
            py::arg("te"))
-      .def("write4d", &SegyRWpy::write4d, py::arg("data"), py::arg("ib"),
+      .def("write4d", &Pysegy::write4d, py::arg("data"), py::arg("ib"),
            py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("ob"),
            py::arg("oe"), py::arg("tb"), py::arg("te"))
 
-      .def_property_readonly("trace_count", &SegyRWpy::ntrace)
-      .def_property_readonly("nt", &SegyRWpy::nt)
-      .def_property_readonly("ndim", &SegyRWpy::ndim)
+      .def_property_readonly("trace_count", &Pysegy::ntrace)
+      .def_property_readonly("nt", &Pysegy::nt)
+      .def_property_readonly("ndim", &Pysegy::ndim)
 
       ;
 

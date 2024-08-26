@@ -609,7 +609,7 @@ class SegyNP:
         np.set_printoptions(suppress=True)
         self._ndim = ndim
         self._fname = filename
-        self.segy = _CXX_SEGY.SegyRWpy(str(filename))
+        self.segy = _CXX_SEGY.Pysegy(str(filename))
         self.keylocs = None
 
         self._shape2d = None

@@ -6,6 +6,7 @@
 import warnings
 import numpy as np
 from segy.cpp import _CXX_SEGY
+from segy.constinfo import kBinaryHeaderHelp, kTraceHeaderHelp
 
 
 def textual_header(segy_name: str, coding: str = None) -> None:
@@ -27,7 +28,7 @@ def textual_header(segy_name: str, coding: str = None) -> None:
                 f"but your input is `coding='{coding}'`")
 
     coding = 'u' if coding is None else coding
-    segy = _CXX_SEGY.SegyRWpy(str(segy_name))
+    segy = _CXX_SEGY.Pysegy(str(segy_name))
     print(segy.textual_header(coding))
     segy.close()
 
@@ -62,6 +63,16 @@ def metaInfo(
         cdp y (real world) value location in trace header
     """
 
+    segy = _CXX_SEGY.Pysegy(str(segy_name))
+    segy.setLocations(iline, xline, offset)
+    segy.setSteps(istep, xstep, ostep)
+    segy.setXYLocations(xloc, yloc)
+    segy.scan()
+    keys = segy.get_keylocs()
+    meta = segy.get_metainfo()
+    # TODO
+    segy.close()
+
 
 def fromfile(
     segy_name: str,
@@ -93,6 +104,13 @@ def fromfile(
     numpy.ndarray :
         shape as (n-inline, n-crossline, n-time)
     """
+    segy = _CXX_SEGY.Pysegy(str(segy_name))
+    segy.setLocations(iline, xline, offset)
+    segy.setSteps(istep, xstep, ostep)
+    segy.scan()
+    d = segy.read()
+    segy.close()
+    return d
 
 
 def collect(
@@ -124,7 +142,7 @@ def collect(
     numpy.ndarray :
         its shape = (trace_count, n-time)
     """
-    segy = _CXX_SEGY.SegyRWpy(str(segy_in))
+    segy = _CXX_SEGY.Pysegy(str(segy_in))
     if beg < 0:
         beg = 0
         end = segy.ntrace
@@ -153,7 +171,13 @@ def collect(
 def tofile(
     segy_name: str,
     out_name: str,
-    **kwargs,
+    iline: int = None,
+    xline: int = None,
+    offset: int = None,
+    istep: int = None,
+    xstep: int = None,
+    ostep: int = None,
+    as2d: bool = False,
 ) -> None:
     """
     convert a segy file to a binary file
@@ -175,12 +199,19 @@ def tofile(
     as_2d : bool
         if True, just remove the header and convert data to IEEE 32 in litte endian
     """
+    segy = _CXX_SEGY.Pysegy(str(segy_name))
+    segy.setLocations(iline, xline, offset)
+    segy.setSteps(istep, xstep, ostep)
+    segy.scan()
+    segy.tofile(out_name, as2d)
+    segy.close()
 
 
 def create_by_sharing_header(
     segy_name: str,
     header_segy: str,
     src,
+    locs: list,
     **kwargs,
 ) -> None:
     """
@@ -195,9 +226,17 @@ def create_by_sharing_header(
     src : numpy.ndarray
         source data
     """
+    # TODO: add more parameters
+    iline, xline, offset, istep, xstep, ostep = locs
+    segy = _CXX_SEGY.Pysegy(str(header_segy))
+    segy.setLocations(iline, xline, offset)
+    segy.setSteps(istep, xstep, ostep)
+    segy.scan()
+    segy.create_by_sharing_header(segy_name, src, **kwargs)
+    segy.close()
 
 
-def get_trace_keys(segy,
+def get_trace_keys(segyname,
                    keyloc,
                    beg: int = -1,
                    end: int = 0,
@@ -207,7 +246,7 @@ def get_trace_keys(segy,
 
     Parameters
     ----------
-    segy : str or Pysegy
+    segyname : str or Pysegy
         input segy file
     keyloc : int or List or 1D np.ndarray
         key locations, can input multi-values
@@ -227,19 +266,36 @@ def get_trace_keys(segy,
     np.ndarray
         shape as (end-beg, )
     """
+    if isinstance(segyname, _CXX_SEGY.Pysegy):
+        segy = segyname
+    else:
+        segy = _CXX_SEGY.Pysegy(str(segyname))
+    if beg < 0:
+        beg = 0
+        end = segy.ntrace
+    if end == 0:
+        end = beg + 1
+    if end < 0:
+        end = segy.ntrace
+
+    # TODO: check length of keyloc
+    d = segy.get_trace_keys(keyloc, [4] * len(keyloc), beg, end).squeeze()
+    if not isinstance(segyname, _CXX_SEGY.Pysegy):
+        segy.close()
+    return d
 
 
-def modify_bin_key(segy_name: str,
+def modify_bin_key(segyname: str,
                    loc: int,
                    value,
                    force: bool = False,
-                   type: str = None) -> None:
+                   dtype: str = None) -> None:
     """
     modify the value of the binary header key.
 
     Parameters
     -----------
-    segy_name : str
+    segyname : str
         segy file name
     loc : int
         location of the binary key
@@ -247,13 +303,29 @@ def modify_bin_key(segy_name: str,
         assigned value to the key
     force : bool
         force to write
-    type : str
+    dtype : str
         value type of the assigned value when force is True, can be
         one of {'int8', 'int16', 'int32', 'int64', 'float32', 'float64'}
     """
+    if isinstance(segyname, _CXX_SEGY.Pysegy):
+        segy = segyname
+    else:
+        segy = _CXX_SEGY.Pysegy(str(segyname))
+    try:
+        l = kBinaryHeaderHelp[loc][1]
+    except KeyError:
+        raise ValueError(
+            f"loc = {loc} is not a valid binary header key location.")
+    if l == 2:
+        segy.set_bkeyi2(loc, value)
+    elif l == 4:
+        segy.set_bkeyi4(loc, value)
+
+    if not isinstance(segyname, _CXX_SEGY.Pysegy):
+        segy.close()
 
 
-def modify_trace_key(segy_name: str,
+def modify_trace_key(segyname: str,
                      loc: int,
                      value,
                      idx: int,
@@ -264,7 +336,7 @@ def modify_trace_key(segy_name: str,
 
     Parameters
     -----------
-    segy_name : str
+    segyname : str
         segy file name
     loc : int
         location of the binary key
@@ -278,41 +350,57 @@ def modify_trace_key(segy_name: str,
         value type of the assigned value when force is True, can be
         one of {'int8', 'int16', 'int32', 'int64', 'float32', 'float64'}
     """
+    if isinstance(segyname, _CXX_SEGY.Pysegy):
+        segy = segyname
+    else:
+        segy = _CXX_SEGY.Pysegy(str(segyname))
+    try:
+        l = kTraceHeaderHelp[loc][1]
+    except KeyError:
+        raise ValueError(
+            f"loc = {loc} is not a valid binary header key location.")
+    if l == 2:
+        segy.set_keyi2(idx, loc, value)
+    elif l == 4:
+        segy.set_keyi4(idx, loc, value)
+
+    if not isinstance(segyname, _CXX_SEGY.Pysegy):
+        segy.close()
 
 
 def ibm_to_ieee(value, is_big_endian):
     """
     convert IBM floating point to IEEE floating point
     """
-    return _CXX_SEGY.ibm_to_ieee(value, is_big_endian)
+    if isinstance(value, (float, int)):
+        return _CXX_SEGY.ibm_to_ieee(value, is_big_endian)
+    elif isinstance(value, np.ndarray):
+        if value.dtype != np.float32:
+            warnings.warn(
+                f"value.dtype = {value.dtype} is not np.float32, it will be converted to np.float32."
+            )
+            value = value.astype(np.float32)
+        return _CXX_SEGY.ibms_to_ieees(value, is_big_endian)
+    else:
+        raise ValueError(
+            f"value = {value} is not a valid type, it should be one of {float, int, np.ndarray}"
+        )
 
 
 def ieee_to_ibm(value, is_little_endian):
     """
     convert IEEE floating point to IBM floating point
     """
-    return _CXX_SEGY.ieee_to_ibm(value, is_little_endian)
-
-
-def ibms_to_ieees(ibms: np.ndarray, is_big_endian: bool) -> np.ndarray:
-    """
-    convert IBM floating array to IEEE floating points
-    """
-    if ibms.dtype != np.float32:
-        warnings.warn(
-            f"ibms.dtype = {ibms.dtype} is not np.float32, it will be converted to np.float32."
+    if isinstance(value, (float, int)):
+        return _CXX_SEGY.ieee_to_ibm(value, is_little_endian)
+    elif isinstance(value, np.ndarray):
+        if value.dtype != np.float32:
+            warnings.warn(
+                f"value.dtype = {value.dtype} is not np.float32, it will be converted to np.float32."
+            )
+            value = value.astype(np.float32)
+        return _CXX_SEGY.ieees_to_ibms(value, is_little_endian)
+    else:
+        raise ValueError(
+            f"value = {value} is not a valid type, it should be one of {float, int, np.ndarray}"
         )
-        ibms = ibms.astype(np.float32)
-    return _CXX_SEGY.ieees_to_ibms(ibms, is_big_endian)
-
-
-def ieees_to_ibms(ieees: np.ndarray, is_little_endian: bool) -> np.ndarray:
-    """
-    convert IEEE floating array to IBM floating points
-    """
-    if ieees.dtype != np.float32:
-        warnings.warn(
-            f"ieees.dtype = {ieees.dtype} is not np.float32, it will be converted to np.float32."
-        )
-        ieees = ieees.astype(np.float32)
-    return _CXX_SEGY.ieees_to_ibms(ieees, is_little_endian)

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List
 import numpy as np
 # from segy import get_trace_keys
-from segy.cpp._CXX_SEGY import SegyRWpy
+from segy.cpp._CXX_SEGY import Pysegy
 from .constinfo import *
 
 
@@ -41,7 +41,7 @@ def parse_theader(theader: np.ndarray):
     return out, hstring
 
 
-def eval_xline(segy: SegyRWpy) -> List:
+def eval_xline(segy: Pysegy) -> List:
     """
     To guess the crossline location of the segy
 
@@ -55,15 +55,14 @@ def eval_xline(segy: SegyRWpy) -> List:
     List
         possible result
     """
-    tracecout = segy.ntrace
+    ntrace = segy.ntrace
     options = [193, 17, 21, 13]
     select = [193, 17, 21, 13]
     for op in options:
-        if get_trace_keys(segy, op, tracecout - 1) - get_trace_keys(
-                segy, op, 0) > tracecout // 2:
+        if _get_keys4(segy, op, ntrace - 1) - _get_keys4(segy, op, 0) > ntrace // 2: # yapf: disable
             select.remove(op)
             continue
-        d = get_trace_keys(segy, op, tracecout // 2, tracecout // 2 + 10)
+        d = _get_keys4(segy, op, ntrace // 2, ntrace // 2 + 10)
         if sum(d >= 0) != 10:
             select.remove(op)
             continue
@@ -77,7 +76,7 @@ def eval_xline(segy: SegyRWpy) -> List:
     return select
 
 
-def eval_iline(segy: SegyRWpy) -> List:
+def eval_iline(segy: Pysegy) -> List:
     """
     To guess the inline location of the segy
 
@@ -91,23 +90,21 @@ def eval_iline(segy: SegyRWpy) -> List:
     List
         possible result
     """
-    tracecout = segy.trace_count
+    ntrace = segy.ntrace
     options = [189, 5, 9, 221]
     select = [189, 5, 9, 221]
-    force = 4
 
     for op in options:
-        l0 = get_trace_keys(segy, op, 0, force=force)
-        ll = get_trace_keys(segy, op, tracecout - 1, force=force)
-        l2 = get_trace_keys(segy, op, tracecout // 2, force=force)
+        l0 = _get_keys4(segy, op, 0)
+        ll = _get_keys4(segy, op, ntrace - 1)
+        l2 = _get_keys4(segy, op, ntrace // 2)
         if sum([x >= 0 for x in [l0, ll, l2]]) != 3:
             select.remove(op)
             continue
         if l0 == ll or l0 == l2 or ll == l2:
             select.remove(op)
             continue
-        if max([l0, ll, l2]) - min([l0, ll, l2]) > min(tracecout // 10 - 1,
-                                                       100000):
+        if max([l0, ll, l2]) - min([l0, ll, l2]) > min(ntrace // 10 - 1, 100000): # yapf: disable
             select.remove(op)
             continue
         if (l0 < l2 and l2 > ll) or (l0 > l2 and l2 < ll):
@@ -120,7 +117,7 @@ def eval_iline(segy: SegyRWpy) -> List:
     return select
 
 
-def eval_xstep(segy: SegyRWpy, xline: int) -> int:
+def eval_xstep(segy: Pysegy, xline: int) -> int:
     """
     To guess the crossline step
 
@@ -136,9 +133,9 @@ def eval_xstep(segy: SegyRWpy, xline: int) -> int:
     List
         possible result
     """
-    tracecout = segy.trace_count
+    ntrace = segy.ntrace
 
-    d = get_trace_keys(segy, xline, tracecout // 2, tracecout // 2 + 10)
+    d = _get_keys4(segy, xline, ntrace // 2, ntrace // 2 + 10)
     diff = np.diff(d)
     if diff.min() > 0:
         return diff.min()
@@ -146,8 +143,8 @@ def eval_xstep(segy: SegyRWpy, xline: int) -> int:
     if len(idx) > 1:
         return 0
 
-    d = get_trace_keys(segy, xline, tracecout // 2 + idx[0] + 1,
-                       tracecout // 2 + 10 + idx[0] + 1)
+    d = _get_keys4(segy, xline, ntrace // 2 + idx[0] + 1,
+                   ntrace // 2 + 10 + idx[0] + 1)
     diff = np.diff(d)
     if diff.min() > 0:
         return diff.min()
@@ -155,7 +152,7 @@ def eval_xstep(segy: SegyRWpy, xline: int) -> int:
         return 0
 
 
-def eval_istep(segy: SegyRWpy, iline: int) -> int:
+def eval_istep(segy: Pysegy, iline: int) -> int:
     """
     To guess the inline step
 
@@ -171,17 +168,17 @@ def eval_istep(segy: SegyRWpy, iline: int) -> int:
     List
         possible result
     """
-    tracecount = segy.trace_count
-    i0 = get_trace_keys(segy, iline, tracecount // 2, force=4)
-    x1 = tracecount // 2 + 1
-    while get_trace_keys(segy, iline, x1, force=4) == i0:
+    ntrace = segy.ntrace
+    i0 = _get_keys4(segy, iline, ntrace // 2)
+    x1 = ntrace // 2 + 1
+    while _get_keys4(segy, iline, x1) == i0:
         x1 += 1
-    i1 = get_trace_keys(segy, iline, x1, force=4)
+    i1 = _get_keys4(segy, iline, x1)
 
     x2 = x1 + 1
-    while get_trace_keys(segy, iline, x2, force=4) == i1:
+    while _get_keys4(segy, iline, x2) == i1:
         x2 += 1
-    i2 = get_trace_keys(segy, iline, x2, force=4)
+    i2 = _get_keys4(segy, iline, x2)
 
     if i2 - i1 != i1 - i0:
         return 0
@@ -214,8 +211,8 @@ def guess(segy_name: str,
           each location is like: [iline, xline, istep, xstep]
     """
     if isinstance(segy_name, (str, Path)):
-        segy = SegyRWpy(str(segy_name))
-    elif isinstance(segy_name, SegyRWpy):
+        segy = Pysegy(str(segy_name))
+    elif isinstance(segy_name, Pysegy):
         segy = segy_name
     else:
         raise TypeError("Invalid type of `segy_name`")
@@ -252,7 +249,7 @@ def guess(segy_name: str,
     for i in range(len(iselect)):
         for x in range(len(xselect)):
             try:
-                s = SegyRWpy(str(segy_name))
+                s = Pysegy(str(segy_name))
                 s.setInlineLocation(iselect[i])
                 s.setCrosslineLocation(xselect[x])
                 s.setSteps(isteps[i], xsteps[x])
@@ -267,7 +264,7 @@ def guess(segy_name: str,
             "cannot define the geometry through the location and steps")
 
     if xloc is None or yloc is None:
-        s = SegyRWpy(str(segy_name))
+        s = Pysegy(str(segy_name))
         s.setInlineLocation(out[0][0])
         s.setCrosslineLocation(out[0][1])
         s.setSteps(out[0][2], out[0][3])
@@ -288,7 +285,46 @@ def guess(segy_name: str,
     return out
 
 
+def eval_offset(segyname, offset=37):
+    if isinstance(segyname, Pysegy):
+        segy = segyname
+    else:
+        segy = Pysegy(str(segyname))
+    ntrace = segy.ntrace
+    ks = segy.get_trace_keys([offset], [4], ntrace // 3, ntrace // 3 + 100)
+    if len(np.unique(ks)) == 1:
+        return -1
+    # TODO: deal with decreasing offset
+    dif = np.diff(ks)
+    dif = dif[dif > 0]
+    return dif.min()
+
+
+def parse_metainfo():
+    pass
+
+
 ############# Internal functions #############
+
+
+def _get_keys4(segy: Pysegy, keyloc, beg=0, end=-1):
+    if beg < 0:
+        beg = 0
+        end = segy.ntrace
+    if end == 0:
+        end = beg + 1
+    if end < 0:
+        end = segy.ntrace
+
+    if isinstance(keyloc, int):
+        keyloc = [keyloc]
+    d = segy.get_trace_keys(keyloc, [4] * len(keyloc), beg, end).squeeze()
+    if d.size == 1 and d.ndim == 0:
+        return int(d)
+    elif d.size == 1 and d.ndim == 1:
+        return int(d[0])
+    else:
+        return d
 
 
 def _to_number(d, loc, ksize, dtype):

@@ -8,7 +8,7 @@ def parser_textual():
     """
     """
     # fmt: off
-    textual = [
+    custom = [
         f"C01 Create By CIGSEGY software (CIG, USTC, 2024), see:",
         f"C02 github: https://github.com/JintaoLee-Roger/cigsegy",
         f"C03 Name: {'segyname'}",
@@ -20,6 +20,8 @@ def parser_textual():
         f"C09",
         f"C10",
         f"C11",
+    ]
+    metainfo = [
         f"C12 Inline range:    {'meta_info'} - {'meta_info'}",
         f"C13 Crossline range: {'meta_info'} - {'meta_info'}",
         f"C14 Inline step: {'meta_info'}, Crossline step: {'meta_info'}",
@@ -32,6 +34,8 @@ def parser_textual():
         f"C21 ",
         f"C22 ",
         f"C23",
+    ]
+    keyloc = [
         f"C24 Binary header locations:",
         f"C25 Sample interval             : bytes {17}",
         f"C26 Number of samples per trace : bytes {21}",
@@ -44,13 +48,14 @@ def parser_textual():
         f"C33 X coordinate                : bytes {181}",
         f"C34 Y coordinate                : bytes {185}",
         f"C35 Trace start time/depth      : bytes {105}",
-        f"C36 Number of samples per trace : bytes {115}",
-        f"C37 Sample interval             : bytes {117}",
+        f"C36 ",
+        f"C37 ",
         f"C38 ",
         f"C39 ",
         f"C40 ",
     ]
 
+    textual = custom + metainfo + keyloc
 
     if len(textual) != 40:
         raise ValueError(f"Header must contain exactly 40 lines, got {len(textual)}")

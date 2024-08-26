@@ -5,7 +5,7 @@
 
 from typing import Dict, List, Tuple
 import numpy as np
-from segy.cpp._CXX_SEGY import SegyRWpy
+from segy.cpp._CXX_SEGY import Pysegy
 from segy import utils
 
 
@@ -29,7 +29,7 @@ def read_header(fname: str, type, n=0, printstr=True):
     -------
     Dict or None
     """
-    segy = SegyRWpy(fname)
+    segy = Pysegy(fname)
     if type == 'bh':
         arr = segy.get_binary_header()
         out, hstring = utils.parse_bheader(arr)
@@ -100,9 +100,9 @@ def trace_count(fname: str) -> int:
     int
         The total numbers of a segy file
     """
-    if isinstance(fname, SegyRWpy):
+    if isinstance(fname, Pysegy):
         return fname.ntrace
-    segy = SegyRWpy(str(fname))
+    segy = Pysegy(str(fname))
     count = segy.trace_count
     segy.close_file()
     return count

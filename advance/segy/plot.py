@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Tuple
 from pathlib import Path
-from segy.cpp._CXX_SEGY import SegyRWpy
+from segy.cpp._CXX_SEGY import Pysegy
 from segy import utils
 import matplotlib.pyplot as plt
 
@@ -31,7 +31,7 @@ def plot_region(fname: str,
     cdpx = 181 if cdpxy_loc is None else cdpxy_loc[0]
     cdpy = 185 if cdpxy_loc is None else cdpxy_loc[1]
 
-    if isinstance(fname, SegyRWpy):
+    if isinstance(fname, Pysegy):
         segy = fname
         try:
             segy.scan()
@@ -46,7 +46,7 @@ def plot_region(fname: str,
         if loc is None:
             loc = utils.guess(str(fname))[0]
         # TODO: is there has offset location?
-        segy = SegyRWpy(str(fname))
+        segy = Pysegy(str(fname))
         segy.setLocations(loc[0], loc[1])
         segy.setSteps(loc[2], loc[3])
         segy.scan()
@@ -106,10 +106,10 @@ def plot_trace_keys(fname: str,
     plot the values (at keyloc in each trace) of the traces 
     range from beg to end .
     """
-    if isinstance(fname, SegyRWpy):
+    if isinstance(fname, Pysegy):
         segy = fname
     else:
-        segy = SegyRWpy(str(fname))
+        segy = Pysegy(str(fname))
     assert beg >= 0 and end > beg, "invalid beg and end"
     assert end < segy.ntrace, "end > trace_count"
     keys = segy.get_trace_keys([keyloc], [4], beg, end).squeeze()
@@ -134,10 +134,10 @@ def plot_trace_ix(fname: str,
     plot inline and crossline number of the traces range from
     beg to end 
     """
-    if isinstance(fname, SegyRWpy):
+    if isinstance(fname, Pysegy):
         segy = fname
     else:
-        segy = SegyRWpy(str(fname))
+        segy = Pysegy(str(fname))
     assert beg >= 0 and end > beg, "invalid beg and end"
     assert end < segy.ntrace, "end > trace_count"
     keys = segy.get_trace_keys([iline, xline], [2, 2], beg, end)
@@ -173,10 +173,10 @@ def plot_trace_ixo(fname: str,
     plot inline, crossline and offset number of the traces range from
     beg to end 
     """
-    if isinstance(fname, SegyRWpy):
+    if isinstance(fname, Pysegy):
         segy = fname
     else:
-        segy = SegyRWpy(str(fname))
+        segy = Pysegy(str(fname))
     assert beg >= 0 and end > beg, "invalid beg and end"
     assert end < segy.ntrace, "end > trace_count"
     keys = segy.get_trace_keys([iline, xline, offset], [4, 4, 4], beg, end)

@@ -8,7 +8,7 @@ from typing import List, Tuple, overload
 import numpy as np
 
 
-class SegyRWpy:
+class Pysegy:
 
     def __init__(self, segy_name: str) -> None:
         ...
