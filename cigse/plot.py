@@ -16,8 +16,12 @@ import numpy as np
 from typing import Tuple
 from pathlib import Path
 from cigse.cpp._CXX_SEGY import Pysegy
-from cigse import utils
-import matplotlib.pyplot as plt
+from cigse import utils, ExceptionWrapper
+
+try:
+    import matplotlib.pyplot as plt
+except BaseException as E:
+    plt = ExceptionWrapper(E, "run `pip install matplotlib` to install the dependency") # yapf: disable
 
 
 def plot_region(fname: str,

@@ -55,7 +55,7 @@ def metaInfo(
     ostep: int = None,
     xloc: int = None,
     yloc: int = None,
-    apply_scalar: bool = False,
+    apply_scalar: bool = True,
 ) -> None:
     """
     print meta info of `segy_name` file
@@ -111,7 +111,7 @@ def fromfile(
     numpy.ndarray :
         shape as (n-inline, n-crossline, n-time)
     """
-    # [iline, xline, offset, istep, xstep, ostep, xloc, yloc] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
+    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
 
     if isinstance(segy_name, _CXX_SEGY.Pysegy):
         segy = segy_name
@@ -230,7 +230,7 @@ def tofile(
     if as2d:
         segy.tofile(out_name, as2d)
     else:
-        [iline, xline, offset, istep, xstep, ostep, xloc, yloc] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
+        [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
         segy.setLocations(iline, xline, offset)
         segy.setSteps(istep, xstep, ostep)
         segy.scan()
@@ -241,11 +241,15 @@ def tofile(
 
 
 def create_by_sharing_header(
-    segy_name: str,
+    out_segy: str,
     header_segy: str,
     src,
-    locs: list,
-    **kwargs,
+    shape: tuple = None,
+    *,
+    start: list = None,
+    keylocs: list = None,
+    as2d: bool = False,
+    textual: str = "",
 ) -> None:
     """
     create a segy and its header is from an existed segy.
@@ -259,13 +263,40 @@ def create_by_sharing_header(
     src : numpy.ndarray
         source data
     """
-    # TODO: add more parameters
-    iline, xline, offset, istep, xstep, ostep = locs
     segy = _CXX_SEGY.Pysegy(str(header_segy))
+    if as2d:
+        if start is None:
+            start = [0, 0]
+        if isinstance(src, np.ndarray):
+            shape = list(src.shape)
+            assert src.ndim == 2, "src's ndim must be 2 when as2d is True"
+            segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual) # yapf: disable
+        else:
+            assert shape is not None, "`shape` must input when src is not ndarray"
+            segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual) # yapf: disable
+        return
+
+    assert keylocs is None or len(keylocs) == 4 or len(keylocs) == 6
+    if keylocs is None:
+        iline, xline, offset, istep, xstep, ostep = [None] * 6
+    elif len(keylocs) == 4:
+        iline, xline, istep, xstep = keylocs
+        offset, ostep = None, None
+    else:
+        iline, xline, offset, istep, xstep, ostep = keylocs
+    [iline, xline, offset, istep, xstep, ostep, xloc, yloc] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
     segy.scan()
-    segy.create_by_sharing_header(segy_name, src, **kwargs)
+    if isinstance(src, np.ndarray):
+        shape = list(src.shape)
+    else:
+        assert shape is not None, "`shape` must input when src is not ndarray"
+    assert segy.ndim == len(shape), f"ndim is {segy.ndim}, len(shape) is {len(shape)}, must be equal" # yapf: disable
+    if start is None:
+        start = [0] * len(shape)
+    assert len(start) == len(shape), "len(start) == len(shape)"
+    segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual)
     segy.close()
 
 
@@ -358,15 +389,25 @@ def modify_bin_key(segyname: str, loc: int, value, force: int = None) -> None:
         segy = segyname
     else:
         segy = _CXX_SEGY.Pysegy(str(segyname))
-    try:
-        l = kBinaryHeaderHelp[loc][1]
-    except KeyError:
-        raise ValueError(
-            f"loc = {loc} is not a valid binary header key location.")
+
+    if force is not None:
+        assert isinstance(force, int)
+        l = force
+    else:
+        try:
+            l = [kBinaryHeaderHelp[loc][1] for k in keyloc]
+        except KeyError:
+            raise ValueError(
+                f"keyloc = {keyloc} is not a valid binary header key location. "
+                "If you want to force to modify a key, please input force, e.g., `modify_bin_key('t.sgy', 221, 10, force=4)`, `force` is the length of the key."
+            )
+
     if l == 2:
         segy.set_bkeyi2(loc, value)
     elif l == 4:
         segy.set_bkeyi4(loc, value)
+    else:
+        raise ValueError("only support int32 (l==4) and int16 (l==2)")
 
     if not isinstance(segyname, _CXX_SEGY.Pysegy):
         segy.close()
@@ -397,15 +438,25 @@ def modify_trace_key(segyname: str,
         segy = segyname
     else:
         segy = _CXX_SEGY.Pysegy(str(segyname))
-    try:
-        l = kTraceHeaderHelp[loc][1]
-    except KeyError:
-        raise ValueError(
-            f"loc = {loc} is not a valid binary header key location.")
+
+    if force is not None:
+        assert isinstance(force, int)
+        l = force
+    else:
+        try:
+            l = [kTraceHeaderHelp[loc][1] for k in keyloc]
+        except KeyError:
+            raise ValueError(
+                f"keyloc = {keyloc} is not a valid trace header key location. "
+                "If you want to force to modify a key, please input force, e.g., `modify_trace_key('t.sgy', 221, 10, 100000, force=4)`, `force` is the length of the key."
+            )
+
     if l == 2:
         segy.set_keyi2(idx, loc, value)
     elif l == 4:
         segy.set_keyi4(idx, loc, value)
+    else:
+        raise ValueError("only support int32 (l==4) and int16 (l==2)")
 
     if not isinstance(segyname, _CXX_SEGY.Pysegy):
         segy.close()

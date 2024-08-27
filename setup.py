@@ -42,7 +42,6 @@ ext_modules = [
         [
             "cigse/cpp/segywrap.cpp",
             "cigse/cpp/segyrw.cpp",
-            "cigse/cpp/segybase.cpp",
         ],
         extra_compile_args=extra_compile_args,
     ),

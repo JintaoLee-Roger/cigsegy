@@ -7,7 +7,7 @@
 
 #ifndef CIG_SEGY_CREATE_H
 #define CIG_SEGY_CREATE_H
-#include "segybase.h"
+#include "segybase.hpp"
 #include "sutils.hpp"
 #include <vector>
 
@@ -50,7 +50,7 @@ private:
 };
 
 inline SegyC::SegyC(const std::string &segyname, int ntrace, int nt)
-    : SegyBase(segyname) {
+    : SegyBase() {
   uint64_t needsize = _need_size(ntrace, 1, 1, nt);
   create_file(segyname, needsize);
   std::error_code error;
@@ -64,7 +64,7 @@ inline SegyC::SegyC(const std::string &segyname, int ntrace, int nt)
 }
 
 inline SegyC::SegyC(const std::string &segyname, int ni, int nx, int nt)
-    : SegyBase(segyname) {
+    : SegyBase() {
   uint64_t needsize = _need_size(ni, nx, 1, nt);
   create_file(segyname, needsize);
   std::error_code error;
@@ -78,7 +78,7 @@ inline SegyC::SegyC(const std::string &segyname, int ni, int nx, int nt)
 }
 
 inline SegyC::SegyC(const std::string &segyname, int ni, int nx, int no, int nt)
-    : SegyBase(segyname) {
+    : SegyBase() {
   uint64_t needsize = _need_size(ni, nx, no, nt);
   create_file(segyname, needsize);
   std::error_code error;

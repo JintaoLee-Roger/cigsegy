@@ -313,7 +313,8 @@ class Pysegy:
         self,
         segy_name: str,
         src: np.ndarray,
-        ranges: List,
+        shape: List,
+        start: List,
         is2d: bool = False,
         textual: str = "",
     ) -> None:
@@ -325,8 +326,8 @@ class Pysegy:
         self,
         segy_name: str,
         src_file: str,
-        shape: Tuple,
-        ranges: List,
+        shape: List,
+        start: List,
         is2d: bool = False,
         textual: str = "",
     ) -> None:
@@ -373,6 +374,7 @@ class Pysegy:
         """
         """
 
+    @overload
     def write_traces(
         self,
         data: np.ndarray,
@@ -384,6 +386,7 @@ class Pysegy:
         """
         """
 
+    @overload
     def write_traces(
         self,
         data: np.ndarray,

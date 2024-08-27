@@ -5,6 +5,7 @@
 
 from pathlib import Path
 from typing import List
+import warnings
 import numpy as np
 # from cigsegy import get_trace_keys
 from cigse.cpp._CXX_SEGY import Pysegy
@@ -41,44 +42,6 @@ def parse_theader(theader: np.ndarray):
     return out, hstring
 
 
-def eval_xline(segy: Pysegy) -> List:
-    """
-    To guess the crossline location of the segy
-
-    Parameters
-    ----------
-    segy : Pysegy
-        input Pysegy class
-
-    Returns
-    -------
-    List
-        possible result
-    """
-    ntrace = segy.ntrace
-    options = [193, 17, 21, 13]
-    select = [193, 17, 21, 13]
-    for op in options:
-        # Monotonically increasing/decreasing, nx is too large, maybe trace index
-        if abs(_get_keys4(segy, op, ntrace - 1) - _get_keys4(segy, op, 0)) > ntrace // 2: # yapf: disable
-            select.remove(op)
-            continue
-        # TODO: deal with decreasing xline and prestack
-        d = _get_keys4(segy, op, ntrace // 2, ntrace // 2 + 10)
-        if sum(d >= 0) != 10:
-            select.remove(op)
-            continue
-        if len(np.where(np.diff(d) == 0)[0]) > 1:
-            select.remove(op)
-            continue
-
-    if select == []:
-        raise RuntimeError("Cannot evaluate crossline location")
-
-    return select
-
-
-# TODO: just select one op?
 def eval_iline(segy: Pysegy) -> List:
     """
     To guess the inline location of the segy
@@ -94,14 +57,14 @@ def eval_iline(segy: Pysegy) -> List:
         possible result
     """
     ntrace = segy.ntrace
-    options = [189, 5, 9, 221]
-    select = [189, 5, 9, 221]
+    options = [189, 5, 9, 221, 13]
+    select = [189, 5, 9, 221, 13]
 
     for op in options:
         l0 = _get_keys4(segy, op, 0)
         ll = _get_keys4(segy, op, ntrace - 1)
         l2 = _get_keys4(segy, op, ntrace // 2)
-        # line number should  not be negetive
+        # line number should  not be negative
         if sum([x >= 0 for x in [l0, ll, l2]]) != 3:
             select.remove(op)
             continue
@@ -117,80 +80,9 @@ def eval_iline(segy: Pysegy) -> List:
         if (l0 < l2 and l2 > ll) or (l0 > l2 and l2 < ll):
             select.remove(op)
             continue
+        return op
 
-    if select == []:
-        raise RuntimeError("Cannot evaluate inline location")
-
-    return select
-
-
-def eval_xstep(segy: Pysegy, xline: int) -> int:
-    """
-    To guess the crossline step
-
-    Parameters
-    ----------
-    segy : Pysegy
-        input Pysegy class
-    xline: int
-        crossline location
-
-    Returns
-    -------
-    List
-        possible result
-    """
-    ntrace = segy.ntrace
-
-    d = _get_keys4(segy, xline, ntrace // 2, ntrace // 2 + 10)
-    diff = np.diff(d)
-    if diff.min() > 0:
-        return diff.min()
-    idx = np.where(diff <= 0)[0]
-    if len(idx) > 1:
-        return 0
-
-    d = _get_keys4(segy, xline, ntrace // 2 + idx[0] + 1,
-                   ntrace // 2 + 10 + idx[0] + 1)
-    diff = np.diff(d)
-    if diff.min() > 0:
-        return diff.min()
-    else:
-        return 0
-
-
-def eval_istep(segy: Pysegy, iline: int) -> int:
-    """
-    To guess the inline step
-
-    Parameters
-    ----------
-    segy : Pysegy
-        input Pysegy class
-    iline: int
-        inline location
-
-    Returns
-    -------
-    List
-        possible result
-    """
-    ntrace = segy.ntrace
-    i0 = _get_keys4(segy, iline, ntrace // 2)
-    x1 = ntrace // 2 + 1
-    while _get_keys4(segy, iline, x1) == i0:
-        x1 += 1
-    i1 = _get_keys4(segy, iline, x1)
-
-    x2 = x1 + 1
-    while _get_keys4(segy, iline, x2) == i1:
-        x2 += 1
-    i2 = _get_keys4(segy, iline, x2)
-
-    if i2 - i1 != i1 - i0:
-        return 0
-    else:
-        return i2 - i1
+    raise RuntimeError("Cannot evaluate inline location")
 
 
 def guess(segy_name: str,
@@ -203,93 +95,93 @@ def guess(segy_name: str,
           xloc=None,
           yloc=None) -> List:
     """
-    TODO: scan 3 times when call metaInfo() ?
     guess the locations and steps of inline and crossline
-
-    Parameters
-    ----------
-    segy_name : str or Pysegy 
-        the input segy file
-
-    Returns
-    -------
-    List
-        locations, [loc1, loc2, ...], all possible loctaions,
-          each location is like: [iline, xline, istep, xstep]
     """
     if isinstance(segy_name, Pysegy):
         segy = segy_name
     else:
         segy = Pysegy(str(segy_name))
 
+    N = segy.ntrace
     offset = 37 if offset is None else offset
-    ostep = eval_offset(offset)
+    ostep, is4d = eval_offset(segy, offset)
 
-    ilines = eval_iline(segy) if iline is None else [iline]
-    xlines = eval_xline(segy) if xline is None else [xline]
-    xselect = []
-    iselect = []
-    xsteps = []
-    isteps = []
+    iline = eval_iline(segy) if iline is None else iline
 
-    if xstep is not None:
-        xsteps = [xstep]
-        xselect = xlines
+    # read 3 lines
+    start = int(N // 3)
+    lines = set()
+    oix = []
+    xlines = [193, 17, 21, 13] if xline is None else [xline]
+    while True:
+        part = _get_keys4(segy, [offset, iline, *xlines], start, start + 200)
+        oix.append(part)
+        lines.update(np.unique(part[:, 1]))
+        start += 1000
+        if len(lines) >= 3:
+            break
+
+    # eval istep
+    lines = np.array(sorted(list(lines)))
+    dif = np.diff(lines)
+    istepx = dif.min() if dif[0] > 0 else dif.max()
+    if istep is not None and istep != istepx:
+        warnings.warn(f"You set istep={istep}, but we scan the istep is {istepx}, be careful!") # yapf: disable
     else:
-        for xline in xlines:
-            xstep = eval_xstep(segy, xline)
-            if xstep:
-                xselect.append(xline)
-                xsteps.append(xstep)
+        istep = istepx
 
-    if istep is not None:
-        isteps = [istep]
-        iselect = ilines
+    # line: n, n+1, n+2, extract the data of line n+1
+    oix = np.concatenate(oix)
+    idx = np.where(np.diff(oix[:, 1]) != 0)[0][:2] + 1
+    oix = oix[idx[0]:idx[1], :]
+
+    # eval xline
+    def _eval_xline(i):
+        # if abs(_get_keys4(segy, , ntrace - 1) - _get_keys4(segy, op, 0)) > ntrace // 2
+        dif = np.diff(oix[:, i])
+        idx = np.where(dif != 0)[0]
+        values, counts = np.unique(idx, return_counts=True)
+        xstepi = int(dif[dif != 0].min())
+        return xstepi
+
+    if len(xlines) == 1:
+        xstepx = _eval_xline(2)
     else:
-        for iline in ilines:
-            istep = eval_istep(segy, iline)
-            if istep:
-                iselect.append(iline)
-                isteps.append(istep)
-
-    out = []
-    for i in range(len(iselect)):
-        for x in range(len(xselect)):
-            try:
-                s = Pysegy(str(segy_name))
-                s.setInlineLocation(iselect[i])
-                s.setCrosslineLocation(xselect[x])
-                s.setSteps(isteps[i], xsteps[x])
-                t = s.metaInfo()
-            except:
+        for i in range(len(xlines)):
+            if abs(_get_keys4(segy, xlines[i], N - 1) - _get_keys4(segy, xlines[i], 0)) > N // 2: # yapf: disable
                 continue
+            xstepx = _eval_xline(i + 2)
+            if xstepx:
+                xline = xlines[i]
+                # oix = oix[:, [0, 1, i + 2]]
+                break
 
-            out.append([iselect[i], xselect[x], isteps[i], xsteps[x]])
+    if xstep is not None and xstep != xstepx:
+        warnings.warn(f"You set xstep={xstep}, but we scan the xstep is {xstepx}, be careful!") # yapf: disable
+    else:
+        xstep = xstepx
 
-    if out == []:
-        raise RuntimeError(
-            "cannot define the geometry through the location and steps")
-
+    # eval xloc and yloc
     if xloc is None or yloc is None:
-        s = Pysegy(str(segy_name))
-        s.setInlineLocation(out[0][0])
-        s.setCrosslineLocation(out[0][1])
-        s.setSteps(out[0][2], out[0][3])
-        s.setXLocation(181)
-        s.setYLocation(185)
-        s.scan()
-        mt = s.get_metaInfo()
-        if np.isnan(mt.Z_interval) or np.isnan(
-                mt.Y_interval) or mt.Z_interval == 0 or mt.Y_interval == 0:
+        xys = _get_keys4(segy, [181, 185, 73, 77], 0, 100)
+        if np.unique(xys[:, 2]) == 0 and np.unique(xys[:, 3]) == 0:
+            xloc, yloc = 181, 185
+        elif np.unique(xys[:, 0]) == 0 and np.unique(xys[:, 1]) == 0:
             xloc, yloc = 73, 77
         else:
-            xloc, yloc = 181, 185
-        s.close_file()
-
-    for o in out:
-        o += [xloc, yloc]
-
-    return out
+            scalar = segy.keyi2(71)
+            scalar = 1 if scalar == 0 else scalar
+            scalar = -1 / scalar if scalar < 0 else scalar
+            xys *= xys
+            d1 = ((xys[-1, 0] - xys[0, 0])**2 +
+                  (xys[-1, 1] - xys[0, 1])**2)**0.5
+            d2 = ((xys[-1, 2] - xys[0, 2])**2 +
+                  (xys[-1, 3] - xys[0, 3])**2)**0.5
+            if d1 < 3 and d2 > 3:
+                xloc, yloc = 73, 77
+            else:
+                xloc, yloc = 181, 185
+    return iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d
 
 
 def eval_offset(segyname, offset: int = 37) -> int:
@@ -308,12 +200,14 @@ def eval_offset(segyname, offset: int = 37) -> int:
         segy.close()
 
     if len(np.unique(ks)) == 1:
-        return -1
+        return 0, False
 
-    # TODO: deal with decreasing offset
     dif = np.diff(ks)
-    dif = dif[dif > 0]
-    return dif.min()
+    udif, count = np.unique(dif, return_counts=True)
+    if (len(udif) > 10):
+        raise RuntimeError("offset may be unsorted, can not evaluate this file") # yapf: disable
+
+    return udif[np.argmax(count)], True
 
 
 def parse_metainfo(meta: dict):
@@ -342,7 +236,7 @@ def parse_metainfo(meta: dict):
     rangeinfo = "range: "
     end_time = meta['start_time'] + (meta['nt'] - 1) * meta['dt'] / 1000
     timer = f"t: {meta['start_time']} - {end_time} ms"
-    if meta['ndim'] > 3:
+    if meta['ndim'] > 2:
         rangeinfo += f"inline: {meta['start_iline']} - {meta['end_iline']}, crossline: {meta['start_xline']} - {meta['end_xline']}, "
     if meta['ndim'] == 4:
         rangeinfo += f"offset: {meta['start_offset']} - {meta['end_offset']}, "
@@ -373,14 +267,14 @@ def parse_metainfo(meta: dict):
 ############# Internal functions #############
 
 
-def _get_keys4(segy: Pysegy, keyloc, beg=0, end=-1):
+def _get_keys4(segy: Pysegy, keyloc, beg=-1, end=0):
     if beg < 0:
         beg = 0
         end = segy.ntrace
-    if end == 0:
-        end = beg + 1
     if end < 0:
         end = segy.ntrace
+    if end == 0:
+        end = beg + 1
 
     if isinstance(keyloc, int):
         keyloc = [keyloc]

@@ -88,6 +88,8 @@ def get_metaInfo(
         segy = segyname
     else:
         segy = Pysegy(str(segyname))
+
+    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
     segy.setXYLocations(xloc, yloc)
@@ -135,20 +137,151 @@ def trace_count(fname: str) -> int:
     return count
 
 
-def scan_unsorted3D(
+def full_scan(fname: str, iline: int, xline: int, offset: int = 37) -> dict:
+    """
+    Scan all keys of the SEG-Y file. This is useful for unsorted SEG-Y file.
+    """
+    if isinstance(fname, Pysegy):
+        segy = fname
+    else:
+        segy = Pysegy(str(fname))
+
+    keys = segy.get_trace_keys([iline, xline, offset], [4] * 3, 0, segy.ntrace)
+    ib = keys[:, 0].min()
+    ie = keys[:, 0].max()
+    diff = np.diff(np.sort(keys[:, 0]))
+    diff = diff[diff != 0]
+    istep = diff.min()
+    if (ie - ib) % istep != 0:
+        raise RuntimeError("can not create geomtry (error when determine iline/istep)") # yapf: disable
+
+    xb = keys[:, 1].min()
+    xe = keys[:, 1].max()
+    diff = np.diff(np.sort(keys[:, 1]))
+    diff = diff[diff != 0]
+    xstep = diff.min()
+    if (xe - xb) % xstep != 0:
+        raise RuntimeError("can not create geomtry (error when determine xline/xstep)") # yapf: disable
+
+    is4d = True
+    ob = keys[:, 2].min()
+    oe = keys[:, 2].max()
+    if oe == ob:
+        is4d = False
+    else:
+        try:
+            diff = np.diff(np.sort(keys[:, 2]))
+            diff = diff[diff != 0]
+            ostep = diff.min()
+            if (oe - ob) % ostep != 0:
+                raise RuntimeError("can not create geomtry (error when determine xline/xstep)") # yapf: disable
+
+            no = int((oe - ob) // ostep + 1)
+        except:
+            is4d = False
+
+    ni = int((ie - ib) // istep + 1)
+    nx = int((xe - xb) // xstep + 1)
+    nt = segy.nt
+    location = [iline, xline, offset] if is4d else [iline, xline]
+    shape = [ni, nx, no, nt] if is4d else [ni, nx, nt]
+    ir = dict(min_iline=ib, max_iline=ie, istep=istep)
+    xr = dict(min_xline=xb, max_xline=xe, xstep=xstep)
+
+    keys[:, 0] = (keys[:, 0] - ib) / istep
+    keys[:, 1] = (keys[:, 1] - xb) / xstep
+    if is4d:
+        keys[:, 2] = (keys[:, 2] - ob) / ostep
+    keys = np.round(keys).astype(np.int32)
+
+    geom = np.full(shape[:-1], -1, np.int32)
+    if is4d:
+        geom[keys[:, 0], keys[:, 1], keys[:, 2]] = np.arange(segy.ntrace)
+    else:
+        geom[keys[:, 0], keys[:, 1]] = np.arange(segy.ntrace)
+
+    geominfo = {
+        'location': location,
+        'shape': shape,
+        'iline': ir,
+        'xline': xr,
+    }
+    if is4d:
+        geominfo['offset'] = dict(min_offset=ob, max_offset=oe, ostep=ostep)
+
+    geominfo['geom'] = geom
+
+    return geominfo
+
+
+def load_without_scan(
     fname,
-    iline: int,
-    xline: int,
-):
+    geominfo: dict,
+    *,
+    ib: int = 0,
+    ie: int = -1,
+    xb: int = 0,
+    xe: int = -1,
+    ob: int = 0,
+    oe: int = -1,
+    tb: int = 0,
+    te: int = -1,
+) -> np.ndarray:
     """
-    Scan an unsored 3D SEG-Y file and get the geometry
+    Using the given geom, extract data without scanning. This is useful for unsorted SEG-Y file.
+    
+    `geominfo` must contain the key locations, shape, and ranges. For example:
+    ```python
+    geominfo = {
+        'location': [189, 193],
+        'shape': [650, 781, 951],
+        'iline': dict(min_iline=2201, max_iline=2850, istep=1),
+        'xline': dict(min_xline=5650, max_xline=7210, xstep=2),
+        'geom': geom, # geom is a (ni, nx) array for 3D or (ni, nx, no) for 4D
+    }
+    ```
     """
+    is4d = False
+    shape = geominfo['shape']
+    if 'offset' in geominfo:
+        is4d = True
+        assert len(shape) == 4
+    else:
+        assert len(shape) == 3
 
+    ie = shape[0] if ie == -1 else ie
+    xe = shape[1] if xe == -1 else xe
+    te = shape[3] if te == -1 else te
+    if is4d:
+        oe = shape[2] if oe == -1 else oe
 
-def load_unsorted3D(fname: str, geom: Dict = None):
-    """
-    using fromfile_without_scan to load unsorted 3D segy file
-    """
+    # check bound
+    assert ib >= 0 and ib < ie and ie <= shape[0]
+    assert xb >= 0 and xb < xe and xe <= shape[1]
+    assert tb >= 0 and tb < te and te <= shape[3]
+    if is4d:
+        assert ob >= 0 and ob < oe and oe <= shape[2]
+
+    if isinstance(fname, Pysegy):
+        segy = fname
+    else:
+        segy = Pysegy(str(fname))
+
+    if not is4d:
+        x, y = np.meshgrid(np.arange(ib, ie), np.arange(xb, xe), indexing='ij')
+        shape = x.shape
+        index = geominfo['geom'][x.flatten(), y.flatten()]
+        d = segy.collect(index, tb, te).reshape(*shape, -1)
+    else:
+        x, y, z = np.meshgrid(np.arange(ib, ie),
+                              np.arange(xb, xe),
+                              np.arange(ob, oe),
+                              indexing='ij')
+        shape = x.shape
+        index = geominfo['geom'][x.flatten(), y.flatten(), z.flatten()]
+        d = segy.collect(index, tb, te).reshape(*shape, -1)
+
+    return d
 
 
 def create(segy_out: str,
@@ -216,4 +349,28 @@ def scan_prestack(*args, **kwargs):
 def load_prestack3D(*args, **kwargs):
     raise RuntimeError(
         "`load_prestack3D` is deprecated and removed. Please use `fromfile` instead."
+    )
+
+
+def create_by_sharing_header_guess(*args, **kwargs):
+    raise RuntimeError(
+        "`create_by_sharing_header_guess` is deprecated and removed. Please use `create_by_sharing_header` instead."
+    )
+
+
+def scan_unsorted3D(*args, **kwargs):
+    """
+    Scan an unsored 3D SEG-Y file and get the geometry
+    """
+    raise RuntimeError(
+        "`scan_unsorted3D` is deprecated and removed. Please use `full_scan` instead."
+    )
+
+
+def load_unsorted3D(*args, **kwargs):
+    """
+    using fromfile_without_scan to load unsorted 3D segy file
+    """
+    raise RuntimeError(
+        "`load_unsorted3D` is deprecated and removed. Please use `load_without_scan` instead."
     )

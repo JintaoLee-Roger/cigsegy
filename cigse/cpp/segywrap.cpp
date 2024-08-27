@@ -24,26 +24,42 @@ public:
   using segy::SegyRW::create_by_sharing_header;
   using SegyRW::SegyRW;
 
-  npfloat read4d(int is, int ie, int xs, int xe, int os, int oe, int ts,
+  npfloat read4d(int ib, int ie, int xb, int xe, int ob, int oe, int tb,
                  int te) {
-    // TODO: check bound
-    int nt = te - ts;
-    int ni = ie - is;
-    int nx = xe - xs;
-    int no = oe - os;
+    if (ndim() != 4) {
+      throw std::runtime_error("read4d function valid when ndim == 4");
+    }
+    if (ib < 0 || ie > m_meta.ni || xb < 0 || xe > m_meta.nx || ob < 0 ||
+        oe > m_meta.no || tb < 0 || te > m_meta.nt) {
+      throw std::runtime_error("Index out of bound.");
+    }
+
+    int nt = te - tb;
+    int ni = ie - ib;
+    int nx = xe - xb;
+    int no = oe - ob;
     auto data = py::array_t<float>({ni, nx, no, nt});
     float *ptr = data.mutable_data();
-    SegyRW::read4d(ptr, is, ie, xs, xe, os, oe, ts, te);
+    SegyRW::read4d(ptr, ib, ie, xb, xe, ob, oe, tb, te);
     return data;
   }
 
-  npfloat read3d(int is, int ie, int xs, int xe, int ts, int te) {
-    int nt = te - ts;
-    int ni = ie - is;
-    int nx = xe - xs;
+  npfloat read3d(int ib, int ie, int xb, int xe, int tb, int te) {
+    // check bound
+    if (ndim() != 3) {
+      throw std::runtime_error("read3d function valid when ndim == 3");
+    }
+    if (ib < 0 || ie > m_meta.ni || xb < 0 || xe > m_meta.nx || tb < 0 ||
+        te > m_meta.nt) {
+      throw std::runtime_error("Index out of bound.");
+    }
+
+    int nt = te - tb;
+    int ni = ie - ib;
+    int nx = xe - xb;
     auto data = py::array_t<float>({ni, nx, nt});
     float *ptr = data.mutable_data();
-    SegyRW::read3d(ptr, is, ie, xs, xe, ts, te);
+    SegyRW::read3d(ptr, ib, ie, xb, xe, tb, te);
     return data;
   }
 
@@ -55,15 +71,20 @@ public:
   }
 
   void create_by_sharing_header(const std::string &segy_name,
-                                const npfloat &src, const py::list &ranges,
-                                bool is2d = false,
+                                const npfloat &src, const py::list &shape,
+                                const py::list &start, bool is2d = false,
                                 const std::string &textual = "") {
     const float *ptr = src.data();
-    auto rge = ranges.cast<std::vector<int>>();
-    create_by_sharing_header(segy_name, ptr, rge, is2d, textual);
+    auto sha = shape.cast<std::vector<int>>();
+    auto sta = start.cast<std::vector<int>>();
+    create_by_sharing_header(segy_name, ptr, sha, sta, is2d, textual);
   }
 
   npfloat itrace(int n) {
+    if (n < 0 || n >= m_meta.ntrace) {
+      throw std::runtime_error("Index out of bound " + std::to_string(n));
+    }
+
     py::array_t<float> out(m_meta.nt);
     float *ptr = out.mutable_data();
     SegyRW::itrace(ptr, n);
@@ -71,7 +92,10 @@ public:
   }
 
   npfloat collect(int beg, int end, int tbeg, int tend) {
-    // TODO: check bound
+    if (beg < 0 || end > m_meta.ntrace || tbeg < 0 || tend > m_meta.nt) {
+      throw std::runtime_error("Index out of bound.");
+    }
+
     auto data = py::array_t<float>({end - beg, tend - tbeg});
     float *ptr = data.mutable_data();
     SegyRW::collect(ptr, beg, end, tbeg, tend);
@@ -79,9 +103,13 @@ public:
   }
 
   npfloat collect(const npint32 &index, int tbeg, int tend) {
-    if (index.ndim() != 1) {
+    if (index.ndim() != 1 && index.size() == 0) {
       throw std::runtime_error("Input index must be a 1D data.");
     }
+    if (tbeg < 0 || tend > m_meta.nt) {
+      throw std::runtime_error("`tbeg` or `tend` index out of bound.");
+    }
+
     int N = index.shape()[0];
     const int32_t *idx = index.data();
 
@@ -98,6 +126,10 @@ public:
     return out;
   }
   npuchar get_trace_header(int n) {
+    if (n < 0 || n > ntrace()) {
+      throw std::runtime_error("Index out of bound." + std::to_string(n));
+    }
+
     py::array_t<uchar> out(segy::kTraceHeaderSize);
     uchar *ptr = out.mutable_data();
     SegyRW::get_trace_header(ptr, n);
@@ -106,8 +138,16 @@ public:
 
   npint32 get_trace_keys(const py::list &keys, const py::list &length, int beg,
                          int end) {
+    if (beg < 0 || end > ntrace()) {
+      throw std::runtime_error("`beg` or `end` Index out of bound.");
+    }
+    if (keys.size() != length.size()) {
+      throw std::runtime_error("`keys` and `length` must have the same size.");
+    }
+
     auto keysvec = keys.cast<std::vector<int>>();
     auto lengthvec = length.cast<std::vector<int>>();
+
     int n1 = end - beg;
     int n2 = keysvec.size();
     py::array_t<int> out({n1, n2});
@@ -118,37 +158,95 @@ public:
 
   //  for write
   void write_itrace(const npfloat &data, int n) {
+    if (n < 0 || n >= m_meta.ntrace) {
+      throw std::runtime_error("Index out of bound: " + std::to_string(n));
+    }
+    if (data.ndim() != 1 || data.size() != m_meta.nt) {
+      throw std::runtime_error("Input data shape not match.");
+    }
+
     const float *ptr = data.data();
     SegyRW::write_itrace(ptr, n);
   }
 
   void write_traces(const npfloat &data, int beg, int end, int tbeg, int tend) {
+    if (beg < 0 || end > m_meta.ntrace || tbeg < 0 || tend > m_meta.nt) {
+      throw std::runtime_error("Index out of bound.");
+    }
+    if (data.size() != (int64_t)(end - beg) * (tend - tbeg)) {
+      throw std::runtime_error("Input data size not match.");
+    }
+
     const float *ptr = data.data();
     SegyRW::write_traces(ptr, beg, end, tbeg, tend);
   }
 
   void write_traces(const npfloat &data, const npint32 &index, int tbeg,
                     int tend) {
+    if (index.ndim() != 1) {
+      throw std::runtime_error("Input index must be a 1D data.");
+    }
+    if (tbeg < 0 || tend > m_meta.nt) {
+      throw std::runtime_error("`tbeg` or `tend` index out of bound.");
+    }
+    if (data.size() != index.size() * (tend - tbeg)) {
+      throw std::runtime_error("Input data size not match.");
+    }
+
     const float *ptr = data.data();
     const int32_t *idx = index.data();
     SegyRW::write_traces(ptr, idx, index.shape()[0], tbeg, tend);
   }
 
   void write(const npfloat &data) {
+    if (ndim() == 2 && data.size() != m_meta.ntrace * m_meta.nt) {
+      throw std::runtime_error("Input data size not match.");
+    }
+    if (ndim() == 3 &&
+        data.size() != (int64_t)m_meta.ni * m_meta.nx * m_meta.nt) {
+      throw std::runtime_error("Input data size not match.");
+    }
+    if (ndim() == 4 &&
+        data.size() != (int64_t)m_meta.ni * m_meta.nx * m_meta.no * m_meta.nt) {
+      throw std::runtime_error("Input data size not match.");
+    }
+
     const float *ptr = data.data();
     SegyRW::write(ptr);
   }
 
-  void write3d(const npfloat &data, int is, int ie, int xs, int xe, int ts,
+  void write3d(const npfloat &data, int ib, int ie, int xb, int xe, int tb,
                int te) {
+    if (ndim() != 3) {
+      throw std::runtime_error("write3d function valid when ndim == 3");
+    }
+    if (ib < 0 || ie > m_meta.ni || xb < 0 || xe > m_meta.nx || tb < 0 ||
+        te > m_meta.nt) {
+      throw std::runtime_error("Index out of bound.");
+    }
+    if (data.size() != (int64_t)(ie - ib) * (xe - xb) * (te - tb)) {
+      throw std::runtime_error("Input data size not match.");
+    }
+
     const float *ptr = data.data();
-    SegyRW::write3d(ptr, is, ie, xs, xe, ts, te);
+    SegyRW::write3d(ptr, ib, ie, xb, xe, tb, te);
   }
 
-  void write4d(const npfloat &data, int is, int ie, int xs, int xe, int os,
-               int oe, int ts, int te) {
+  void write4d(const npfloat &data, int ib, int ie, int xb, int xe, int ob,
+               int oe, int tb, int te) {
+    if (ndim() != 4) {
+      throw std::runtime_error("write4d function valid when ndim == 4");
+    }
+    if (ib < 0 || ie > m_meta.ni || xb < 0 || xe > m_meta.nx || ob < 0 ||
+        oe > m_meta.no || tb < 0 || te > m_meta.nt) {
+      throw std::runtime_error("Index out of bound.");
+    }
+    if (data.size() != (int64_t)(ie - ib) * (xe - xb) * (oe - ob) * (te - tb)) {
+      throw std::runtime_error("Input data size not match.");
+    }
+
     const float *ptr = data.data();
-    SegyRW::write4d(ptr, is, ie, xs, xe, os, oe, ts, te);
+    SegyRW::write4d(ptr, ib, ie, xb, xe, ob, oe, tb, te);
   }
 
   std::map<std::string, int> get_keylocs() const {
@@ -351,17 +449,20 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
            py::arg("as_2d") = false)
       .def("cut", &Pysegy::cut, py::arg("outname"), py::arg("ranges"),
            py::arg("is2d") = false, py::arg("textual") = "")
-      .def("create_by_sharing_header",
-           overload_cast_<const std::string &, const npfloat &,
-                          const py::list &, bool, const std::string &>()(
-               &Pysegy::create_by_sharing_header),
-           py::arg("segy_name"), py::arg("src"), py::arg("ranges"),
-           py::arg("is2d") = false, py::arg("textual") = "")
+      .def(
+          "create_by_sharing_header",
+          overload_cast_<const std::string &, const npfloat &, const py::list &,
+                         const py::list &, bool, const std::string &>()(
+              &Pysegy::create_by_sharing_header),
+          py::arg("segy_name"), py::arg("src"), py::arg("shape"),
+          py::arg("start"), py::arg("is2d") = false, py::arg("textual") = "")
       .def("create_by_sharing_header",
            overload_cast_<const std::string &, const std::string &,
                           const std::vector<int> &, const std::vector<int> &,
                           bool, const std::string &>()(
-               &Pysegy::create_by_sharing_header))
+               &Pysegy::create_by_sharing_header),
+           py::arg("segy_name"), py::arg("src_file"), py::arg("shape"),
+           py::arg("start"), py::arg("is2d") = false, py::arg("textual") = "")
 
       // for write
       .def("set_bkeyi2", &Pysegy::set_bkeyi2, py::arg("loc"), py::arg("val"))
@@ -386,13 +487,13 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
            overload_cast_<const npfloat &, const npint32 &, int, int>()(
                &Pysegy::write_traces),
            py::arg("data"), py::arg("index"), py::arg("tbeg"), py::arg("tend"))
-      // .def("write", &Pysegy::write, py::arg("data"))
-      // .def("write3d", &Pysegy::write3d, py::arg("data"), py::arg("ib"),
-      //      py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("tb"),
-      //      py::arg("te"))
-      // .def("write4d", &Pysegy::write4d, py::arg("data"), py::arg("ib"),
-      //      py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("ob"),
-      //      py::arg("oe"), py::arg("tb"), py::arg("te"))
+      .def("write", &Pysegy::write, py::arg("data"))
+      .def("write3d", &Pysegy::write3d, py::arg("data"), py::arg("ib"),
+           py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("tb"),
+           py::arg("te"))
+      .def("write4d", &Pysegy::write4d, py::arg("data"), py::arg("ib"),
+           py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("ob"),
+           py::arg("oe"), py::arg("tb"), py::arg("te"))
 
       .def_property_readonly("ntrace", &Pysegy::ntrace)
       .def_property_readonly("nt", &Pysegy::nt)
