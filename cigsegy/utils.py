@@ -6,8 +6,8 @@
 from pathlib import Path
 from typing import List
 import numpy as np
-# from segy import get_trace_keys
-from segy.cpp._CXX_SEGY import Pysegy
+# from cigsegy import get_trace_keys
+from cigsegy.cpp._CXX_SEGY import Pysegy
 from .constinfo import *
 
 
@@ -59,9 +59,11 @@ def eval_xline(segy: Pysegy) -> List:
     options = [193, 17, 21, 13]
     select = [193, 17, 21, 13]
     for op in options:
-        if _get_keys4(segy, op, ntrace - 1) - _get_keys4(segy, op, 0) > ntrace // 2: # yapf: disable
+        # Monotonically increasing/decreasing, nx is too large, maybe trace index
+        if abs(_get_keys4(segy, op, ntrace - 1) - _get_keys4(segy, op, 0)) > ntrace // 2: # yapf: disable
             select.remove(op)
             continue
+        # TODO: deal with decreasing xline and prestack
         d = _get_keys4(segy, op, ntrace // 2, ntrace // 2 + 10)
         if sum(d >= 0) != 10:
             select.remove(op)
@@ -76,6 +78,7 @@ def eval_xline(segy: Pysegy) -> List:
     return select
 
 
+# TODO: just select one op?
 def eval_iline(segy: Pysegy) -> List:
     """
     To guess the inline location of the segy
@@ -98,15 +101,19 @@ def eval_iline(segy: Pysegy) -> List:
         l0 = _get_keys4(segy, op, 0)
         ll = _get_keys4(segy, op, ntrace - 1)
         l2 = _get_keys4(segy, op, ntrace // 2)
+        # line number should  not be negetive
         if sum([x >= 0 for x in [l0, ll, l2]]) != 3:
             select.remove(op)
             continue
+        # line number should be increasing/decreasing
         if l0 == ll or l0 == l2 or ll == l2:
             select.remove(op)
             continue
-        if max([l0, ll, l2]) - min([l0, ll, l2]) > min(ntrace // 10 - 1, 100000): # yapf: disable
+        # ni is too large
+        if max([l0, ll, l2]) - min([l0, ll, l2]) > min(ntrace // 10 - 1, 50000): # yapf: disable
             select.remove(op)
             continue
+        # line number should be increasing/decreasing
         if (l0 < l2 and l2 > ll) or (l0 > l2 and l2 < ll):
             select.remove(op)
             continue
@@ -210,15 +217,16 @@ def guess(segy_name: str,
         locations, [loc1, loc2, ...], all possible loctaions,
           each location is like: [iline, xline, istep, xstep]
     """
-    if isinstance(segy_name, (str, Path)):
-        segy = Pysegy(str(segy_name))
-    elif isinstance(segy_name, Pysegy):
+    if isinstance(segy_name, Pysegy):
         segy = segy_name
     else:
-        raise TypeError("Invalid type of `segy_name`")
+        segy = Pysegy(str(segy_name))
 
-    xlines = eval_xline(segy) if xline is None else [xline]
+    offset = 37 if offset is None else offset
+    ostep = eval_offset(offset)
+
     ilines = eval_iline(segy) if iline is None else [iline]
+    xlines = eval_xline(segy) if xline is None else [xline]
     xselect = []
     iselect = []
     xsteps = []
@@ -243,7 +251,6 @@ def guess(segy_name: str,
             if istep:
                 iselect.append(iline)
                 isteps.append(istep)
-    segy.close_file()
 
     out = []
     for i in range(len(iselect)):
@@ -285,15 +292,24 @@ def guess(segy_name: str,
     return out
 
 
-def eval_offset(segyname, offset=37):
+def eval_offset(segyname, offset: int = 37) -> int:
+    """
+    return the ostep, if return -1, the file is not prestack SEG-Y
+    """
     if isinstance(segyname, Pysegy):
         segy = segyname
     else:
         segy = Pysegy(str(segyname))
+
     ntrace = segy.ntrace
-    ks = segy.get_trace_keys([offset], [4], ntrace // 3, ntrace // 3 + 100)
+    ks = _get_keys4(segy, offset, ntrace // 3, ntrace // 3 + 200)
+
+    if not isinstance(segyname, Pysegy):
+        segy.close()
+
     if len(np.unique(ks)) == 1:
         return -1
+
     # TODO: deal with decreasing offset
     dif = np.diff(ks)
     dif = dif[dif > 0]
@@ -319,7 +335,7 @@ def parse_metainfo(meta: dict):
     if meta['ndim'] == 2:
         intervalinfo += f"dt = {meta['dt']} us"
     else:
-        intervalinfo += f"di(iline) = {meta['di']:.2f}, dx(xline) = {meta['dx']:.2f}, dt = {meta['dt']} us"
+        intervalinfo += f"di(iline) = {meta['di']:.2f} {meta['unit']}, dx(xline) = {meta['dx']:.2f} {meta['unit']}, dt = {meta['dt']//1000} ms"
     out += intervalinfo + "\n"
 
     # range
@@ -338,6 +354,18 @@ def parse_metainfo(meta: dict):
 
     dformat = f"scalar: {meta['scalar']}, data format: " + kDataSampleFormatHelp[meta['dformat']] # yapf: disable
     out += dformat + "\n"
+
+    kinfo = "(key info) "
+    stepinfo = "           "
+    if meta['ndim'] == 3:
+        kinfo += f"iline: {meta['iline']:3}, xline: {meta['iline']:3}"
+        stepinfo += f"istep: {meta['istep']:3}, xstep: {meta['xstep']:3}"
+    if meta['ndim'] == 4:
+        kinfo += f", offset: {meta['offset']:3}"
+        stepinfo += f"ostep: {meta['ostep']:3}"
+    kinfo += f", xloc: {meta['xloc']:3}, yloc: {meta['yloc']:3}\n"
+    out += kinfo
+    out += stepinfo + "\n"
 
     return out
 
@@ -386,6 +414,6 @@ def _parse_header(header: np.ndarray, help_dict: dict) -> dict:
             out[key] = _to_number(header, key, ksize, '>i8')
         else:
             out[key] = 0
-        hstring.append(f"{key}-{key+ksize}: {out[key]} - {disc}")
+        hstring.append(f"{key:^3} - {key+ksize-1:^3}: {out[key]:<8} - {disc}")
 
     return out, hstring

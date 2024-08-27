@@ -1,6 +1,13 @@
+# Copyright (c) 2024 Jintao Li.
+# Computational and Interpretation Group (CIG),
+# University of Science and Technology of China (USTC).
+# All rights reserved.
+
 import os, sys
 import subprocess
 from pathlib import Path
+from setuptools import setup, find_packages
+from distutils.ccompiler import get_default_compiler
 
 
 def install_package(package):
@@ -13,57 +20,33 @@ except ImportError:
     install_package("pybind11")
     from pybind11.setup_helpers import Pybind11Extension, build_ext
 
-from setuptools import setup
-from distutils.ccompiler import get_default_compiler
-
-fmt_root = ''
-for v in sys.argv:
-    if v.startswith('--fmt_root='):
-        sys.argv.remove(v)
-        # fmt_root = v.removeprefix('--fmt_root=')
-        fmt_root = v[11:]
-        break
-
 cwd = Path(__file__).resolve().parent
 
 package_name = "cigsegy"
-git_hash = "unknown"
 
-version_path = Path(__file__).parent / "VERSION.txt"
-if not version_path.exists():
-    raise FileNotFoundError("VERSION.txt file not found")
-version = version_path.read_text().strip()
+version = '1.2.0'
 
 if not version:
     raise RuntimeError("Failed to parse version from VERSION")
 
+if get_default_compiler() == 'msvc':
+    extra_compile_args = ['/wd4244', '/wd4996', '/wd4819']
+else:
+    extra_compile_args = ["-std=c++11", "-Wall", "-O3"]
 
-def get_extensions():
-    # add segy
-    ext_modules = []
-    sources = ['src/segy.cpp', 'python/PySegy.cpp']
-    include_dirs = ['src/include']
-    if fmt_root:
-        include_dirs.append(str(Path(fmt_root) / 'include'))
-    if get_default_compiler() == 'msvc':
-        extra_compile_args = ['/wd4244', '/wd4996', '/wd4819']
-    else:
-        extra_compile_args = ["-std=c++11", "-Wall", "-O3"]
+extra_compile_args += ["-DUSE_PYBIND11", "-undefined dynamic_lookup"]
 
-    extra_compile_args.append("-DUSE_PYBIND11")
-
-    extra_link_args = []
-    # extra_link_args = ['-lfmt']
-
-    ext_modules.append(
-        Pybind11Extension(name=f'{package_name}.{package_name}',
-                          sources=[str(s) for s in sources],
-                          include_dirs=include_dirs,
-                          extra_compile_args=extra_compile_args,
-                          extra_link_args=extra_link_args))
-
-    return ext_modules
-
+ext_modules = [
+    Pybind11Extension(
+        "cigsegy.cpp._CXX_SEGY",
+        [
+            "cigsegy/cpp/segywrap.cpp",
+            "cigsegy/cpp/segyrw.cpp",
+            "cigsegy/cpp/segybase.cpp",
+        ],
+        extra_compile_args=extra_compile_args,
+    ),
+]
 
 setup(name=package_name,
       version=version,
@@ -74,9 +57,9 @@ setup(name=package_name,
       license='MIT',
       install_requires=['numpy'],
       python_requires=">=3.6",
-      ext_modules=get_extensions(),
+      setup_requires=['pybind11'],
+      ext_modules=ext_modules,
       cmdclass={"build_ext": build_ext},
-      packages=['cigsegy'],
-      package_dir={'cigsegy': 'python'},
+      packages=find_packages(exclude=['docs', 'python', 'tools']),
       include_package_data=True,
       exclude_package_data={'cigsegy': ['*.cpp', '*.txt', 'setup.py']})

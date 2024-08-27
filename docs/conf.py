@@ -15,16 +15,10 @@ from pathlib import Path
 DIR = Path(__file__).parent.resolve()
 
 project = 'cigsegy'
-<<<<<<< HEAD
-copyright = '2024, Roger Lee'
-author = 'Roger Lee'
-version = 'v1.1.8'
-=======
 copyright = '2024, Jintao Li'
 author = 'Jintao Li'
 verison_path = DIR.parent / "VERSION.txt"
 version =  verison_path.read_text().strip()
->>>>>>> dev
 language = 'en'
 
 # -- General configuration ---------------------------------------------------
@@ -135,8 +129,6 @@ def prepare(app):
     with open(targetdir / 'plot.py', 'w') as f:
         f.write(contents)
 
-<<<<<<< HEAD
-=======
     with open(sourcedir / 'transform.py') as f:
         contents = f.read()
 
@@ -149,7 +141,6 @@ def prepare(app):
     with open(targetdir / 'interp.py', 'w') as f:
         f.write(contents)
 
->>>>>>> dev
     with open(sourcedir / 'segynp.py') as f:
         contents = f.read()
         contents = contents.replace('from .cigsegy', 'from .cigsegyc')

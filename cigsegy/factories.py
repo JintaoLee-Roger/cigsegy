@@ -12,10 +12,10 @@ like header reading, file scanning, data retrieval, and file creation using a co
 
 import warnings
 import numpy as np
-from segy.cpp import _CXX_SEGY
-from segy.constinfo import kBinaryHeaderHelp, kTraceHeaderHelp
-from segy.tools import get_metaInfo
-from segy.utils import parse_metainfo
+from cigsegy.cpp import _CXX_SEGY
+from cigsegy.constinfo import kBinaryHeaderHelp, kTraceHeaderHelp
+from cigsegy.tools import get_metaInfo
+from cigsegy import utils
 
 
 def textual_header(segy_name: str, coding: str = None) -> None:
@@ -31,15 +31,18 @@ def textual_header(segy_name: str, coding: str = None) -> None:
     """
     if coding is not None:
         if coding != 'a' and coding != 'e' and coding != 'u':
-            raise ValueError(
-                f"`coding` can be one of " +
-                f"{{ 'a': 'ascii', 'e': 'EBCDIC', 'u': 'Unkown' }}, " +
-                f"but your input is `coding='{coding}'`")
+            raise ValueError(f"`coding` can be one of {{ 'a': 'ascii', 'e': 'EBCDIC', 'u': 'Unkown' }}, but your input is `coding='{coding}'`") # yapf: disable
 
     coding = 'u' if coding is None else coding
-    segy = _CXX_SEGY.Pysegy(str(segy_name))
+    if isinstance(segy_name, _CXX_SEGY.Pysegy):
+        segy = segy_name
+    else:
+        segy = _CXX_SEGY.Pysegy(str(segy_name))
+
     print(segy.textual_header(coding))
-    segy.close()
+
+    if not isinstance(segy_name, _CXX_SEGY.Pysegy):
+        segy.close()
 
 
 def metaInfo(
@@ -74,7 +77,7 @@ def metaInfo(
     """
 
     meta = get_metaInfo(segy_name, iline, xline, offset, istep, xstep, ostep, xloc, yloc, apply_scalar) # yapf: disable
-    out = parse_metainfo(meta)
+    out = utils.parse_metainfo(meta)
     print(out)
 
 
@@ -108,12 +111,20 @@ def fromfile(
     numpy.ndarray :
         shape as (n-inline, n-crossline, n-time)
     """
-    segy = _CXX_SEGY.Pysegy(str(segy_name))
+    [iline, xline, offset, istep, xstep, ostep, xloc, yloc] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
+
+    if isinstance(segy_name, _CXX_SEGY.Pysegy):
+        segy = segy_name
+    else:
+        segy = _CXX_SEGY.Pysegy(str(segy_name))
+
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
     segy.scan()
     d = segy.read()
-    segy.close()
+
+    if not isinstance(segy_name, _CXX_SEGY.Pysegy):
+        segy.close()
     return d
 
 
@@ -146,7 +157,11 @@ def collect(
     numpy.ndarray :
         its shape = (trace_count, n-time)
     """
-    segy = _CXX_SEGY.Pysegy(str(segy_in))
+    if isinstance(segy_in, _CXX_SEGY.Pysegy):
+        segy = segy_in
+    else:
+        segy = _CXX_SEGY.Pysegy(str(segy_in))
+
     if beg < 0:
         beg = 0
         end = segy.ntrace
@@ -169,6 +184,10 @@ def collect(
         raise ValueError(f"tbeg = {tbeg}, tend = {tend} is out of range.")
 
     data = segy.collect(beg, end, tbeg, tend).squeeze()
+
+    if not isinstance(segy_in, _CXX_SEGY.Pysegy):
+        segy.close()
+
     return data
 
 
@@ -203,12 +222,22 @@ def tofile(
     as_2d : bool
         if True, just remove the header and convert data to IEEE 32 in litte endian
     """
-    segy = _CXX_SEGY.Pysegy(str(segy_name))
-    segy.setLocations(iline, xline, offset)
-    segy.setSteps(istep, xstep, ostep)
-    segy.scan()
-    segy.tofile(out_name, as2d)
-    segy.close()
+    if isinstance(segy_name, _CXX_SEGY.Pysegy):
+        segy = segy_name
+    else:
+        segy = _CXX_SEGY.Pysegy(str(segy_name))
+
+    if as2d:
+        segy.tofile(out_name, as2d)
+    else:
+        [iline, xline, offset, istep, xstep, ostep, xloc, yloc] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
+        segy.setLocations(iline, xline, offset)
+        segy.setSteps(istep, xstep, ostep)
+        segy.scan()
+        segy.tofile(out_name, as2d)
+
+    if not isinstance(segy_name, _CXX_SEGY.Pysegy):
+        segy.close()
 
 
 def create_by_sharing_header(
@@ -282,18 +311,35 @@ def get_trace_keys(segyname,
     if end < 0:
         end = segy.ntrace
 
-    # TODO: check length of keyloc
-    d = segy.get_trace_keys(keyloc, [4] * len(keyloc), beg, end).squeeze()
+    if isinstance(keyloc, int):
+        keyloc = [keyloc]
+
+    if force is not None:
+        if isinstance(force, int):
+            force = [force] * len(keyloc)
+        assert len(keyloc) == len(force), "force must have the same length as keyloc" # yapf: disable
+        d = segy.get_trace_keys(keyloc, force, beg, end).squeeze()
+    else:
+        try:
+            length = [kTraceHeaderHelp[k][1] for k in keyloc]
+        except KeyError:
+            raise ValueError(
+                f"keyloc = {keyloc} is not a valid trace header key location. "
+                "If you want to force to read a key, please input force, e.g., `get_trace_keys('t.sgy', 221, 10, force=4)`, `force` is the length of the key."
+            )
+        d = segy.get_trace_keys(keyloc, length, beg, end).squeeze()
+
+    if d.size == 1 and d.ndim == 0:
+        d = int(d)
+    elif d.size == 1 and d.ndim == 1:
+        d = int(d[0])
+
     if not isinstance(segyname, _CXX_SEGY.Pysegy):
         segy.close()
     return d
 
 
-def modify_bin_key(segyname: str,
-                   loc: int,
-                   value,
-                   force: bool = False,
-                   dtype: str = None) -> None:
+def modify_bin_key(segyname: str, loc: int, value, force: int = None) -> None:
     """
     modify the value of the binary header key.
 
@@ -305,11 +351,8 @@ def modify_bin_key(segyname: str,
         location of the binary key
     value : float or int
         assigned value to the key
-    force : bool
-        force to write
-    dtype : str
-        value type of the assigned value when force is True, can be
-        one of {'int8', 'int16', 'int32', 'int64', 'float32', 'float64'}
+    force : int
+        one of 2, 4
     """
     if isinstance(segyname, _CXX_SEGY.Pysegy):
         segy = segyname
@@ -333,8 +376,7 @@ def modify_trace_key(segyname: str,
                      loc: int,
                      value,
                      idx: int,
-                     force: bool = False,
-                     type: str = None) -> None:
+                     force: int = None) -> None:
     """
     modify the value of the trace header key.
 
@@ -348,11 +390,8 @@ def modify_trace_key(segyname: str,
         assigned value to the key
     idx : int
         trace index, if idx < 0, assign the value for all traces.
-    force : bool
-        force to write
-    type : str
-        value type of the assigned value when force is True, can be
-        one of {'int8', 'int16', 'int32', 'int64', 'float32', 'float64'}
+    force : int
+        one of 2/4
     """
     if isinstance(segyname, _CXX_SEGY.Pysegy):
         segy = segyname
@@ -372,7 +411,7 @@ def modify_trace_key(segyname: str,
         segy.close()
 
 
-def ibm_to_ieee(value, is_big_endian):
+def ibm_to_ieee(value, is_big_endian: bool):
     """
     convert IBM floating point to IEEE floating point
     """
@@ -391,7 +430,7 @@ def ibm_to_ieee(value, is_big_endian):
         )
 
 
-def ieee_to_ibm(value, is_little_endian):
+def ieee_to_ibm(value, is_little_endian: bool):
     """
     convert IEEE floating point to IBM floating point
     """

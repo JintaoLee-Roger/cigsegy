@@ -5,8 +5,8 @@
 
 from typing import Dict, List, Tuple
 import numpy as np
-from segy.cpp._CXX_SEGY import Pysegy
-from segy import utils
+from cigsegy.cpp._CXX_SEGY import Pysegy
+from cigsegy import utils
 
 
 def read_header(fname: str, type, n=0, printstr=True):
@@ -35,7 +35,7 @@ def read_header(fname: str, type, n=0, printstr=True):
         out, hstring = utils.parse_bheader(arr)
     elif type == 'th':
         arr = segy.get_trace_header(n)
-        out = utils.parse_theader(arr)
+        out, hstring = utils.parse_theader(arr)
     else:
         raise ValueError("type must be one of ['bh', 'th']")
 
@@ -84,21 +84,33 @@ def get_metaInfo(
     Dict
         Dict of meta information 
     """
-    segy = Pysegy(segyname)
+    if isinstance(segyname, Pysegy):
+        segy = segyname
+    else:
+        segy = Pysegy(str(segyname))
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
     segy.setXYLocations(xloc, yloc)
     segy.scan()
     keys = segy.get_keylocs()
     meta = segy.get_metainfo()
-    out = {**keys, **meta}
+    meta = {**keys, **meta}
+    unit = segy.bkeyi2(55)
+
+    if not isinstance(segyname, Pysegy):
+        segy.close()
+
     if apply_scalar:
         if meta['scalar'] == 0:
             meta['scalar'] = 1
         scalar = -1 / meta['scalar'] if meta['scalar'] < 0 else meta['scalar']
         meta['di'] *= scalar
         meta['dx'] *= scalar
-    return out
+    if unit == 2:
+        meta['unit'] = 'ft'
+    else:
+        meta['unit'] = 'm'
+    return meta
 
 
 def trace_count(fname: str) -> int:

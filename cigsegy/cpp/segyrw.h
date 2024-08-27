@@ -51,7 +51,15 @@ struct LineInfo {
 
 class SegyRW : public SegyBase {
 public:
-  explicit SegyRW(const std::string &segyname);
+  SegyRW(const std::string &segyname) : SegyBase() {
+    std::error_code error;
+    this->m_sink.map(segyname, error);
+    if (error) {
+      throw std::runtime_error("Cannot mmap the file as RW mode: " + segyname);
+    }
+    m_data_ptr = this->m_sink.data();
+    scanBinaryHeader();
+  }
 
   void set_segy_type(int ndim);
   void scan();
@@ -88,22 +96,15 @@ public:
 
 protected:
   std::vector<LineInfo> m_iinfos;
-  int m_ndim = 2;
-  void scanBinaryHeader();
 
 private:
+  int m_ndim = 2;
   bool isScan = false;
   uint64_t m_sizeL = 1;
 
   bool isPreStack();
-  // inline int il2ii(int il) { return (il - m_meta.start_iline) / m_keys.istep;
-  // } inline int ii2il(int ii) { return ii * m_keys.istep + m_meta.start_iline;
-  // }
   inline int xl2ix(int xl) { return (xl - m_meta.start_xline) / m_keys.xstep; }
-  // inline int ix2xl(int ix) { return ix * m_keys.xstep + m_meta.start_xline; }
   inline int of2io(int of) { return (of - m_meta.start_offset) / m_keys.ostep; }
-  // inline int io2of(int io) { return io * m_keys.ostep + m_meta.start_offset;
-  // }
   bool isCtnL(LineInfo &linfo);
   bool NoOverlap(LineInfo &linfo, int s, int e);
   void find_idx(std::array<int32_t, 4> &idx, LineInfo &linfo, int xs, int xe);
@@ -121,6 +122,7 @@ private:
 
   uint64_t _need_size_b(int ndim = -1);
   uint64_t _need_size_s(uint64_t ntrace);
+  void scanBinaryHeader();
 };
 
 } // namespace segy

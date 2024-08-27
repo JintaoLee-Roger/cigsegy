@@ -15,8 +15,8 @@ such as survey coordinates and trace header keys.
 import numpy as np
 from typing import Tuple
 from pathlib import Path
-from segy.cpp._CXX_SEGY import Pysegy
-from segy import utils
+from cigsegy.cpp._CXX_SEGY import Pysegy
+from cigsegy import utils
 import matplotlib.pyplot as plt
 
 

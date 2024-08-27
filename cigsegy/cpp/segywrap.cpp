@@ -17,10 +17,12 @@ using npfloat = py::array_t<float, py::array::c_style | py::array::forcecast>;
 using npint32 = py::array_t<int32_t, py::array::c_style | py::array::forcecast>;
 using npuchar = py::array_t<uchar, py::array::c_style | py::array::forcecast>;
 
-class Pysegy : public segy::SegyRW {
+namespace segy {
+
+class Pysegy : public SegyRW {
 public:
   using segy::SegyRW::create_by_sharing_header;
-  using segy::SegyRW::SegyRW;
+  using SegyRW::SegyRW;
 
   npfloat read4d(int is, int ie, int xs, int xe, int os, int oe, int ts,
                  int te) {
@@ -114,7 +116,7 @@ public:
     return out;
   }
 
-  // for write
+  //  for write
   void write_itrace(const npfloat &data, int n) {
     const float *ptr = data.data();
     SegyRW::write_itrace(ptr, n);
@@ -178,22 +180,22 @@ public:
             {"trace_sorting_code", pybind11::int_(m_meta.trace_sorting_code)},
             {"esize", pybind11::int_(m_meta.esize)},
             {"fillNoValue", pybind11::float_(m_meta.fillNoValue)},
-            {"ndim", pybind11::int_(m_ndim)}};
+            {"ndim", pybind11::int_(ndim())}};
   }
 
   npint32 get_lineInfo() {
-    if (m_ndim == 2) {
+    if (ndim() == 2) {
       throw std::runtime_error("get_lineInfo function valid when ndim > 2");
     }
     py::array_t<int> out;
-    if (m_ndim == 3) {
+    if (ndim() == 3) {
       out = py::array_t<int>({m_meta.ni, 3});
     } else {
       out = py::array_t<int>({m_meta.ni, m_meta.nx, 4});
     }
     int *ptr = out.mutable_data();
 
-    if (m_ndim == 3) {
+    if (ndim() == 3) {
       for (auto linfo : m_iinfos) {
         ptr[0] = linfo.line;
         if (linfo.count == 0) {
@@ -276,7 +278,7 @@ npfloat ibms_to_ieees(const npfloat &ibm_arr, bool is_big_endian) {
   const float *ibm_ptr = ibm_arr.data();
   float *ieee_ptr = ieee_arr.mutable_data();
 
-  for (size_t i = 0; i < ibm_arr.size(); ++i) {
+  for (size_t i = 0; i < size; ++i) {
     ieee_ptr[i] = segy::ibm_to_ieee(ibm_ptr[i], is_big_endian);
   }
 
@@ -288,7 +290,7 @@ using overload_cast_ = pybind11::detail::overload_cast_impl<Args...>;
 
 PYBIND11_MODULE(_CXX_SEGY, m) {
   py::class_<Pysegy>(m, "Pysegy")
-      .def(py::init<std::string>())
+      .def(py::init<const std::string &>())
       .def("close", &Pysegy::close_file)
 
       // location
@@ -364,14 +366,10 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       // for write
       .def("set_bkeyi2", &Pysegy::set_bkeyi2, py::arg("loc"), py::arg("val"))
       .def("set_bkeyi4", &Pysegy::set_bkeyi4, py::arg("loc"), py::arg("val"))
-      //  .def("set_bkeyi8", &Pysegy::set_bkeyi8, py::arg("loc"),
-      //  py::arg("val"))
       .def("set_keyi2", &Pysegy::set_keyi2, py::arg("n"), py::arg("loc"),
            py::arg("val"))
       .def("set_keyi4", &Pysegy::set_keyi4, py::arg("n"), py::arg("loc"),
            py::arg("val"))
-      //  .def("set_keyi8", &Pysegy::set_keyi8, py::arg("n"), py::arg("loc"),
-      //       py::arg("val"))
       .def("set_iline", &Pysegy::set_iline, py::arg("n"), py::arg("val"))
       .def("set_xline", &Pysegy::set_xline, py::arg("n"), py::arg("val"))
       .def("set_offset", &Pysegy::set_offset, py::arg("n"), py::arg("val"))
@@ -388,13 +386,13 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
            overload_cast_<const npfloat &, const npint32 &, int, int>()(
                &Pysegy::write_traces),
            py::arg("data"), py::arg("index"), py::arg("tbeg"), py::arg("tend"))
-      .def("write", &Pysegy::write, py::arg("data"))
-      .def("write3d", &Pysegy::write3d, py::arg("data"), py::arg("ib"),
-           py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("tb"),
-           py::arg("te"))
-      .def("write4d", &Pysegy::write4d, py::arg("data"), py::arg("ib"),
-           py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("ob"),
-           py::arg("oe"), py::arg("tb"), py::arg("te"))
+      // .def("write", &Pysegy::write, py::arg("data"))
+      // .def("write3d", &Pysegy::write3d, py::arg("data"), py::arg("ib"),
+      //      py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("tb"),
+      //      py::arg("te"))
+      // .def("write4d", &Pysegy::write4d, py::arg("data"), py::arg("ib"),
+      //      py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("ob"),
+      //      py::arg("oe"), py::arg("tb"), py::arg("te"))
 
       .def_property_readonly("trace_count", &Pysegy::ntrace)
       .def_property_readonly("nt", &Pysegy::nt)
@@ -458,7 +456,7 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
   //       &SegyCpy::add_trace, py::arg("src"), py::arg("idx"),
   //            py::arg("iline"), py::arg("xline"), py::arg("offset") = 0)
   //       .def("create", &SegyCpy::create, py::arg("src"), py::arg("xyico"));
-  //   ;
+  ;
 
   m.def("ieee_to_ibm", &segy::ieee_to_ibm, py::arg("value"),
         py::arg("is_little_endian"));
@@ -469,3 +467,4 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
   m.def("ibms_to_ieees", &ibms_to_ieees, py::arg("ibm_arr"),
         py::arg("is_big_endian"));
 }
+} // namespace segy

@@ -61,8 +61,7 @@ public:
   using ReadFunc = std::function<void(float *, const char *, int)>;
   using WriteFunc = std::function<void(char *, const float *, int)>;
 
-  SegyBase(const std::string &segyname)
-      : segyname(segyname), m_data_ptr(nullptr) {}
+  SegyBase() : m_data_ptr(nullptr) {}
 
   ~SegyBase() { this->close_file(); }
 
@@ -139,7 +138,6 @@ public:
                     int tend);
 
 protected:
-  std::string segyname;
   const char *m_data_ptr;
   mio::mmap_sink m_sink;
   KeyLocs m_keys;

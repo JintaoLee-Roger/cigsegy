@@ -6,6 +6,7 @@
 *********************************************************************/
 
 #include "segyrw.h"
+#include <iostream>
 
 namespace segy {
 
@@ -15,16 +16,6 @@ inline static void set_bkeyi2(char *bheader, int loc, int16_t val) {
 }
 inline static void set_keyi2(char *theader, int loc, int16_t val) {
   *reinterpret_cast<int16_t *>(theader + loc - 1) = swap_endian<int16_t>(val);
-}
-
-SegyRW::SegyRW(const std::string &segyname) : SegyBase(segyname) {
-  std::error_code error;
-  this->m_sink.map(segyname, error);
-  if (error) {
-    throw std::runtime_error("Cannot mmap the file as RW mode: " + segyname);
-  }
-  m_data_ptr = this->m_sink.data();
-  this->scanBinaryHeader();
 }
 
 void SegyRW::set_segy_type(int ndim) {
@@ -48,7 +39,7 @@ void SegyRW::scan() {
   // range
   int is = iline(0);
   int ie = iline(m_meta.ntrace - 1);
-  int ni = (is - ie) / m_keys.istep + 1;
+  int ni = (ie - is) / m_keys.istep + 1;
   m_iinfos.resize(ni, LineInfo(true));
 
   // global xline range and offset range
@@ -76,7 +67,6 @@ void SegyRW::scan() {
   for (size_t ii = 0; ii < ni; ++ii) {
     CHECK_SIGNALS();
     LineInfo &linfo = m_iinfos[ii];
-
     // when missing line
     if (skipi > 0) {
       linfo.line = m_iinfos[ii - 1].line + istep;
@@ -108,7 +98,9 @@ void SegyRW::scan() {
       }
     }
 
-    if (iline(it) == iiline || iline((it - 1) != iiline)) {
+    if (iline(it) == iiline || iline(it - 1) != iiline) {
+      std::cout << iline(it) << " " << iiline << " " << iline(it - 1)
+                << std::endl;
       throw std::runtime_error("error1");
     }
 
@@ -163,7 +155,9 @@ void SegyRW::scan() {
           }
         }
 
-        if (xline(xt) == xxline || xline((xt - 1) != xxline)) {
+        if (xline(xt) == xxline || xline(xt - 1) != xxline) {
+          std::cout << xline(xt) << " " << xxline << " " << xline(xt - 1)
+                    << std::endl;
           throw std::runtime_error("error2");
         }
 
@@ -184,8 +178,11 @@ void SegyRW::scan() {
         if (xline(xt) != (xxline + xstep)) {
           skipx = xline(xt) - (xxline + xstep);
           if (skipx % xstep != 0) {
+            std::cout << xline(xt) << " " << xxline << " " << xstep
+                      << std::endl;
+            std::cout << "skipx: " << skipx << " xstep: " << xstep << std::endl;
             throw std::runtime_error(
-                "Cannot analysis this segy file, may step != 1");
+                "Cannot analysis this xline, maybe xstep is wrong");
           }
           skipx /= xstep;
         }
@@ -193,11 +190,12 @@ void SegyRW::scan() {
     }
 
     // missing line
-    if (xline(it) != (iiline + istep)) {
+    if (iline(it) != (iiline + istep)) {
       skipi = xline(it) - (iiline + istep);
       if (skipi % istep != 0) {
-        throw std::runtime_error(
-            "Cannot analysis this segy file, may step != 1");
+        std::cout << iline(it) << " " << iiline << " " << istep << std::endl;
+        std::cout << "skipi: " << skipi << " istep: " << istep << std::endl;
+        throw std::runtime_error("Cannot analysis line, maybe istep is wrong");
       }
       skipi /= istep;
     }
