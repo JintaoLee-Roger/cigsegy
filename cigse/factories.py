@@ -12,10 +12,10 @@ like header reading, file scanning, data retrieval, and file creation using a co
 
 import warnings
 import numpy as np
-from cigsegy.cpp import _CXX_SEGY
-from cigsegy.constinfo import kBinaryHeaderHelp, kTraceHeaderHelp
-from cigsegy.tools import get_metaInfo
-from cigsegy import utils
+from cigse.cpp import _CXX_SEGY
+from cigse.constinfo import kBinaryHeaderHelp, kTraceHeaderHelp
+from cigse.tools import get_metaInfo
+from cigse import utils
 
 
 def textual_header(segy_name: str, coding: str = None) -> None:
@@ -111,7 +111,7 @@ def fromfile(
     numpy.ndarray :
         shape as (n-inline, n-crossline, n-time)
     """
-    [iline, xline, offset, istep, xstep, ostep, xloc, yloc] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
+    # [iline, xline, offset, istep, xstep, ostep, xloc, yloc] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
 
     if isinstance(segy_name, _CXX_SEGY.Pysegy):
         segy = segy_name
@@ -170,7 +170,7 @@ def collect(
     if end < 0:
         end = segy.ntrace
 
-    if beg > end or end >= segy.ntrace:
+    if beg > end or end > segy.ntrace:
         raise ValueError(f"beg = {beg}, end = {end} is out of range.")
 
     if tbeg < 0:
@@ -180,7 +180,7 @@ def collect(
         tend = tbeg + 1
     if tend < 0:
         tend = segy.nt
-    if tbeg > tend or tend >= segy.nt:
+    if tbeg > tend or tend > segy.nt:
         raise ValueError(f"tbeg = {tbeg}, tend = {tend} is out of range.")
 
     data = segy.collect(beg, end, tbeg, tend).squeeze()

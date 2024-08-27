@@ -118,20 +118,20 @@ void SegyBase::itrace(float *data, int n) {
 }
 
 void SegyBase::collect(float *data, int beg, int end, int tbeg, int tend) {
-  int n = end - beg;
+  int nt = tend - tbeg;
   for (size_t i = beg; i < end; i++) {
     CHECK_SIGNALS();
-    m_readfunc(data, trDataStart(i) + tbeg, n);
-    data += n;
+    m_readfunc(data, trDataStart(i) + tbeg, nt);
+    data += nt;
   }
 }
 
 void SegyBase::collect(float *data, const int32_t *index, int n, int tbeg,
                        int tend) {
-  int len = tend - tbeg;
+  int nt = tend - tbeg;
   for (size_t i = 0; i < n; i++) {
     CHECK_SIGNALS();
-    m_readfunc(data + i * (uint64_t)len, trDataStart(index[i]) + tbeg, len);
+    m_readfunc(data + i * (uint64_t)nt, trDataStart(index[i]) + tbeg, nt);
   }
 }
 

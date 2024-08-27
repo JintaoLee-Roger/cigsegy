@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List
 import numpy as np
 # from cigsegy import get_trace_keys
-from cigsegy.cpp._CXX_SEGY import Pysegy
+from cigse.cpp._CXX_SEGY import Pysegy
 from .constinfo import *
 
 

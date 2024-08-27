@@ -394,7 +394,7 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       //      py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("ob"),
       //      py::arg("oe"), py::arg("tb"), py::arg("te"))
 
-      .def_property_readonly("trace_count", &Pysegy::ntrace)
+      .def_property_readonly("ntrace", &Pysegy::ntrace)
       .def_property_readonly("nt", &Pysegy::nt)
       .def_property_readonly("ndim", &Pysegy::ndim)
 

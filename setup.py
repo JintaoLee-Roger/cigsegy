@@ -22,7 +22,7 @@ except ImportError:
 
 cwd = Path(__file__).resolve().parent
 
-package_name = "cigsegy"
+package_name = "cigse"
 
 version = '1.2.0'
 
@@ -38,11 +38,11 @@ extra_compile_args += ["-DUSE_PYBIND11", "-undefined dynamic_lookup"]
 
 ext_modules = [
     Pybind11Extension(
-        "cigsegy.cpp._CXX_SEGY",
+        "cigse.cpp._CXX_SEGY",
         [
-            "cigsegy/cpp/segywrap.cpp",
-            "cigsegy/cpp/segyrw.cpp",
-            "cigsegy/cpp/segybase.cpp",
+            "cigse/cpp/segywrap.cpp",
+            "cigse/cpp/segyrw.cpp",
+            "cigse/cpp/segybase.cpp",
         ],
         extra_compile_args=extra_compile_args,
     ),
@@ -53,7 +53,7 @@ setup(name=package_name,
       long_description=open('README.rst').read(),
       long_description_content_type='text/x-rst',
       author='Jintao Li',
-      url='https://github.com/JintaoLee-Roger/cigsegy',
+      url='https://github.com/JintaoLee-Roger/cigse',
       license='MIT',
       install_requires=['numpy'],
       python_requires=">=3.6",
@@ -62,4 +62,4 @@ setup(name=package_name,
       cmdclass={"build_ext": build_ext},
       packages=find_packages(exclude=['docs', 'python', 'tools']),
       include_package_data=True,
-      exclude_package_data={'cigsegy': ['*.cpp', '*.txt', 'setup.py']})
+      exclude_package_data={'cigse': ['*.cpp', '*.txt', 'setup.py']})

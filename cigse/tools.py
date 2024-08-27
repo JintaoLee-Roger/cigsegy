@@ -5,8 +5,8 @@
 
 from typing import Dict, List, Tuple
 import numpy as np
-from cigsegy.cpp._CXX_SEGY import Pysegy
-from cigsegy import utils
+from cigse.cpp._CXX_SEGY import Pysegy
+from cigse import utils
 
 
 def read_header(fname: str, type, n=0, printstr=True):

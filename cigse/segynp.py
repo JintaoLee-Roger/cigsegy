@@ -5,10 +5,10 @@
 
 from typing import List, Tuple
 import numpy as np
-from cigsegy.cpp import _CXX_SEGY
-from cigsegy.transform import get_transform_metrix, apply_transform
-from cigsegy.interp import arbitray_line
-from cigsegy import utils
+from cigse.cpp import _CXX_SEGY
+from cigse.transform import get_transform_metrix, apply_transform
+from cigse.interp import arbitray_line
+from cigse import utils
 import warnings
 
 
