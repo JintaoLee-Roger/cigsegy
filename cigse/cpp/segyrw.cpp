@@ -11,6 +11,7 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace segy {
@@ -161,7 +162,7 @@ void SegyRW::scan() {
         int ostart = offset(xt);
 
         xt += jumpx;
-        xt = xt < m_meta.ntrace ? xt : m_meta.ntrace - 1;
+        xt = xt < xtmax ? xt : xtmax - 1;
 
         // jump too small
         if (xline(xt) == xxline) {
@@ -178,7 +179,7 @@ void SegyRW::scan() {
           }
         }
 
-        if (xt < ntrace() &&
+        if (xt < xtmax &&
             (xline(xt) != (xxline + xstep) || xline(xt - 1) != xxline)) {
           std::ostringstream oss;
           oss << "Error when scan this file. We except `xline(i) == "
@@ -204,7 +205,7 @@ void SegyRW::scan() {
         goend = ostep > 0 ? MMAX(goend, oend) : MMIN(goend, oend);
 
         // missing xline
-        if (xline(xt) != (xxline + xstep)) {
+        if (xt < xtmax && xline(xt) != (xxline + xstep)) {
           skipx = xline(xt) - (xxline + xstep);
           if (skipx % xstep != 0) {
             std::ostringstream oss;
@@ -226,7 +227,7 @@ void SegyRW::scan() {
     }
 
     // missing line
-    if (iline(it) != (iiline + istep)) {
+    if (it < ntrace() && iline(it) != (iiline + istep)) {
       skipi = xline(it) - (iiline + istep);
       if (skipi % istep != 0) {
         std::ostringstream oss;

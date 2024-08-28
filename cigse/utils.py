@@ -223,11 +223,12 @@ def parse_metainfo(meta: dict):
         shapeinfo += f"(n-inline, n-crossline, n-offset, n-time) = ({meta['ni']}, {meta['nx']}, {meta['no']}, {meta['nt']})"
 
     out += shapeinfo + "\n"
+    out += f"N traces: {meta['ntrace']}\n"
 
     # interval
     intervalinfo = "interval: "
     if meta['ndim'] == 2:
-        intervalinfo += f"dt = {meta['dt']} us"
+        intervalinfo += f"dt = {meta['dt']//1000} ms"
     else:
         intervalinfo += f"di(iline) = {meta['di']:.2f} {meta['unit']}, dx(xline) = {meta['dx']:.2f} {meta['unit']}, dt = {meta['dt']//1000} ms"
     out += intervalinfo + "\n"
@@ -262,6 +263,21 @@ def parse_metainfo(meta: dict):
     out += stepinfo + "\n"
 
     return out
+
+
+def post_process_meta(segy: Pysegy, meta: dict, apply_scalar=True):
+    unit = segy.bkeyi2(55)
+    if apply_scalar:
+        if meta['scalar'] == 0:
+            meta['scalar'] = 1
+        scalar = -1 / meta['scalar'] if meta['scalar'] < 0 else meta['scalar']
+        meta['di'] *= scalar
+        meta['dx'] *= scalar
+    if unit == 2:
+        meta['unit'] = 'ft'
+    else:
+        meta['unit'] = 'm'
+    return meta
 
 
 ############# Internal functions #############

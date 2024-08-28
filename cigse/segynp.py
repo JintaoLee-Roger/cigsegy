@@ -13,8 +13,9 @@ import warnings
 
 
 class ScanMixin:
+    segy: _CXX_SEGY.Pysegy
 
-    def _scan_unsorted(self, iline=None, xline=None, ic=None):
+    def _scan_unsorted(self, iline=None, xline=None, offset=37, ic=None):
         """scan the unsorted SEG-Y file and create the geometry"""
         if ic is not None:
             ic = np.array(ic)
@@ -22,7 +23,7 @@ class ScanMixin:
                 warnings.warn(
                     "'ic' is provided, so 'iline' and 'xline' will be ignored.",
                     UserWarning)
-            if ic.shape[0] != self.trace_count:
+            if ic.shape[0] != self.ntrace:
                 raise ValueError(
                     "The length of ic should be the same as the trace count")
 
@@ -95,22 +96,6 @@ class ScanMixin:
         self._trans_matrix = None
         self._geomety = None
 
-    def _scan3d(self,
-                iline=None,
-                xline=None,
-                istep=None,
-                xstep=None,
-                xloc=None,
-                yloc=None):
-        [iline, xline, istep, xstep, xloc,
-         yloc] = utils.guess(self.fname, iline, xline, istep, xstep, xloc,
-                             yloc)[0]
-        self.keylocs = [iline, xline, istep, xstep, xloc, yloc]
-        self.segy.setInlineLocation(iline)
-        self.segy.setCrosslineLocation(xline)
-        self.segy.setSteps(istep, xstep)
-        self.segy.scan()
-
     def _eval_range(self):
         if self.trace_count < 6000:
             p0 = self.segy.collect(0, self.trace_count)
@@ -136,6 +121,7 @@ class ScanMixin:
 
 
 class GeometryMixin:
+    segy: _CXX_SEGY.Pysegy
 
     def map_to_index(self, index):
         if self._geomety is None:
@@ -143,8 +129,7 @@ class GeometryMixin:
                 "geometry is not created, Call `update_geometry` first")
 
         index = np.array(index)
-        assert index.ndim == 2 and index.shape[
-            1] == 2, "index shape must be (N, 2)"
+        assert index.ndim == 2 and index.shape[1] == 2, "index shape must be (N, 2)" # yapf: disable
         index = self._geomety[index[:, 0], index[:, 1]]
         return index
 
@@ -283,6 +268,7 @@ class GeometryMixin:
 
 
 class InterpMixin:
+    segy: _CXX_SEGY.Pysegy
 
     def _check_points_valid(self, points, ptype='auto'):
         if not self.as_3d:
@@ -362,6 +348,7 @@ class InterpMixin:
 
 
 class RWMixin:
+    segy: _CXX_SEGY.Pysegy
 
     def _read3d(self, idx):
         num = idx[1::2].count(-1)
@@ -525,13 +512,14 @@ class RWMixin:
         else:
             raise IndexError("Invalid index slices")
 
-    def _check_bound(self, ib, ie, xb, xe, tb=None, te=None) -> None:
-        assert ib < ie and ie <= self.shape[0] and ib >= 0, "index out of range"
-        assert xb < xe and xe <= self.shape[1] and xb >= 0, "index out of range"
-        if self.as_3d:
-            assert (tb is not None) and (te is not None)
-            assert tb < te and te <= self.shape[
-                2] and tb >= 0, "index out of range"
+    def _check_bound1(self, idx, start, end):
+        assert idx >= 0 and idx < self._ndim, "dim index out of range"
+        assert start < end and end <= self.shape[idx] and start >= 0, "index out of range" # yapf: disable
+
+    def _check_bound(self, *args) -> None:
+        assert len(args) == 2 * self._ndim, "The number of arguments is not correct" # yapf: disable
+        for i in range(self._ndim):
+            self._check_bound1(i, args[2 * i], args[2 * i + 1])
 
     def tofile(self, fpath: str, load: bool = True):
         """
@@ -547,10 +535,11 @@ class RWMixin:
         if load:
             self.to_numpy().tofile(fpath)
         else:
-            self.segy.tofile(fpath, not self.as_3d)
+            self.segy.tofile(fpath, self._ndim == 2)
 
 
 class InnerMixin:
+    segy: _CXX_SEGY.Pysegy
 
     def __array__(self):
         """To support np.array(SegyNP(xxx))"""
@@ -558,7 +547,9 @@ class InnerMixin:
 
     def __getitem__(self, slices) -> np.ndarray:
         idx = self._process_keys(slices)
-        if self.as_3d:
+        if self._ndim == 4:
+            return self._read4d(idx)
+        elif self._ndim == 3:
             return self._read3d(idx)
         else:
             return self._read2d(idx)
@@ -583,8 +574,12 @@ class InnerMixin:
         self.segy.close()
 
     def __repr__(self) -> str:
-        out = f"cigsey.SegyNP class, file name: '{self.fname}'\n"
-        out += f"shape: {self.shape}, nt is {self.shape[-1]}. Total traces: {self.trace_count}, interval: {self.interval}"
+        out = f"cigsey.SegyNP class, file name: '{self.fname}'\n\n"
+        keys = self.segy.get_keylocs()
+        meta = self.segy.get_metainfo()
+        meta = {**keys, **meta}
+        meta = utils.post_process_meta(meta)
+        out += utils.parse_metainfo(meta)
         return out
 
     def __len__(self) -> int:

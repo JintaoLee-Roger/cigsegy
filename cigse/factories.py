@@ -498,3 +498,50 @@ def ieee_to_ibm(value, is_little_endian: bool):
         raise ValueError(
             f"value = {value} is not a valid type, it should be one of {float, int, np.ndarray}"
         )
+
+
+def create(
+    segy_out: str,
+    binary_in,
+    shape=None,
+    format: int = 5,
+    dt: int = 2000,
+    start_time: int = 0,
+    iline_interval: float = 25,
+    xline_interval: float = 25,
+    min_iline: int = 1,
+    min_xline: int = 1,
+    custom_info="",
+) -> None:
+    """
+    Create a segy format file from a binary file or np.ndarray
+    
+    Parameters
+    ----------
+    segy_out : str
+        out segy format file path
+    binary_in : str or np.array
+        the input binary file or array
+    shape : Tuple
+        len == 3
+    format : int
+        the data format code, 1 for 4 bytes IBM float, 5 for 4 bytes IEEE float
+    dt : int
+        data sample interval, 2000 means 2ms
+    start_time : int
+        start time for each trace
+    iline_interval : int
+        inline interval, will affect cdp x and cdp y
+    xline_interval : int
+        crossline interval, will affect cdp x and cdp y
+    min_iline : int
+        the start inline number
+    min_xline : int 
+        the start crossline number
+    custom_info : List[str]
+        textual header info by user custom, max: 12 rows each row is less than 76 chars
+    """
+    warnings.warn(
+        "create function is deprecated and will remove in the future version, please consider use `cigsegy.SegyCreate` class instead.",
+        DeprecationWarning,
+    )

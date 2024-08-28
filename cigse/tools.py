@@ -97,21 +97,12 @@ def get_metaInfo(
     keys = segy.get_keylocs()
     meta = segy.get_metainfo()
     meta = {**keys, **meta}
-    unit = segy.bkeyi2(55)
+
+    meta = utils.post_process_meta(segy, meta, apply_scalar)
 
     if not isinstance(segyname, Pysegy):
         segy.close()
 
-    if apply_scalar:
-        if meta['scalar'] == 0:
-            meta['scalar'] = 1
-        scalar = -1 / meta['scalar'] if meta['scalar'] < 0 else meta['scalar']
-        meta['di'] *= scalar
-        meta['dx'] *= scalar
-    if unit == 2:
-        meta['unit'] = 'ft'
-    else:
-        meta['unit'] = 'm'
     return meta
 
 
@@ -270,6 +261,7 @@ def full_scan(fname: str, iline: int, xline: int, offset: int = 37) -> dict:
 
     return geominfo
 
+
 # TODO: what's name of this function?
 def load_by_geom(
     fname,
@@ -339,47 +331,6 @@ def load_by_geom(
         d = segy.collect(index, tb, te).reshape(*shape, -1)
 
     return d
-
-
-def create(segy_out: str,
-           binary_in,
-           shape: Tuple = None,
-           format: int = 5,
-           dt: int = 2000,
-           start_time: int = 0,
-           iline_interval: float = 25,
-           xline_interval: float = 25,
-           min_iline: int = 1,
-           min_xline: int = 1,
-           custom_info: List = []) -> None:
-    """
-    Create a segy format file from a binary file or np.ndarray
-    
-    Parameters
-    ----------
-    segy_out : str
-        out segy format file path
-    binary_in : str or np.array
-        the input binary file or array
-    shape : Tuple
-        len == 3
-    format : int
-        the data format code, 1 for 4 bytes IBM float, 5 for 4 bytes IEEE float
-    dt : int
-        data sample interval, 2000 means 2ms
-    start_time : int
-        start time for each trace
-    iline_interval : int
-        inline interval, will affect cdp x and cdp y
-    xline_interval : int
-        crossline interval, will affect cdp x and cdp y
-    min_iline : int
-        the start inline number
-    min_xline : int 
-        the start crossline number
-    custom_info : List[str]
-        textual header info by user custom, max: 12 rows each row is less than 76 chars
-    """
 
 
 ############### Deprecated functions ####################
