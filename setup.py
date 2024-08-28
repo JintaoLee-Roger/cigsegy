@@ -32,9 +32,9 @@ if not version:
 if get_default_compiler() == 'msvc':
     extra_compile_args = ['/wd4244', '/wd4996', '/wd4819']
 else:
-    extra_compile_args = ["-std=c++11", "-Wall", "-O3"]
+    extra_compile_args = ["-std=c++14", "-O3", "-undefined dynamic_lookup"]
 
-extra_compile_args += ["-DUSE_PYBIND11", "-undefined dynamic_lookup"]
+extra_compile_args += ["-DUSE_PYBIND11"]
 
 ext_modules = [
     Pybind11Extension(

@@ -31,20 +31,21 @@ namespace segy {
 struct LineInfo {
 
   bool isline;
-  int line;    // iline/xline number for this line
-  int itstart; // for this line, start trace index
-  int itend;   // for this line, end trace index
-  int count;   // the number of traces for this line
-  int lstart;  // the start xline/offset
-  int lend;    // the end xline/offset
+  size_t line;    // iline/xline number for this line
+  size_t itstart; // for this line, start trace index
+  size_t itend;   // for this line, end trace index
+  size_t count;   // the number of traces for this line // TODO:
+  size_t lstart;  // the start xline/offset
+  size_t lend;    // the end xline/offset
 
   // if not continuous, record all idx
-  std::vector<int> idx;
+  std::vector<size_t> idx;
 
   std::vector<LineInfo> xinfos; // XLineInfos for Line
 
   LineInfo(bool t)
-      : isline(t), itstart(-1), itend(-1), count(-1), lstart(-1), lend(-1) {}
+      : isline(t), itstart(kInvalid), itend(kInvalid), count(kInvalid),
+        lstart(kInvalid), lend(kInvalid) {}
 
   void set_xinfos(size_t size) { xinfos.resize(size, LineInfo(false)); }
 };
@@ -61,37 +62,38 @@ public:
     scanBinaryHeader();
   }
 
-  void set_segy_type(int ndim);
+  void set_segy_type(size_t ndim);
   void scan();
-  std::vector<int> shape() const;
-  inline int ndim() const { return m_ndim; }
+  std::vector<size_t> shape() const;
+  inline size_t ndim() const { return m_ndim; }
 
   // R mode
-  void read4d(float *dst, int is, int ie, int xs, int xe, int os, int oe,
-              int ts, int te);
-  void read3d(float *dst, int is, int ie, int xs, int xe, int ts, int te);
+  void read4d(float *dst, size_t ib, size_t ie, size_t xb, size_t xe, size_t ob,
+              size_t oe, size_t tb, size_t te);
+  void read3d(float *dst, size_t ib, size_t ie, size_t xb, size_t xe, size_t tb,
+              size_t te);
   void read(float *dst);
   void tofile(const std::string &binary_out_name, bool is2d = false);
-  void cut(const std::string &outname, const std::vector<int> &ranges,
+  void cut(const std::string &outname, const std::vector<size_t> &ranges,
            bool is2d = false, const std::string &textual = "");
   void create_by_sharing_header(const std::string &segy_name, const float *src,
-                                const std::vector<int> &shape,
-                                const std::vector<int> &start,
+                                const std::vector<size_t> &shape,
+                                const std::vector<size_t> &start,
                                 bool is2d = false,
                                 const std::string &textual = "");
   void create_by_sharing_header(const std::string &segy_name,
                                 const std::string &src_name,
-                                const std::vector<int> &shape,
-                                const std::vector<int> &start,
+                                const std::vector<size_t> &shape,
+                                const std::vector<size_t> &start,
                                 bool is2d = false,
                                 const std::string &textual = "");
 
   // write mode
   void write(const float *data);
-  void write3d(const float *data, int is, int ie, int xs, int xe, int ts,
-               int te);
-  void write4d(const float *data, int is, int ie, int xs, int xe, int os,
-               int oe, int ts, int te);
+  void write3d(const float *data, size_t ib, size_t ie, size_t xb, size_t xe,
+               size_t tb, size_t te);
+  void write4d(const float *data, size_t ib, size_t ie, size_t xb, size_t xe,
+               size_t ob, size_t oe, size_t tb, size_t te);
 
   // Geometry view?
 
@@ -99,38 +101,44 @@ protected:
   std::vector<LineInfo> m_iinfos;
 
 private:
-  int m_ndim = 2;
+  size_t m_ndim = 2;
   bool isScan = false;
-  uint64_t m_sizeL = 1;
 
   bool isPreStack();
-  inline int xl2ix(int xl) { return (xl - m_meta.start_xline) / m_keys.xstep; }
-  inline int of2io(int of) { return (of - m_meta.start_offset) / m_keys.ostep; }
-  bool NoOverlap(LineInfo &linfo, int s, int e);
-  void find_idx(std::array<int32_t, 4> &idx, LineInfo &linfo, int xs, int xe);
+  inline size_t xl2ix(size_t xl) {
+    return (xl - m_meta.start_xline) / m_keys.xstep;
+  }
+  inline size_t of2io(size_t of) {
+    return (of - m_meta.start_offset) / m_keys.ostep;
+  }
+  bool NoOverlap(LineInfo &linfo, size_t s, size_t e);
+  void find_idx(std::array<size_t, 4> &idx, LineInfo &linfo, size_t xs,
+                size_t xe);
 
-  void _read_inner(float *dst, LineInfo &linfo, int ks, int ke, int ts, int te);
-  void _read4d_xo(float *dst, LineInfo &linfo, int xs, int xe, int os, int oe,
-                  int ts, int te);
-  uint64_t _copy_inner(char *dst, const float *src, LineInfo &linfo, int ks,
-                       int ke, int ts, int te, bool fromsrc);
-  uint64_t _copy4d_xo(char *dst, const float *src, LineInfo &linfo, int xs,
-                      int xe, int os, int oe, int ts, int te, bool fromsrc);
+  void _read_inner(float *dst, LineInfo &linfo, size_t ks, size_t ke, size_t ts,
+                   size_t te);
+  void _read4d_xo(float *dst, LineInfo &linfo, size_t xs, size_t xe, size_t os,
+                  size_t oe, size_t ts, size_t te);
+  uint64_t _copy_inner(char *dst, const float *src, LineInfo &linfo, size_t ks,
+                       size_t ke, size_t ts, size_t te, bool fromsrc);
+  uint64_t _copy4d_xo(char *dst, const float *src, LineInfo &linfo, size_t xs,
+                      size_t xe, size_t os, size_t oe, size_t ts, size_t te,
+                      bool fromsrc);
   void _create_from_segy(const std::string &outname, const float *src,
-                         const std::vector<int> &ranges, bool is2d,
+                         const std::vector<size_t> &ranges, bool is2d,
                          const std::string &textual, bool fromsrc,
                          uint64_t check_size = 0);
 
-  void _write_inner(const float *src, LineInfo &linfo, int ks, int ke, int ts,
-                    int te);
-  void _write4d_xo(const float *src, LineInfo &linfo, int xs, int xe, int os,
-                   int oe, int ts, int te);
+  void _write_inner(const float *src, LineInfo &linfo, size_t ks, size_t ke,
+                    size_t ts, size_t te);
+  void _write4d_xo(const float *src, LineInfo &linfo, size_t xs, size_t xe,
+                   size_t os, size_t oe, size_t ts, size_t te);
 
-  uint64_t _need_size_b(int ndim = -1);
+  uint64_t _need_size_b(size_t ndim = kInvalid);
   void scanBinaryHeader();
 };
 
-inline void SegyRW::set_segy_type(int ndim) {
+inline void SegyRW::set_segy_type(size_t ndim) {
   if (ndim < 2 || ndim > 4) {
     std::runtime_error("Error SEG-Y type, 2 for 2D, 3 for poststack, 4 for "
                        "prestack. But now is " +
@@ -139,9 +147,9 @@ inline void SegyRW::set_segy_type(int ndim) {
   m_ndim = ndim;
 }
 
-inline std::vector<int> SegyRW::shape() const {
+inline std::vector<size_t> SegyRW::shape() const {
   if (m_ndim == 2) {
-    return {(int)m_meta.ntrace, m_meta.nt};
+    return {m_meta.ntrace, m_meta.nt};
   } else if (m_ndim == 3) {
     return {m_meta.ni, m_meta.nx, m_meta.nt};
   } else {
@@ -151,7 +159,7 @@ inline std::vector<int> SegyRW::shape() const {
 
 inline bool SegyRW::isPreStack() {
   int o0 = offset(0);
-  int n = m_meta.ntrace < 500 ? m_meta.ntrace : 500;
+  size_t n = m_meta.ntrace < 500 ? m_meta.ntrace : 500;
   for (size_t i = 1; i < n; i++) {
     if (o0 != offset(i)) {
       return true;
@@ -160,9 +168,9 @@ inline bool SegyRW::isPreStack() {
   return false;
 }
 
-inline uint64_t SegyRW::_need_size_b(int ndim) {
+inline uint64_t SegyRW::_need_size_b(size_t ndim) {
   uint64_t need_size = 0;
-  if (ndim == -1) {
+  if (ndim > 4) {
     ndim = m_ndim;
   }
 
@@ -180,7 +188,7 @@ inline uint64_t SegyRW::_need_size_b(int ndim) {
   return need_size * sizeof(float);
 }
 
-inline bool SegyRW::NoOverlap(LineInfo &linfo, int s, int e) {
+inline bool SegyRW::NoOverlap(LineInfo &linfo, size_t s, size_t e) {
   if (linfo.isline) {
     return s > xl2ix(linfo.lend) || e <= xl2ix(linfo.lstart);
   } else {
@@ -189,11 +197,11 @@ inline bool SegyRW::NoOverlap(LineInfo &linfo, int s, int e) {
 }
 
 // Use only if xs/xe and xinfo have overlapped parts
-inline void SegyRW::find_idx(std::array<int32_t, 4> &idx, LineInfo &linfo,
-                             int xs, int xe) {
+inline void SegyRW::find_idx(std::array<size_t, 4> &idx, LineInfo &linfo,
+                             size_t xs, size_t xe) {
   memset(&idx, 0, 4 * 4);
-  int start = linfo.isline ? xl2ix(linfo.lstart) : of2io(linfo.lstart);
-  int end = linfo.isline ? xl2ix(linfo.lend) + 1 : of2io(linfo.lend) + 1;
+  size_t start = linfo.isline ? xl2ix(linfo.lstart) : of2io(linfo.lstart);
+  size_t end = linfo.isline ? xl2ix(linfo.lend) + 1 : of2io(linfo.lend) + 1;
   if (xs < start) {
     idx[0] = start - xs;
     xs = start;
@@ -207,9 +215,9 @@ inline void SegyRW::find_idx(std::array<int32_t, 4> &idx, LineInfo &linfo,
 }
 
 void create_segy(const std::string &segyname, const float *src,
-                 const int32_t *keys, const std::vector<int> &shape,
+                 const int32_t *keys, const std::vector<size_t> &shape,
                  const std::string &textual, const uchar *bheader,
-                 const uchar *theader, int keysize);
+                 const uchar *theader, size_t keysize);
 
 } // namespace segy
 #endif

@@ -46,35 +46,36 @@ using uchar = unsigned char;
 namespace segy {
 
 // const size
-const int kTextualHeaderSize = 3200;
-const int kBinaryHeaderSize = 400;
-const int kTraceHeaderStart = 3600;
-const int kTraceHeaderSize = 240;
-const int kTextualColumns = 80;
-const int kTextualRows = 40;
+const size_t kTextualHeaderSize = 3200;
+const size_t kBinaryHeaderSize = 400;
+const size_t kTraceHeaderStart = 3600;
+const size_t kTraceHeaderSize = 240;
+const size_t kTextualColumns = 80;
+const size_t kTextualRows = 40;
 
-const int kMaxSizeOneDimemsion = 100000;
+const size_t kMaxSizeOneDimemsion = 100000;
 
 // const binary header field
-const int kBSampleIntervalField = 17;
-const int kBSampleCountField = 21;
-const int kBSampleFormatField = 25;
-const int kBTraceSortingCodeField = 29;
+const size_t kBSampleIntervalField = 17;
+const size_t kBSampleCountField = 21;
+const size_t kBSampleFormatField = 25;
+const size_t kBTraceSortingCodeField = 29;
 
 // const trace header field
-const int kTStartTimeField = 105; // in ms
-const int kTDelayTimeField = 109; // in ms
-const int kTScalarField = 71;
-const int kTSampleCountField = 115;
-const int kTSampleIntervalField = 117;
+const size_t kTStartTimeField = 105; // in ms
+const size_t kTDelayTimeField = 109; // in ms
+const size_t kTScalarField = 71;
+const size_t kTSampleCountField = 115;
+const size_t kTSampleIntervalField = 117;
 
-const int kDefaultInlineField = 189;
-const int kDefaultCrosslineField = 193;
-const int kDefaultXField = 73;
-const int kDefaultYField = 77;
+const size_t kDefaultInlineField = 189;
+const size_t kDefaultCrosslineField = 193;
+const size_t kDefaultXField = 73;
+const size_t kDefaultYField = 77;
+const size_t kInvalid = std::numeric_limits<size_t>::max();
 
 // A key map that convert EBCDIC to ASCII format
-const std::map<unsigned char, char> kEBCDICtoASCIImap = {
+const std::map<uchar, char> kEBCDICtoASCIImap = {
     {64, ' '},   {75, '.'},  {76, '<'},   {77, '('},  {78, '+'},  {79, '|'},
     {80, '&'},   {90, '!'},  {91, '$'},   {92, '*'},  {93, ')'},  {94, ';'},
     {96, '-'},   {97, '/'},  {106, '|'},  {107, ','}, {108, '%'}, {109, '_'},
@@ -92,7 +93,7 @@ const std::map<unsigned char, char> kEBCDICtoASCIImap = {
     {241, '1'},  {242, '2'}, {243, '3'},  {244, '4'}, {245, '5'}, {246, '6'},
     {247, '7'},  {248, '8'}, {249, '9'}};
 
-const std::map<char, unsigned char> kASCIItoEBCDICmap = {
+const std::map<char, uchar> kASCIItoEBCDICmap = {
     {' ', 64},   {'.', 75},  {'<', 76},   {'(', 77},  {'+', 78},  {'|', 79},
     {'&', 80},   {'!', 90},  {'$', 91},   {'*', 92},  {')', 93},  {';', 94},
     {'-', 96},   {'/', 97},  {'|', 106},  {',', 107}, {'%', 108}, {'_', 109},
@@ -111,10 +112,10 @@ const std::map<char, unsigned char> kASCIItoEBCDICmap = {
     {'7', 247},  {'8', 248}, {'9', 249}};
 
 // NOTE: only support 1, 2, 4 bytes
-const std::map<int, int> kElementSize = {{1, 4}, {2, 4},  {3, 2},  {5, 4},
-                                         {8, 1}, {10, 4}, {11, 2}, {16, 1}};
+const std::map<size_t, size_t> kElementSize = {
+    {1, 4}, {2, 4}, {3, 2}, {5, 4}, {8, 1}, {10, 4}, {11, 2}, {16, 1}};
 
-inline void swap_endian_inplace(void *dst, const void *src, int n) {
+inline void swap_endian_inplace(void *dst, const void *src, size_t n) {
   uchar *_dst = static_cast<uchar *>(dst);
   const uchar *_src = static_cast<const uchar *>(src);
   static_assert(CHAR_BIT == 8, "CHAR_BIT != 8");
@@ -265,13 +266,13 @@ inline char getEBCIDfromASCII(char c) {
 }
 
 inline bool isTextInEBCDICFormat(const char *text, size_t size) {
-  int alnumASCII = 0;
+  size_t alnumASCII = 0;
   for (size_t i = 0; i < size; i++) {
     if (std::isalnum(text[i]))
       alnumASCII++;
   }
 
-  int alnumEBCDIC = 0;
+  size_t alnumEBCDIC = 0;
   for (size_t i = 0; i < size; i++) {
     if (std::isalnum(getASCIIfromEBCDIC(text[i])))
       alnumEBCDIC++;
@@ -282,78 +283,80 @@ inline bool isTextInEBCDICFormat(const char *text, size_t size) {
   return true;
 }
 
-template <typename T> void convert2npT(float *dst, const char *src, int size) {
+template <typename T>
+void convert2npT(float *dst, const char *src, size_t size) {
   const T *_src = reinterpret_cast<const T *>(src);
-  for (int i = 0; i < size; ++i) {
+  for (size_t i = 0; i < size; ++i) {
     dst[i] = ibm_to_ieee(_src[i], true);
   }
 }
 
-inline void convert2npibm(float *dst, const char *src, int size) {
+inline void convert2npibm(float *dst, const char *src, size_t size) {
   const float *_src = reinterpret_cast<const float *>(src);
-  for (int i = 0; i < size; ++i) {
+  for (size_t i = 0; i < size; ++i) {
     dst[i] = ibm_to_ieee(_src[i], true);
   }
 }
 
-template <typename T> void float2sgyT(char *dst, const float *src, int size) {
+template <typename T>
+void float2sgyT(char *dst, const float *src, size_t size) {
   float *_dst = reinterpret_cast<float *>(dst);
 
-  for (int i = 0; i < size; ++i) {
+  for (size_t i = 0; i < size; ++i) {
     _dst[i] = swap_endian<T>(T(src[i]));
   }
 }
 
-inline void float2sgyibm(char *dst, const float *src, int size) {
+inline void float2sgyibm(char *dst, const float *src, size_t size) {
   float *_dst = reinterpret_cast<float *>(dst);
 
-  for (int i = 0; i < size; ++i) {
+  for (size_t i = 0; i < size; ++i) {
     _dst[i] = ieee_to_ibm(src[i], true);
   }
 }
 
-using ReadFunc = std::function<void(float *, const char *, int)>;
-using WriteFunc = std::function<void(char *, const float *, int)>;
+using ReadFunc = std::function<void(float *, const char *, size_t)>;
+using WriteFunc = std::function<void(char *, const float *, size_t)>;
 
 inline void setRFunc(ReadFunc &m_readfunc, int dformat) {
   switch (dformat) {
   case 1:
-    m_readfunc = [](float *dst, const char *src, int size) {
+    m_readfunc = [](float *dst, const char *src, size_t size) {
       convert2npibm(dst, src, size);
     };
     break;
   case 2:
-    m_readfunc = [](float *dst, const char *src, int size) {
+    m_readfunc = [](float *dst, const char *src, size_t size) {
       convert2npT<int32_t>(dst, src, size);
     };
     break;
   case 3:
-    m_readfunc = [](float *dst, const char *src, int size) {
+    m_readfunc = [](float *dst, const char *src, size_t size) {
       convert2npT<int16_t>(dst, src, size);
     };
     break;
   case 5:
-    m_readfunc = [](float *dst, const char *src, int size) {
+    m_readfunc = [](float *dst, const char *src, size_t size) {
       convert2npT<float>(dst, src, size);
     };
     break;
   case 8:
-    m_readfunc = [](float *dst, const char *src, int size) {
+    m_readfunc = [](float *dst, const char *src, size_t size) {
       convert2npT<int8_t>(dst, src, size);
     };
     break;
   case 10:
-    m_readfunc = [](float *dst, const char *src, int size) {
+    m_readfunc = [](float *dst, const char *src, size_t size) {
       convert2npT<uint32_t>(dst, src, size);
     };
     break;
   case 11:
-    m_readfunc = [](float *dst, const char *src, int size) {
+    m_readfunc = [](float *dst, const char *src, size_t size) {
       convert2npT<uint16_t>(dst, src, size);
     };
     break;
   case 16:
-    m_readfunc = [](float *dst, const char *src, int size) {
+    m_readfunc = [](float *dst, const char *src, size_t size) {
       convert2npT<uint8_t>(dst, src, size);
     };
     break;
@@ -366,42 +369,42 @@ inline void setRFunc(ReadFunc &m_readfunc, int dformat) {
 inline void setWFunc(WriteFunc &m_wfunc, int dformat) {
   switch (dformat) {
   case 1:
-    m_wfunc = [](char *dst, const float *src, int size) {
+    m_wfunc = [](char *dst, const float *src, size_t size) {
       float2sgyibm(dst, src, size);
     };
     break;
   case 2:
-    m_wfunc = [](char *dst, const float *src, int size) {
+    m_wfunc = [](char *dst, const float *src, size_t size) {
       float2sgyT<int32_t>(dst, src, size);
     };
     break;
   case 3:
-    m_wfunc = [](char *dst, const float *src, int size) {
+    m_wfunc = [](char *dst, const float *src, size_t size) {
       float2sgyT<int16_t>(dst, src, size);
     };
     break;
   case 5:
-    m_wfunc = [](char *dst, const float *src, int size) {
+    m_wfunc = [](char *dst, const float *src, size_t size) {
       float2sgyT<float>(dst, src, size);
     };
     break;
   case 8:
-    m_wfunc = [](char *dst, const float *src, int size) {
+    m_wfunc = [](char *dst, const float *src, size_t size) {
       float2sgyT<int8_t>(dst, src, size);
     };
     break;
   case 10:
-    m_wfunc = [](char *dst, const float *src, int size) {
+    m_wfunc = [](char *dst, const float *src, size_t size) {
       float2sgyT<uint32_t>(dst, src, size);
     };
     break;
   case 11:
-    m_wfunc = [](char *dst, const float *src, int size) {
+    m_wfunc = [](char *dst, const float *src, size_t size) {
       float2sgyT<uint16_t>(dst, src, size);
     };
     break;
   case 16:
-    m_wfunc = [](char *dst, const float *src, int size) {
+    m_wfunc = [](char *dst, const float *src, size_t size) {
       float2sgyT<uint8_t>(dst, src, size);
     };
     break;
@@ -444,7 +447,7 @@ inline void create_file(const std::string &file_name, uint64_t file_size) {
 #endif
 }
 
-inline void append_to_file(const std::string &file_name, uint64_t size_to_add) {
+inline void append_to_file(const std::string &file_name, int64_t size_to_add) {
 #ifdef _WIN32
   HANDLE file = CreateFile(file_name.c_str(), GENERIC_WRITE, 0, NULL,
                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -491,7 +494,7 @@ inline void append_to_file(const std::string &file_name, uint64_t size_to_add) {
 }
 
 inline void truncate_file(const std::string &file_name,
-                          uint64_t size_to_remove) {
+                          int64_t size_to_remove) {
 #ifdef _WIN32
   HANDLE file = CreateFile(file_name.c_str(), GENERIC_WRITE, 0, NULL,
                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);

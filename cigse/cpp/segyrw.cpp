@@ -6,6 +6,7 @@
 *********************************************************************/
 
 #include "segyrw.h"
+#include "utils.hpp"
 #include <cassert>
 #include <iostream>
 #include <sstream>
@@ -15,13 +16,13 @@
 namespace segy {
 
 // modify header keys function, for cut, create_by_sharing_header
-inline static void set_bkeyi2(char *bheader, int loc, int16_t val) {
+inline static void set_bkeyi2(char *bheader, size_t loc, int16_t val) {
   *reinterpret_cast<int16_t *>(bheader + loc - 1) = swap_endian<int16_t>(val);
 }
-inline static void set_keyi2(char *theader, int loc, int16_t val) {
+inline static void set_keyi2(char *theader, size_t loc, int16_t val) {
   *reinterpret_cast<int16_t *>(theader + loc - 1) = swap_endian<int16_t>(val);
 }
-inline static void set_keyi4(char *theader, int loc, int32_t val) {
+inline static void set_keyi4(char *theader, size_t loc, int32_t val) {
   *reinterpret_cast<int32_t *>(theader + loc - 1) = swap_endian<int32_t>(val);
 }
 
@@ -38,6 +39,14 @@ void SegyRW::scan() {
   int is = iline(0);
   int ie = iline(m_meta.ntrace - 1);
   int ni = (ie - is) / m_keys.istep + 1;
+  if (ni < 0 || ni > kMaxSizeOneDimemsion) {
+    std::ostringstream oss;
+    oss << "Error when scan this file. The size of inline is error. ni = " << ni
+        << ", max size = " << kMaxSizeOneDimemsion
+        << ". If ni < 0, maybe istep is error.";
+    throw std::runtime_error(oss.str());
+  }
+
   m_iinfos.resize(ni, LineInfo(true));
 
   // global xline range and offset range
@@ -59,9 +68,9 @@ void SegyRW::scan() {
   int skipx = 0;
 
   // trace index for iline
-  int it = 0;
-  int jumpl = 1;
-  int jumpx = 1;
+  size_t it = 0;
+  size_t jumpl = 1;
+  size_t jumpx = 1;
   for (size_t ii = 0; ii < ni; ++ii) {
     CHECK_SIGNALS();
     LineInfo &linfo = m_iinfos[ii];
@@ -75,7 +84,7 @@ void SegyRW::scan() {
 
     // record the number of this line, trace start and xline start
     int iiline = iline(it);
-    int itstart = it;
+    size_t itstart = it;
     int xs = xline(it);
 
     // jump
@@ -125,9 +134,17 @@ void SegyRW::scan() {
     if (is4D) {
       assert((m_iinfos[ii].lend - xs) % xstep == 0);
       int nx = (xend - xs) / xstep + 1;
+      if (nx < 0 || nx > kMaxSizeOneDimemsion) {
+        std::ostringstream oss;
+        oss << "Error when scan this file. The size of xline is error. nx = "
+            << nx << ", max size = " << kMaxSizeOneDimemsion
+            << ". If nx < 0, maybe xstep is error.";
+        throw std::runtime_error(oss.str());
+      }
+
       linfo.set_xinfos(nx);
-      int xt = itstart;
-      int xtmax = it;
+      size_t xt = itstart;
+      size_t xtmax = it;
 
       for (size_t ix = 0; ix < nx; ix++) {
         LineInfo &xinfo = linfo.xinfos[ix];
@@ -140,7 +157,7 @@ void SegyRW::scan() {
         }
 
         int xxline = iline(xt);
-        int xtstart = xt;
+        size_t xtstart = xt;
         int ostart = offset(xt);
 
         xt += jumpx;
@@ -196,10 +213,14 @@ void SegyRW::scan() {
                    "But we got xline(i) = "
                 << xline(xt) << ", line = " << xxline << ", xstep = " << xstep
                 << ". xline(i) - (line+xstep) = " << skipx
-                << ", and skipx \% xstep != 0. Maybe the xstep is wrong.";
+                << ", and skipx % xstep != 0. Maybe the xstep is wrong.";
             throw std::runtime_error(oss.str());
           }
           skipx /= xstep;
+          if (skipx < 0) {
+            throw std::runtime_error("Error when scan this file. skipx < 0. "
+                                     "Maybe the xstep is wrong.");
+          }
         }
       }
     }
@@ -214,10 +235,14 @@ void SegyRW::scan() {
                "But we got iline(i) = "
             << iline(it) << ", line = " << iiline << ", istep = " << istep
             << ". iline(i) - (line+istep) = " << skipi
-            << ", and skipi \% istep != 0. Maybe the istep is wrong.";
+            << ", and skipi % istep != 0. Maybe the istep is wrong.";
         throw std::runtime_error(oss.str());
       }
       skipi /= istep;
+      if (skipi < 0) {
+        throw std::runtime_error(
+            "Error when scan this file. skipi < 0. Maybe the istep is wrong.");
+      }
     }
   }
 
@@ -227,15 +252,29 @@ void SegyRW::scan() {
   m_meta.ni = ni;
   m_meta.start_xline = gxstart;
   m_meta.end_xline = gxend;
-  m_meta.nx = (gxend - gxstart) / xstep + 1;
+  int nx = (gxend - gxstart) / xstep + 1;
+  if (nx < 0 || nx > kMaxSizeOneDimemsion) {
+    std::ostringstream oss;
+    oss << "Error when scan this file. The size of xline is error. nx = " << nx
+        << ", max size = " << kMaxSizeOneDimemsion
+        << ". If nx < 0, maybe xstep is error.";
+    throw std::runtime_error(oss.str());
+  }
+  m_meta.nx = ni;
 
   if (is4D) {
     m_meta.start_offset = gostart;
     m_meta.end_offset = goend;
-    m_meta.no = (goend - gostart) / ostep + 1;
+    int no = (goend - gostart) / ostep + 1;
+    if (no < 0 || no > kMaxSizeOneDimemsion) {
+      std::ostringstream oss;
+      oss << "Error when scan this file. The size of offset is error. no = "
+          << no << ", max size = " << kMaxSizeOneDimemsion
+          << ". If no < 0, maybe ostep is error.";
+      throw std::runtime_error(oss.str());
+    }
+    m_meta.no = no;
   }
-
-  m_sizeL = m_meta.nx * m_meta.no;
 
   // if line or xline is not continouse, we record their idx for fast indexing
   for (auto linfo : m_iinfos) {
@@ -248,12 +287,12 @@ void SegyRW::scan() {
         continue;
       }
 
-      // we set count = -1 for not continous line
-      linfo.idx.resize(m_meta.nx, -1);
+      // we set count = kInvalid for not continous line
+      linfo.idx.resize(m_meta.nx, kInvalid);
       for (size_t xt = linfo.itstart; xt < linfo.itend + 1; xt++) {
         linfo.idx[xl2ix(xline(xt))] = xt;
       }
-      linfo.count = -1;
+      linfo.count = 0;
     } else {
       for (auto xinfo : linfo.xinfos) {
         if (xinfo.count == 0) {
@@ -265,11 +304,11 @@ void SegyRW::scan() {
         }
 
         // we set count = -1 for not continous xline
-        xinfo.idx.resize(m_meta.no, -1);
+        xinfo.idx.resize(m_meta.no, kInvalid);
         for (size_t ot = xinfo.itstart; ot < xinfo.itend + 1; ot++) {
           xinfo.idx[of2io(offset(ot))] = ot;
         }
-        xinfo.count = -1;
+        xinfo.count = 0;
       }
     }
   }
@@ -278,14 +317,16 @@ void SegyRW::scan() {
 
     // cal x, y interval
     // find a line contained more than 5 traces
-    int s = m_meta.ni / 8;
+    size_t s = m_meta.ni / 8;
     while (m_iinfos[s].count < 6 && s < m_meta.ni) {
       s++;
     }
 
+    istep = std::abs(istep);
+    xstep = std::abs(xstep);
     // Y_interval = ((x2-x1)^2 + (y2-y1)^2)^0.5 / abs(xline2 - xline1) * xstep
-    int te = m_iinfos[s].itend;
-    int ts = m_iinfos[s].itstart;
+    size_t te = m_iinfos[s].itend;
+    size_t ts = m_iinfos[s].itstart;
     m_meta.dx = std::sqrt(std::pow(coordx(te) - coordx(ts), 2) +
                           std::pow(coordy(te) - coordy(ts), 2)) /
                 std::abs(xline(te) - xline(ts)) * xstep;
@@ -311,15 +352,15 @@ void SegyRW::scan() {
   }
 }
 
-void SegyRW::read4d(float *dst, int is, int ie, int xs, int xe, int os, int oe,
-                    int ts, int te) {
+void SegyRW::read4d(float *dst, size_t is, size_t ie, size_t xs, size_t xe,
+                    size_t os, size_t oe, size_t ts, size_t te) {
   if (!isScan || m_ndim != 4) {
     throw std::runtime_error("Not scan or is not a 4d pretrack SEG-Y");
   }
 
-  int nx = xe - xs;
-  int no = oe - os;
-  int nt = te - ts;
+  size_t nx = xe - xs;
+  size_t no = oe - os;
+  size_t nt = te - ts;
   uint64_t sizeOT = no * nt;
   uint64_t sizeXOT = nx * sizeOT;
 
@@ -335,14 +376,14 @@ void SegyRW::read4d(float *dst, int is, int ie, int xs, int xe, int os, int oe,
   }
 }
 
-void SegyRW::read3d(float *dst, int is, int ie, int xs, int xe, int ts,
-                    int te) {
+void SegyRW::read3d(float *dst, size_t is, size_t ie, size_t xs, size_t xe,
+                    size_t ts, size_t te) {
   if (!isScan || m_ndim != 3) {
     throw std::runtime_error("Not scan or is not a 3d SEG-Y");
   }
 
-  int nx = xe - xs;
-  int nt = te - ts;
+  size_t nx = xe - xs;
+  size_t nt = te - ts;
   uint64_t sizeXT = nx * nt;
 
   // int step = ni >= 100 ? 1 : 100 / ni + 1;
@@ -363,7 +404,7 @@ void SegyRW::read3d(float *dst, int is, int ie, int xs, int xe, int ts,
 
 void SegyRW::read(float *dst) {
   if (m_ndim == 2) {
-    collect(dst, 0, m_meta.ntrace, 0, m_meta.nt);
+    collect(dst, (size_t)0, m_meta.ntrace, 0, m_meta.nt);
   } else if (m_ndim == 3) {
     read3d(dst, 0, m_meta.ni, 0, m_meta.nx, 0, m_meta.nt);
   } else if (m_ndim == 4) {
@@ -373,7 +414,7 @@ void SegyRW::read(float *dst) {
 
 void SegyRW::write(const float *data) {
   if (m_ndim == 2) {
-    write_traces(data, 0, m_meta.ntrace, 0, m_meta.nt);
+    write_traces(data, (size_t)0, m_meta.ntrace, 0, m_meta.nt);
   } else if (m_ndim == 3) {
     write3d(data, 0, m_meta.ni, 0, m_meta.nx, 0, m_meta.nt);
   } else if (m_ndim == 4) {
@@ -381,14 +422,14 @@ void SegyRW::write(const float *data) {
   }
 }
 
-void SegyRW::write3d(const float *data, int is, int ie, int xs, int xe, int ts,
-                     int te) {
+void SegyRW::write3d(const float *data, size_t is, size_t ie, size_t xs,
+                     size_t xe, size_t ts, size_t te) {
   if (!isScan || m_ndim != 3) {
     throw std::runtime_error("Not scan or is not a 3d SEG-Y");
   }
 
-  int nx = xe - xs;
-  int nt = te - ts;
+  size_t nx = xe - xs;
+  size_t nt = te - ts;
   uint64_t sizeXT = nx * nt;
 
   // int step = ni >= 100 ? 1 : 100 / ni + 1;
@@ -407,15 +448,15 @@ void SegyRW::write3d(const float *data, int is, int ie, int xs, int xe, int ts,
   }
 }
 
-void SegyRW::write4d(const float *data, int is, int ie, int xs, int xe, int os,
-                     int oe, int ts, int te) {
+void SegyRW::write4d(const float *data, size_t is, size_t ie, size_t xs,
+                     size_t xe, size_t os, size_t oe, size_t ts, size_t te) {
   if (!isScan || m_ndim != 4) {
     throw std::runtime_error("Not scan or is not a 4d pretrack SEG-Y");
   }
 
-  int nx = xe - xs;
-  int no = oe - os;
-  int nt = te - ts;
+  size_t nx = xe - xs;
+  size_t no = oe - os;
+  size_t nt = te - ts;
   uint64_t sizeOT = no * nt;
   uint64_t sizeXOT = nx * sizeOT;
 
@@ -460,31 +501,30 @@ void SegyRW::tofile(const std::string &binary_out_name, bool is2d) {
   if (!is2d) {
     read(dst);
   } else {
-    collect(dst, 0, (int)m_meta.ntrace, 0, m_meta.nt);
+    collect(dst, (size_t)0, m_meta.ntrace, 0, m_meta.nt);
   }
 
   rw_mmap.unmap();
 }
 
 /*   priviate function for reading */
-void SegyRW::_read_inner(float *dst, LineInfo &linfo, int ks, int ke, int ts,
-                         int te) {
-  float *odst = dst;
-  int nt = te - ts;
-  int nk = ke - ks;
+void SegyRW::_read_inner(float *dst, LineInfo &linfo, size_t ks, size_t ke,
+                         size_t ts, size_t te) {
+  size_t nt = te - ts;
+  size_t nk = ke - ks;
   uint64_t sizeKT = nt * nk;
 
   /* no data to copy, just fill */
-  if (linfo.count == 0 || NoOverlap(linfo, ks, ke)) {
+  if ((linfo.count == 0 && linfo.idx.size() == 0) || NoOverlap(linfo, ks, ke)) {
     std::fill(dst, dst + sizeKT, m_meta.fillNoValue);
     return;
   }
 
   /* line is not continuous */
-  else if (linfo.count == -1) {
+  else if (linfo.count == 0 && linfo.idx.size() > 0) {
     for (size_t ik = ks; ik < ke; ik++) {
-      int it = linfo.idx[ik];
-      if (it == -1) {
+      size_t it = linfo.idx[ik];
+      if (it > kMaxSizeOneDimemsion) {
         std::fill(dst, dst + nt, m_meta.fillNoValue);
       } else {
         m_readfunc(dst, trDataStart(it, ts), nt);
@@ -495,7 +535,9 @@ void SegyRW::_read_inner(float *dst, LineInfo &linfo, int ks, int ke, int ts,
   }
 
   else {
-    std::array<int32_t, 4> idx;
+    // float *odst = dst;
+
+    std::array<size_t, 4> idx;
     find_idx(idx, linfo, ks, ke);
 
     if (idx[0] > 0) {
@@ -509,16 +551,15 @@ void SegyRW::_read_inner(float *dst, LineInfo &linfo, int ks, int ke, int ts,
       std::fill(dst, dst + idx[1] * nt, m_meta.fillNoValue);
       dst += idx[1] * nt; // TODO: remove
     }
-    assert((dst - odst) == sizeKT);
+    // assert((dst - odst) == sizeKT);
   }
 }
 
-void SegyRW::_read4d_xo(float *dst, LineInfo &linfo, int xs, int xe, int os,
-                        int oe, int ts, int te) {
-  float *odst = dst;
-  int nt = te - ts;
-  int no = oe - os;
-  int nx = xe - xs;
+void SegyRW::_read4d_xo(float *dst, LineInfo &linfo, size_t xs, size_t xe,
+                        size_t os, size_t oe, size_t ts, size_t te) {
+  size_t nt = te - ts;
+  size_t no = oe - os;
+  size_t nx = xe - xs;
   uint64_t sizeOT = nt * no;
   uint64_t sizeXOT = nx * sizeOT;
 
@@ -528,7 +569,9 @@ void SegyRW::_read4d_xo(float *dst, LineInfo &linfo, int xs, int xe, int os,
     return;
   }
 
-  std::array<int32_t, 4> idx;
+  // float *odst = dst;
+
+  std::array<size_t, 4> idx;
   find_idx(idx, linfo, xs, xe);
 
   // fill the left
@@ -548,24 +591,24 @@ void SegyRW::_read4d_xo(float *dst, LineInfo &linfo, int xs, int xe, int os,
     std::fill(dst, dst + idx[1] * sizeOT, m_meta.fillNoValue);
     dst += idx[1] * sizeOT;
   }
-  assert((dst - odst) == sizeXOT);
+  // assert((dst - odst) == sizeXOT);
   // assert
 }
 
-void SegyRW::_write_inner(const float *src, LineInfo &linfo, int ks, int ke,
-                          int ts, int te) {
-  int nt = te - ts;
+void SegyRW::_write_inner(const float *src, LineInfo &linfo, size_t ks,
+                          size_t ke, size_t ts, size_t te) {
+  size_t nt = te - ts;
 
   /* no data to copy, just fill */
-  if (linfo.count == 0 || NoOverlap(linfo, ks, ke)) {
+  if ((linfo.count == 0 && linfo.idx.size() == 0) || NoOverlap(linfo, ks, ke)) {
     return;
   }
 
   /* line is not continuous */
-  else if (linfo.count == -1) {
+  else if (linfo.count == 0 && linfo.idx.size() > 0) {
     for (size_t ik = ks; ik < ke; ik++) {
-      int it = linfo.idx[ik];
-      if (it >= 0) {
+      size_t it = linfo.idx[ik];
+      if (it < kMaxSizeOneDimemsion) {
         m_wfunc(twDataStart(it, ts), src + (ik - ks) * nt, nt);
       }
     }
@@ -573,17 +616,18 @@ void SegyRW::_write_inner(const float *src, LineInfo &linfo, int ks, int ke,
   }
 
   else {
-    std::array<int32_t, 4> idx;
+    std::array<size_t, 4> idx;
     find_idx(idx, linfo, ks, ke);
 
     write_traces(src + idx[0] * nt, idx[2], idx[3], ts, te);
   }
 }
 
-void SegyRW::_write4d_xo(const float *src, LineInfo &linfo, int xs, int xe,
-                         int os, int oe, int ts, int te) {
-  int nt = te - ts;
-  int no = oe - os;
+void SegyRW::_write4d_xo(const float *src, LineInfo &linfo, size_t xs,
+                         size_t xe, size_t os, size_t oe, size_t ts,
+                         size_t te) {
+  size_t nt = te - ts;
+  size_t no = oe - os;
   uint64_t sizeOT = nt * no;
 
   /* no data to copy, just fill */
@@ -591,7 +635,7 @@ void SegyRW::_write4d_xo(const float *src, LineInfo &linfo, int xs, int xe,
     return;
   }
 
-  std::array<int32_t, 4> idx;
+  std::array<size_t, 4> idx;
   find_idx(idx, linfo, xs, xe);
 
   const float *srcf = src + idx[0] * sizeOT;
@@ -604,21 +648,22 @@ void SegyRW::_write4d_xo(const float *src, LineInfo &linfo, int xs, int xe,
 }
 
 uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
-                             int ks, int ke, int ts, int te, bool fromsrc) {
+                             size_t ks, size_t ke, size_t ts, size_t te,
+                             bool fromsrc) {
   char *odst = dst;
-  int nt = te - ts;
+  size_t nt = te - ts;
   bool tchanged = nt == m_meta.nt ? false : true;
 
   /* no data to copy, just fill */
-  if (linfo.count == 0 || NoOverlap(linfo, ks, ke)) {
+  if ((linfo.count == 0 && linfo.idx.size() == 0) || NoOverlap(linfo, ks, ke)) {
     return 0;
   }
 
   /* line is not continuous */
-  else if (linfo.count == -1) {
+  else if (linfo.count == 0 && linfo.idx.size() > 0) {
     for (size_t ik = ks; ik < ke; ik++) {
-      int it = linfo.idx[ik];
-      if (it >= 0) {
+      size_t it = linfo.idx[ik];
+      if (it < kMaxSizeOneDimemsion) {
         // copy trace header
         memcpy(dst, trheader(it), kTraceHeaderSize);
         if (tchanged) {
@@ -644,7 +689,7 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
   }
 
   else {
-    std::array<int32_t, 4> idx;
+    std::array<size_t, 4> idx;
     find_idx(idx, linfo, ks, ke);
     const float *srcf = src + idx[0] * nt;
 
@@ -675,12 +720,11 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
 }
 
 uint64_t SegyRW::_copy4d_xo(char *dst, const float *src, LineInfo &linfo,
-                            int xs, int xe, int os, int oe, int ts, int te,
-                            bool fromsrc) {
-  char *odst = dst;
-  int nt = te - ts;
-  int no = oe - os;
-  int nx = xe - xs;
+                            size_t xs, size_t xe, size_t os, size_t oe,
+                            size_t ts, size_t te, bool fromsrc) {
+  size_t nt = te - ts;
+  size_t no = oe - os;
+  size_t nx = xe - xs;
   uint64_t sizeOT = nt * no;
   uint64_t sizeXOT = nx * sizeOT;
 
@@ -691,9 +735,10 @@ uint64_t SegyRW::_copy4d_xo(char *dst, const float *src, LineInfo &linfo,
 
   uint64_t jump = 0;
 
-  std::array<int32_t, 4> idx;
+  std::array<size_t, 4> idx;
   find_idx(idx, linfo, xs, xe);
 
+  char *odst = dst;
   const float *srcf = src + idx[0] * sizeXOT;
 
   // read, when is 4D, xlines are always continuous as we filled
@@ -727,21 +772,21 @@ void SegyRW::scanBinaryHeader() {
 }
 
 void SegyRW::_create_from_segy(const std::string &outname, const float *src,
-                               const std::vector<int> &ranges, bool is2d,
+                               const std::vector<size_t> &ranges, bool is2d,
                                const std::string &textual, bool fromsrc,
                                uint64_t check_size) {
-  int rsize = ranges.size();
+  size_t rsize = ranges.size();
   if (rsize < 4) {
     throw std::runtime_error(
         "Error ranges size, ranges.size() must >= 4, but got " +
         std::to_string(rsize));
   }
-  int ts = ranges[rsize - 2], te = ranges[rsize - 1];
-  if (ts < 0 || te > m_meta.nt) {
+  size_t ts = ranges[rsize - 2], te = ranges[rsize - 1];
+  if (ts > te || te > m_meta.nt) {
     throw std::runtime_error("ts and te index out of range");
   }
 
-  int tstart, tend, is, ie, xs, xe, os, oe;
+  size_t tstart = 0, tend = 0, is = 0, ie = 0, xs = 0, xe = 0, os = 0, oe = 0;
   uint64_t maxsize = 0, tracesize = 0;
   if (is2d || m_ndim == 2) {
     if (ranges.size() != 4) {
@@ -796,7 +841,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
   }
 
   // set dimension
-  int nt = te - ts;
+  size_t nt = te - ts;
 
   bool tchanged = nt == m_meta.nt ? false : true;
 
@@ -864,31 +909,32 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
     }
   }
 
-  uint64_t to_remove = maxsize - (outptr - rw_mmap.data());
+  int64_t to_remove = maxsize - (outptr - rw_mmap.data());
   rw_mmap.unmap();
   if (to_remove > 0) {
     truncate_file(outname, to_remove);
   }
 }
 
-void SegyRW::cut(const std::string &segy_name, const std::vector<int> &ranges,
-                 bool is2d, const std::string &textual) {
+void SegyRW::cut(const std::string &segy_name,
+                 const std::vector<size_t> &ranges, bool is2d,
+                 const std::string &textual) {
   _create_from_segy(segy_name, nullptr, ranges, is2d, textual, true);
 }
 
 void SegyRW::create_by_sharing_header(const std::string &segy_name,
                                       const float *src,
-                                      const std::vector<int> &shape,
-                                      const std::vector<int> &start, bool is2d,
-                                      const std::string &textual) {
-  int nd = is2d ? 2 : m_ndim;
+                                      const std::vector<size_t> &shape,
+                                      const std::vector<size_t> &start,
+                                      bool is2d, const std::string &textual) {
+  size_t nd = is2d ? 2 : m_ndim;
 
   if (shape.size() != start.size() || shape.size() != nd) {
     throw std::runtime_error("shape's size must be equal to the start's size, "
                              "and shape's size must be equal to ndim");
   }
-  std::vector<int> ranges(nd * 2);
-  for (int i = 0; i < nd; ++i) {
+  std::vector<size_t> ranges(nd * 2);
+  for (size_t i = 0; i < nd; ++i) {
     ranges[i * 2] = start[i];
     ranges[i * 2 + 1] = start[i] + shape[i];
   }
@@ -897,9 +943,9 @@ void SegyRW::create_by_sharing_header(const std::string &segy_name,
 
 void SegyRW::create_by_sharing_header(const std::string &segy_name,
                                       const std::string &src_name,
-                                      const std::vector<int> &shape,
-                                      const std::vector<int> &start, bool is2d,
-                                      const std::string &textual) {
+                                      const std::vector<size_t> &shape,
+                                      const std::vector<size_t> &start,
+                                      bool is2d, const std::string &textual) {
   std::error_code error;
   mio::mmap_source float_file;
   float_file.map(src_name, error);
@@ -908,13 +954,13 @@ void SegyRW::create_by_sharing_header(const std::string &segy_name,
                              src_name);
   }
 
-  int nd = is2d ? 2 : m_ndim;
+  size_t nd = is2d ? 2 : m_ndim;
   if (shape.size() != start.size() || shape.size() != nd) {
     throw std::runtime_error("shape's size must be equal to the start's size, "
                              "and shape's size must be equal to ndim");
   }
-  std::vector<int> ranges(nd * 2);
-  for (int i = 0; i < nd; ++i) {
+  std::vector<size_t> ranges(nd * 2);
+  for (size_t i = 0; i < nd; ++i) {
     ranges[i * 2] = start[i];
     ranges[i * 2 + 1] = start[i] + shape[i];
   }
@@ -924,7 +970,7 @@ void SegyRW::create_by_sharing_header(const std::string &segy_name,
                     float_file.size());
 }
 
-inline static void modify_keys(char *dst, const int32_t *keys, int keysize) {
+inline static void modify_keys(char *dst, const int32_t *keys, size_t keysize) {
   set_keyi4(dst, 5, keys[0]);
   set_keyi4(dst, 9, keys[0]);
   set_keyi4(dst, 189, keys[0]);
@@ -946,11 +992,11 @@ inline static void modify_keys(char *dst, const int32_t *keys, int keysize) {
 }
 
 void create_segy(const std::string &segyname, const float *src,
-                 const int32_t *keys, const std::vector<int> &shape,
+                 const int32_t *keys, const std::vector<size_t> &shape,
                  const std::string &textual, const uchar *bheader,
-                 const uchar *theader, int keysize) {
-  int ndim = shape.size();
-  int ni, nx, no;
+                 const uchar *theader, size_t keysize) {
+  size_t ndim = shape.size();
+  size_t ni, nx, no;
   uint64_t nt;
   uint64_t ntrace;
   if (ndim == 2) {
@@ -981,7 +1027,7 @@ void create_segy(const std::string &segyname, const float *src,
   }
   char *dst = rw_mmap.data();
   int dformat = swap_endian<int16_t>(bheader + kBSampleFormatField);
-  int esize = 0;
+  size_t esize = 0;
 
   auto it = kElementSize.find(dformat);
   if (it != kElementSize.end()) {
