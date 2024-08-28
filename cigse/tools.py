@@ -89,7 +89,7 @@ def get_metaInfo(
     else:
         segy = Pysegy(str(segyname))
 
-    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
+    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, None, None) # yapf: disable
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
     segy.setXYLocations(xloc, yloc)
@@ -113,6 +113,63 @@ def get_metaInfo(
     else:
         meta['unit'] = 'm'
     return meta
+
+
+def get_lineInfo(
+    fname: str,
+    iline: int = None,
+    xline: int = None,
+    offset: int = None,
+    istep: int = None,
+    xstep: int = None,
+    ostep: int = None,
+    mode: str = 'raw',
+):
+    """
+    mode can be one of ['raw', 'geom']
+    """
+    if isinstance(fname, Pysegy):
+        segy = fname
+    else:
+        segy = Pysegy(str(fname))
+
+    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, None, None) # yapf: disable
+    segy.setLocations(iline, xline, offset)
+    segy.setSteps(istep, xstep, ostep)
+    segy.setXYLocations(xloc, yloc)
+    segy.scan()
+    lineinfo = segy.get_lineInfo()
+    ndim = segy.ndim
+
+    out = None
+    if mode == 'raw':
+        out = lineinfo
+    elif mode == 'geom':
+        if ndim == 4:
+            raise NotImplementedError("4D geometry is not supported yet")
+        lineinfo = lineinfo[~np.any(lineinfo == -1, axis=1)]
+        N = lineinfo.shape[0]
+        out = np.zeros((N * 2 + 1, 4), dtype=np.int32)
+        out[:N, :2] = lineinfo[:, :2]
+        for i in range(N):
+            idx = lineinfo[i, 3]
+            out[i, 2:] = [segy.coordx(idx), segy.coordy(idx)]
+
+        lineinfo = lineinfo[::-1, ...]
+        out[N:2 * N, :2] = lineinfo[:, [0, 2]]
+        for i in range(N):
+            idx = lineinfo[i, 4]
+            out[N + i, 2:] = [segy.coordx(idx), segy.coordy(idx)]
+
+        out[-1] = out[0]
+    else:
+        raise ValueError("`mode` only support 'raw' and 'geom'")
+
+    if not isinstance(fname, Pysegy):
+        segy.close()
+
+    # HACK: add more mode
+    return out
 
 
 def trace_count(fname: str) -> int:
@@ -213,8 +270,8 @@ def full_scan(fname: str, iline: int, xline: int, offset: int = 37) -> dict:
 
     return geominfo
 
-
-def load_without_scan(
+# TODO: what's name of this function?
+def load_by_geom(
     fname,
     geominfo: dict,
     *,
@@ -372,5 +429,5 @@ def load_unsorted3D(*args, **kwargs):
     using fromfile_without_scan to load unsorted 3D segy file
     """
     raise RuntimeError(
-        "`load_unsorted3D` is deprecated and removed. Please use `load_without_scan` instead."
+        "`load_unsorted3D` is deprecated and removed. Please use `load_by_geom` instead."
     )

@@ -10,7 +10,6 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
-#include <string>
 #include <vector>
 
 namespace segy {
@@ -22,9 +21,11 @@ inline static void set_bkeyi2(char *bheader, int loc, int16_t val) {
 inline static void set_keyi2(char *theader, int loc, int16_t val) {
   *reinterpret_cast<int16_t *>(theader + loc - 1) = swap_endian<int16_t>(val);
 }
+inline static void set_keyi4(char *theader, int loc, int32_t val) {
+  *reinterpret_cast<int32_t *>(theader + loc - 1) = swap_endian<int32_t>(val);
+}
 
 void SegyRW::scan() {
-  // TODO: check order
   m_meta.start_time = keyi2(0, kTStartTimeField);
   m_meta.scalar = keyi2(0, kTScalarField);
 
@@ -79,6 +80,7 @@ void SegyRW::scan() {
 
     // jump
     it += jumpl;
+    it = it < m_meta.ntrace ? it : m_meta.ntrace - 1;
 
     // jump too small
     if (iline(it) == iiline) {
@@ -95,14 +97,15 @@ void SegyRW::scan() {
       }
     }
 
-    if (iline(it) != (iiline + istep) || iline(it - 1) != iiline) {
+    if (it < ntrace() &&
+        (iline(it) != (iiline + istep) || iline(it - 1) != iiline)) {
       std::ostringstream oss;
       oss << "Error when scan this file. We except `iline(i) == (line+istep)` "
              "and `iline(i-1)==line` when the line breaking, however, we got "
              "line = "
           << iiline << ", istep = " << istep << ", iline(i) = " << iline(it)
-          << ", iline(i-1) = " << iline(it - 1)
-          << ". Maybe this file is unsorted.";
+          << ", iline(i-1) = " << iline(it - 1) << ", i = " << it
+          << ". Maybe this file is unsorted." << ntrace();
       throw std::runtime_error(oss.str());
     }
 
@@ -141,6 +144,7 @@ void SegyRW::scan() {
         int ostart = offset(xt);
 
         xt += jumpx;
+        xt = xt < m_meta.ntrace ? xt : m_meta.ntrace - 1;
 
         // jump too small
         if (xline(xt) == xxline) {
@@ -157,7 +161,8 @@ void SegyRW::scan() {
           }
         }
 
-        if (xline(xt) != (xxline + xstep) || xline(xt - 1) != xxline) {
+        if (xt < ntrace() &&
+            (xline(xt) != (xxline + xstep) || xline(xt - 1) != xxline)) {
           std::ostringstream oss;
           oss << "Error when scan this file. We except `xline(i) == "
                  "(line+xstep)` and `xline(i-1)==line` when the xline "
@@ -917,6 +922,94 @@ void SegyRW::create_by_sharing_header(const std::string &segy_name,
   const float *src = reinterpret_cast<const float *>(float_file.data());
   _create_from_segy(segy_name, src, ranges, is2d, textual, false,
                     float_file.size());
+}
+
+inline static void modify_keys(char *dst, const int32_t *keys, int keysize) {
+  set_keyi4(dst, 5, keys[0]);
+  set_keyi4(dst, 9, keys[0]);
+  set_keyi4(dst, 189, keys[0]);
+  set_keyi4(dst, 17, keys[1]);
+  set_keyi4(dst, 21, keys[1]);
+  set_keyi4(dst, 193, keys[1]);
+  if (keysize == 4) {
+    set_keyi4(dst, 73, keys[2]);
+    set_keyi4(dst, 77, keys[3]);
+    set_keyi4(dst, 181, keys[2]);
+    set_keyi4(dst, 185, keys[3]);
+  } else if (keysize == 5) {
+    set_keyi4(dst, 37, keys[2]);
+    set_keyi4(dst, 73, keys[3]);
+    set_keyi4(dst, 77, keys[4]);
+    set_keyi4(dst, 181, keys[3]);
+    set_keyi4(dst, 185, keys[4]);
+  }
+}
+
+void create_segy(const std::string &segyname, const float *src,
+                 const int32_t *keys, const std::vector<int> &shape,
+                 const std::string &textual, const uchar *bheader,
+                 const uchar *theader, int keysize) {
+  int ndim = shape.size();
+  int ni, nx, no;
+  uint64_t nt;
+  uint64_t ntrace;
+  if (ndim == 2) {
+    ntrace = shape[0];
+    nt = shape[1];
+  } else if (ndim == 3) {
+    ni = shape[0];
+    nx = shape[1];
+    nt = shape[2];
+    ntrace = ni * nx;
+  } else if (ndim == 4) {
+    ni = shape[0];
+    nx = shape[1];
+    no = shape[2];
+    nt = shape[3];
+    ntrace = ni * nx * no;
+  } else {
+    throw std::runtime_error("shape's size must be 2, 3 or 4, but got " +
+                             std::to_string(ndim));
+  }
+  uint64_t needsize = kTraceHeaderStart + ntrace * (nt * 4 + kTraceHeaderSize);
+  create_file(segyname, needsize);
+
+  std::error_code error;
+  mio::mmap_sink rw_mmap = mio::make_mmap_sink(segyname, error);
+  if (error) {
+    throw std::runtime_error("mmap fail in 'rw' mode: " + segyname);
+  }
+  char *dst = rw_mmap.data();
+  int dformat = swap_endian<int16_t>(bheader + kBSampleFormatField);
+  int esize = 0;
+
+  auto it = kElementSize.find(dformat);
+  if (it != kElementSize.end()) {
+    esize = it->second;
+  } else {
+    throw std::runtime_error("Unknown data format: " + std::to_string(dformat));
+  }
+
+  WriteFunc wfunc;
+  setWFunc(wfunc, dformat);
+
+  memcpy(dst, textual.data(), kTextualHeaderSize);
+  dst += kTextualHeaderSize;
+
+  memcpy(dst, bheader, kBinaryHeaderSize);
+  dst += kBinaryHeaderSize;
+
+  for (size_t i = 0; i < ntrace; i++) {
+    CHECK_SIGNALS();
+    memcpy(dst, theader, kTraceHeaderSize);
+    modify_keys(dst, keys + i * (uint64_t)keysize, keysize);
+    dst += kTraceHeaderSize;
+    wfunc(dst, src + i * nt, nt);
+    dst += nt * esize;
+  }
+
+  assert(dst - rw_mmap.data() == needsize);
+  rw_mmap.unmap();
 }
 
 } // namespace segy

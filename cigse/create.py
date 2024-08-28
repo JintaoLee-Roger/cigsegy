@@ -67,3 +67,36 @@ def parser_textual():
 
     return textual
     # fmt: on
+
+
+class SegyCreate:
+
+    def __init__(self, fname, data=None, shape=None, metainfo=None):
+        self.filename = fname
+        self.textual_header = None
+        self.binary_header = None
+        self.trace_header = None
+        self.data = data
+        self.shape = shape
+        self.metainfo = metainfo
+
+    def set_textual_header(self, textual=None):
+        pass
+
+    def set_binary_header(self, bheader=None):
+        pass
+
+    def set_trace_header(self, theader=None):
+        pass
+
+    def copy_textual_from(self, segyname):
+        pass
+
+    def copy_bheader_from(self, segyname):
+        pass
+
+    def copy_theader_from(self, segyname):
+        pass
+
+    def create(self, data, keys):
+        pass

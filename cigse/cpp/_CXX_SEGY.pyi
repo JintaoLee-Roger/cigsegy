@@ -157,38 +157,47 @@ class Pysegy:
 
     def bkeyi2(self, loc: int) -> int:
         """
+        return the key value of the binary header in loc, 2 bytes
         """
 
     def bkeyi4(self, loc: int) -> int:
         """
+        return the key value of the binary header in loc, 4 bytes
         """
 
     def keyi2(self, n: int, loc: int) -> int:
         """
+        return the key value of the n-th trace header in loc, 2 bytes
         """
 
     def keyi4(self, n: int, loc: int) -> int:
         """
+        return the key value of the n-th trace header in loc, 4 bytes
         """
 
     def iline(self, n: int) -> int:
         """
+        return the inline value of the n-th trace
         """
 
     def xline(self, n: int) -> int:
         """
+        return the crossline value of the n-th trace
         """
 
     def offset(self, n: int) -> int:
         """
+        return the offset value of the n-th trace
         """
 
     def coordx(self, n: int) -> int:
         """
+        return the X coordinate value of the n-th trace
         """
 
     def coordy(self, n: int) -> int:
         """
+        return the Y coordinate value of the n-th trace
         """
 
     def get_binary_header(self) -> np.ndarray:
@@ -224,7 +233,7 @@ class Pysegy:
         beg : int
             the start trace index
         end : int 
-            the stop trace index
+            the stop trace index (not included)
 
         Returns
         -------
@@ -234,32 +243,100 @@ class Pysegy:
 
     def itrace(self, n: int) -> np.ndarray:
         """
-        """
-
-    @overload
-    def collect(self, index: np.ndarray, tbeg: int, tend: int) -> np.ndarray:
-        """
+        exract the data in the n-th trace
         """
 
     @overload
     def collect(self, beg: int, end: int, tbeg: int, tend: int) -> np.ndarray:
         """
+        collect the data from the beg-th trace to the end-th trace (not included),
+        time window is from tbeg to tend
+
+        Parameters
+        ----------
+        beg : int
+            the start trace index
+        end : int
+            the stop trace index (not included)
+        tbeg : int
+            the start time index
+        tend : int
+            the stop time index (not included)
+        
+        Returns
+        -------
+        numpy.ndarray
+            shape is (end-beg, tend-tbeg)
+        """
+
+    @overload
+    def collect(self, index: np.ndarray, tbeg: int, tend: int) -> np.ndarray:
+        """
+        Collect the data from the index array. This funcion is useful 
+        when collect unsorted traces. if a index is negative, the trace 
+        will be filled by fills (0 is default).
+
+        Parameters
+        -----------
+        index : numpy.ndarray
+            1D array, np.int32, 
+        tbeg : int
+            the start time index
+        tend : int
+            the stop time index (not included)
+        
+        Returns
+        -------
+        numpy.ndarray
+            shape is (index.shape[0], tend-tbeg)
+
+        Examples
+        ---------
+        >>> index = np.array([10, -1, 200, 300])
+        >>> data = Pysegy('out.segy').collect(index, 0, 1000)
+        >>> data.shape # (4, 1000)
+        >>> np.allclose(data[1], 0) # True
         """
 
     def get_keylocs(self) -> dict:
         """
+        get key locations in dict format
         """
 
     def get_metainfo(self) -> dict:
         """
+        get metainfo in dict format.
+        """
+
+    def get_lineInfo(self) -> np.ndarray:
+        """
+        get lineinfo in np.ndarray format.
+        if ndim == 3, each raw: 
+            [iline, xstart, xend, trace_start, trace_end]
+        if ndim == 4, each raw:
+            [iline, xline, ostart, oend, trace_start, trace_end]
+
+
+        Returns
+        -------
+        numpy.ndarray
+            if ndim == 3, each raw: 
+                [iline, xstart, xend, trace_start, trace_end]
+            if ndim == 4, each raw:
+                [iline, xline, ostart, oend, trace_start, trace_end]
         """
 
     def set_segy_type(self, ndim) -> None:
         """
+        set the segy type, 2 or 3 or 4
+        2 for a collect of traces,
+        3 for poststack 3D volume,
+        4 for prestack 4D volume/gather
         """
 
     def scan(self) -> None:
         """
+        fast scan the file to obtain some meta infos
         """
 
     def read4d(
@@ -428,6 +505,38 @@ class Pysegy:
     ) -> None:
         """
         """
+
+
+def create_segy(
+    segyname: str,
+    src: np.ndarray,
+    keys: np.ndarray,
+    textual: str,
+    bheader: np.ndarray,
+    theader: np,
+    ndarray,
+) -> None:
+    """
+    create a new segy file from src data
+
+    Parameters
+    ----------
+    segyname : str
+        the name of the segy file
+    src : np.ndarray, np.float32
+        the source data in np.float32
+    keys : np.ndarray, np.int32
+        the keys of the traces, shape is (N, keysize), where N is the number of traces,
+        and keysize can be 4, 5. N = src.shape[0]*...*src.shape[-2].
+        if kesize is 4, each row contains [iline, xline, X, Y]
+        if keysize is 5, each row contains [iline, xline, offset, X, Y]
+    textual : str
+        the textual header, 3200 bytes
+    bheader : np.ndarray, np.uint8
+        the binary header, 400 bytes
+    theader : np.ndarray, np.uint8
+        the trace header template, 240 bytes
+    """
 
 
 def ibm_to_ieee(value: float, is_big_endian: bool) -> float:

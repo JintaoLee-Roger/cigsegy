@@ -4,8 +4,8 @@
 ** University of Science and Technology of China (USTC).
 *********************************************************************/
 
-#ifndef CIG_sUTILS_H
-#define CIG_sUTILS_H
+#ifndef CIG_UTILS_H
+#define CIG_UTILS_H
 
 #include <algorithm>
 #include <cctype>
@@ -119,8 +119,10 @@ inline void swap_endian_inplace(void *dst, const void *src, int n) {
   const uchar *_src = static_cast<const uchar *>(src);
   static_assert(CHAR_BIT == 8, "CHAR_BIT != 8");
   memcpy(_dst, _src, n);
-
-  if (n <= 16) {
+  if (n == 1) {
+    return;
+  }
+  if (n <= 8) {
     // don't do anything if n > 16
     // uchar u8[17] = {0}; // for src == dst
     // for (int i = 0; i < n; i++) {
@@ -307,6 +309,105 @@ inline void float2sgyibm(char *dst, const float *src, int size) {
 
   for (int i = 0; i < size; ++i) {
     _dst[i] = ieee_to_ibm(src[i], true);
+  }
+}
+
+using ReadFunc = std::function<void(float *, const char *, int)>;
+using WriteFunc = std::function<void(char *, const float *, int)>;
+
+inline void setRFunc(ReadFunc &m_readfunc, int dformat) {
+  switch (dformat) {
+  case 1:
+    m_readfunc = [](float *dst, const char *src, int size) {
+      convert2npibm(dst, src, size);
+    };
+    break;
+  case 2:
+    m_readfunc = [](float *dst, const char *src, int size) {
+      convert2npT<int32_t>(dst, src, size);
+    };
+    break;
+  case 3:
+    m_readfunc = [](float *dst, const char *src, int size) {
+      convert2npT<int16_t>(dst, src, size);
+    };
+    break;
+  case 5:
+    m_readfunc = [](float *dst, const char *src, int size) {
+      convert2npT<float>(dst, src, size);
+    };
+    break;
+  case 8:
+    m_readfunc = [](float *dst, const char *src, int size) {
+      convert2npT<int8_t>(dst, src, size);
+    };
+    break;
+  case 10:
+    m_readfunc = [](float *dst, const char *src, int size) {
+      convert2npT<uint32_t>(dst, src, size);
+    };
+    break;
+  case 11:
+    m_readfunc = [](float *dst, const char *src, int size) {
+      convert2npT<uint16_t>(dst, src, size);
+    };
+    break;
+  case 16:
+    m_readfunc = [](float *dst, const char *src, int size) {
+      convert2npT<uint8_t>(dst, src, size);
+    };
+    break;
+  default:
+    throw std::invalid_argument("Unsupported dformat value: " +
+                                std::to_string(dformat));
+  }
+}
+
+inline void setWFunc(WriteFunc &m_wfunc, int dformat) {
+  switch (dformat) {
+  case 1:
+    m_wfunc = [](char *dst, const float *src, int size) {
+      float2sgyibm(dst, src, size);
+    };
+    break;
+  case 2:
+    m_wfunc = [](char *dst, const float *src, int size) {
+      float2sgyT<int32_t>(dst, src, size);
+    };
+    break;
+  case 3:
+    m_wfunc = [](char *dst, const float *src, int size) {
+      float2sgyT<int16_t>(dst, src, size);
+    };
+    break;
+  case 5:
+    m_wfunc = [](char *dst, const float *src, int size) {
+      float2sgyT<float>(dst, src, size);
+    };
+    break;
+  case 8:
+    m_wfunc = [](char *dst, const float *src, int size) {
+      float2sgyT<int8_t>(dst, src, size);
+    };
+    break;
+  case 10:
+    m_wfunc = [](char *dst, const float *src, int size) {
+      float2sgyT<uint32_t>(dst, src, size);
+    };
+    break;
+  case 11:
+    m_wfunc = [](char *dst, const float *src, int size) {
+      float2sgyT<uint16_t>(dst, src, size);
+    };
+    break;
+  case 16:
+    m_wfunc = [](char *dst, const float *src, int size) {
+      float2sgyT<uint8_t>(dst, src, size);
+    };
+    break;
+  default:
+    throw std::invalid_argument("Unsupported dformat value: " +
+                                std::to_string(dformat));
   }
 }
 

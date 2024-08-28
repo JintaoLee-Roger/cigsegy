@@ -580,7 +580,7 @@ class InnerMixin:
             f"Function {func} is not implemented for SegyNP")
 
     def __del__(self):
-        self.close()
+        self.segy.close()
 
     def __repr__(self) -> str:
         out = f"cigsey.SegyNP class, file name: '{self.fname}'\n"
@@ -603,6 +603,7 @@ class SegyNP:
                  ostep=None,
                  xloc=None,
                  yloc=None,
+                 *,
                  ndim=None,
                  as_unsorted=False,
                  keys=None) -> None:

@@ -7,7 +7,7 @@
 
 // #include "segyc.hpp"
 #include "segyrw.h"
-#include "sutils.hpp"
+#include "utils.hpp"
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -287,67 +287,104 @@ public:
     }
     py::array_t<int> out;
     if (ndim() == 3) {
-      out = py::array_t<int>({m_meta.ni, 3});
-    } else {
-      out = py::array_t<int>({m_meta.ni, m_meta.nx, 4});
-    }
-    int *ptr = out.mutable_data();
-
-    if (ndim() == 3) {
+      out = py::array_t<int>({m_meta.ni, 5});
+      int *ptr = out.mutable_data();
+      std::fill(ptr, ptr + out.size(), -1);
       for (auto linfo : m_iinfos) {
         ptr[0] = linfo.line;
-        if (linfo.count == 0) {
-          ptr[1] = -1;
-          ptr[2] = -1;
-        } else {
-          ptr[1] = linfo.itstart;
-          ptr[2] = linfo.itend;
+        if (linfo.count > 0) {
+          ptr[1] = linfo.lstart;
+          ptr[2] = linfo.lend;
+          ptr[3] = linfo.itstart;
+          ptr[4] = linfo.itend;
         }
-        ptr += 3;
+        ptr += 5;
       }
     } else {
+      out = py::array_t<int>({m_meta.ni, m_meta.nx, 6});
+      int *ptr = out.mutable_data();
+      std::fill(ptr, ptr + out.size(), -1);
+
       for (auto linfo : m_iinfos) {
-        // TODO: fill
+        int xs = (linfo.lstart - m_meta.start_xline) / m_keys.xstep;
+        int xe = (linfo.lend - m_meta.start_xline) / m_keys.xstep;
+
+        if (xs > 0) {
+          for (int ix = 0; ix < xs; ix++) {
+            ptr[0] = linfo.line;
+            ptr[1] = linfo.lstart + ix * m_keys.xstep;
+            ptr += 6;
+          }
+        }
+
         for (auto xinfo : linfo.xinfos) {
           ptr[0] = linfo.line;
           ptr[1] = xinfo.line;
-          if (xinfo.count == 0) {
-            ptr[2] = -1;
-            ptr[3] = -1;
-          } else {
-            ptr[2] = xinfo.itstart;
-            ptr[3] = xinfo.itend;
+          if (xinfo.count > 0) {
+            ptr[2] = xinfo.lstart;
+            ptr[3] = xinfo.lend;
+            ptr[4] = xinfo.itstart;
+            ptr[5] = xinfo.itend;
           }
-          ptr += 4;
+          ptr += 6;
+        }
+
+        if (xe < m_meta.nx) {
+          for (int ix = xe; ix < m_meta.nx; ix++) {
+            ptr[0] = linfo.line;
+            ptr[1] = linfo.lend + ix * m_keys.xstep;
+            ptr += 6;
+          }
         }
       }
+      if ((ptr - out.mutable_data()) != out.size()) {
+        std::runtime_error("Error when get lineinfo");
+      }
     }
-
     return out;
   }
 };
 
-// class SegyCpy : public segy::SegyC {
-// public:
-//   using segy::SegyC::SegyC;
+void create_segy(const std::string &segyname, const npfloat &src,
+                 const npint32 &keys, const std::string &textual,
+                 const npuchar &bheader, const npuchar &theader) {
+  if (textual.size() != kTextualHeaderSize) {
+    throw std::runtime_error("textual header size must be 3200, but got " +
+                             std::to_string(textual.size()));
+  }
+  if (bheader.size() != kBinaryHeaderSize) {
+    throw std::runtime_error("binary header size must be 400, but got " +
+                             std::to_string(bheader.size()));
+  }
+  if (theader.size() != kTraceHeaderSize) {
+    throw std::runtime_error("trace header size must be 240, but got " +
+                             std::to_string(theader.size()));
+  }
+  if (keys.ndim() != 2) {
+    throw std::runtime_error("keys must be a 2D array.");
+  }
+  int keysize = keys.shape()[1];
+  std::vector<int> shape(src.shape(), src.shape() + src.ndim());
+  uint64_t ntrace = 1;
+  for (int i = 0; i < shape.size() - 1; i++) {
+    ntrace *= shape[i];
+  }
+  if (ntrace != keys.shape()[0]) {
+    throw std::runtime_error("Input data size not match with keys.");
+  }
+  if (keysize < 4 || keysize > 5) {
+    throw std::runtime_error("keys size must be 4 or 5");
+  }
+  if (shape.size() == 4 && keysize != 5) {
+    throw std::runtime_error("keys size must be 5 when ndim == 4.");
+  }
 
-//   void add_trace(const npfloat &src, int idx, int iline, int xline,
-//                  int offset = 0) {
-//     // TODO: check src' length == nt
-//     auto buff = src.request();
-//     float *ptr = static_cast<float *>(buff.ptr);
-//     segy::SegyC::add_trace(ptr, idx, iline, xline, offset);
-//   }
-
-//   void create(const npfloat &src, const npint32 &xyico) {
-//     // TODO: check bound
-//     auto buff = src.request();
-//     float *ptr = static_cast<float *>(buff.ptr);
-//     auto buff2 = xyico.request();
-//     int32_t *ptr2 = static_cast<int32_t *>(buff2.ptr);
-//     segy::SegyC::create(ptr, ptr2);
-//   }
-// };
+  const float *ptr = src.data();
+  const int32_t *kptr = keys.data();
+  const uchar *bptr = bheader.data();
+  const uchar *tptr = theader.data();
+  create_segy(segyname, ptr, kptr, shape, textual, bptr, tptr, keysize);
+}
 
 npfloat ieees_to_ibms(const npfloat &ieee_arr, bool is_little_endian) {
   auto shape = ieee_arr.shape();
@@ -501,64 +538,12 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
 
       ;
 
-  //   py::class_<SegyCpy>(m, "SegyCpy")
-  //       .def(py::init<std::string, int, int>())
-  //       .def(py::init<std::string, int, int, int>())
-  //       .def(py::init<std::string, int, int, int, int>())
-
-  //       // location
-  //       .def("setLocations", &SegyCpy::setLocations, py::arg("iline"),
-  //            py::arg("xline"), py::arg("offset") = 37)
-  //       .def("setInlineLocation", &SegyCpy::setInlineLocation,
-  //       py::arg("iline")) .def("setCrosslineLocation",
-  //       &SegyCpy::setCrosslineLocation,
-  //            py::arg("xline"))
-  //       .def("setOffsetLocation", &SegyCpy::setOffsetLocation,
-  //       py::arg("offset")) .def("setXLocation", &SegyCpy::setXLocation,
-  //       py::arg("xloc")) .def("setYLocation", &SegyCpy::setYLocation,
-  //       py::arg("yloc")) .def("setXYLocation", &SegyCpy::setXYLocations,
-  //       py::arg("xloc"),
-  //            py::arg("yloc"))
-  //       .def("setInlineStep", &SegyCpy::setInlineStep, py::arg("istep"))
-  //       .def("setCrosslineStep", &SegyCpy::setCrosslineStep,
-  //       py::arg("xstep")) .def("setOffsetStep", &SegyCpy::setOffsetStep,
-  //       py::arg("ostep")) .def("setSteps", &SegyCpy::setSteps,
-  //       py::arg("istep"), py::arg("xstep"),
-  //            py::arg("ostep") = 1)
-
-  //       .def("setStartTime", &SegyCpy::setStartTime, py::arg("start_time"))
-  //       .def("setInlineInterval", &SegyCpy::setInlineInterval, py::arg("di"))
-  //       .def("setCrosslineInterval", &SegyCpy::setCrosslineInterval,
-  //            py::arg("dx"))
-  //       .def("setStartInline", &SegyCpy::setStartInline, py::arg("il"))
-  //       .def("setStartCrossline", &SegyCpy::setStartCrossline, py::arg("xl"))
-  //       .def("setStartOffset", &SegyCpy::setStartOffset, py::arg("of"))
-
-  //       .def("copy_textual_from", &SegyCpy::copy_textual_from,
-  //            py::arg("segyname"))
-  //       .def("copy_bheader_from", &SegyCpy::copy_bheader_from,
-  //            py::arg("segyname"))
-  //       .def("copy_theader_from", &SegyCpy::copy_theader_from,
-  //            py::arg("segyname"))
-
-  //       .def("set_bkeyi2", &SegyCpy::set_bkeyi2, py::arg("loc"),
-  //       py::arg("val")) .def("set_bkeyi4", &SegyCpy::set_bkeyi4,
-  //       py::arg("loc"), py::arg("val")) .def("set_keyi2",
-  //       &SegyCpy::set_keyi2, py::arg("n"), py::arg("loc"),
-  //            py::arg("val"))
-  //       .def("set_keyi4", &SegyCpy::set_keyi4, py::arg("n"), py::arg("loc"),
-  //            py::arg("val"))
-  //       .def("set_iline", &SegyCpy::set_iline, py::arg("n"), py::arg("val"))
-  //       .def("set_xline", &SegyCpy::set_xline, py::arg("n"), py::arg("val"))
-  //       .def("set_offset", &SegyCpy::set_offset, py::arg("n"),
-  //       py::arg("val")) .def("set_coordx", &SegyCpy::set_coordx,
-  //       py::arg("n"), py::arg("val")) .def("set_coordy",
-  //       &SegyCpy::set_coordy, py::arg("n"), py::arg("val")) .def("add_trace",
-  //       &SegyCpy::add_trace, py::arg("src"), py::arg("idx"),
-  //            py::arg("iline"), py::arg("xline"), py::arg("offset") = 0)
-  //       .def("create", &SegyCpy::create, py::arg("src"), py::arg("xyico"));
-  ;
-
+  m.def("create_segy",
+        overload_cast_<const std::string &, const npfloat &, const npint32 &,
+                       const std::string &, const npuchar &, const npuchar &>()(
+            &create_segy),
+        py::arg("segyname"), py::arg("src"), py::arg("keys"),
+        py::arg("textual"), py::arg("bheader"), py::arg("theader"));
   m.def("ieee_to_ibm", &segy::ieee_to_ibm, py::arg("value"),
         py::arg("is_little_endian"));
   m.def("ibm_to_ieee", &segy::ibm_to_ieee, py::arg("value"),

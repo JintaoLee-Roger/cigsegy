@@ -14,9 +14,9 @@ such as survey coordinates and trace header keys.
 
 import numpy as np
 from typing import Tuple
-from pathlib import Path
 from cigse.cpp._CXX_SEGY import Pysegy
-from cigse import utils, ExceptionWrapper
+from cigse import ExceptionWrapper, tools
+from cigse import SegyNP
 
 try:
     import matplotlib.pyplot as plt
@@ -24,11 +24,16 @@ except BaseException as E:
     plt = ExceptionWrapper(E, "run `pip install matplotlib` to install the dependency") # yapf: disable
 
 
+try:
+    import cigvis
+except BaseException as E:
+    cigvis = ExceptionWrapper(E, "run `pip install cigvis` to install the dependency") # yapf: disable
+
+
 def plot_region(fname: str,
                 mode: str = 'line',
-                loc: list = None,
-                cdpxy_loc: list = None,
-                save: str = None) -> None:
+                save: str = None,
+                **kwargs) -> None:
     """
     plot the region map (x and y axis are inline and crossline)
 
@@ -44,54 +49,11 @@ def plot_region(fname: str,
     if mode not in ['line', 'cdpxy', 'xy']:
         raise RuntimeError(f"mode must be 'line' or 'cdpxy'/'xy', mode = {mode}") # yapf: disable
 
-    assert loc is None or len(loc) == 4
-    assert cdpxy_loc is None or len(cdpxy_loc) == 2
-    cdpx = 181 if cdpxy_loc is None else cdpxy_loc[0]
-    cdpy = 185 if cdpxy_loc is None else cdpxy_loc[1]
-
-    if isinstance(fname, Pysegy):
-        segy = fname
-        try:
-            segy.scan()
-        except:
-            loc = utils.guess(segy)[0]
-            segy.setLocations(loc[0], loc[1])
-            segy.setSteps(loc[2], loc[3])
-            segy.setXYLocations(loc[4], loc[5])
-            segy.scan()
-        lineinfo = segy.get_lineInfo()
-    elif isinstance(fname, (str, Path)):
-        if loc is None:
-            loc = utils.guess(str(fname))[0]
-        # TODO: is there has offset location?
-        segy = Pysegy(str(fname))
-        segy.setLocations(loc[0], loc[1])
-        segy.setSteps(loc[2], loc[3])
-        segy.scan()
-        lineinfo = segy.get_lineInfo()
-    else:
-        raise RuntimeError("Invalid type of `segy`")
-
+    geom = tools.get_lineInfo(fname, mode='geom', **kwargs)
     if mode == 'line':
-        x = np.concatenate((lineinfo[:, 0], lineinfo[::-1, 0]))
-        y = np.concatenate((lineinfo[:, 1], lineinfo[::-1, 2]))
-        x = np.append(x, x[0])
-        y = np.append(y, y[0])
+        x, y = geom[:, 0], geom[:, 1]
     else:
-        ni = lineinfo.shape[0]
-        N = ni * 2 + 1
-        x = np.zeros(N, dtype=int)
-        y = np.zeros(N, dtype=int)
-        for i in range(ni):  # TODO:
-            x[i] = segy.get_trace_keys(cdpx, lineinfo[i, 3])
-            y[i] = segy.get_trace_keys(cdpy, lineinfo[i, 3])
-            x[N - i - 2] = segy.get_trace_keys(cdpx, lineinfo[i, 4])
-            y[N - i - 2] = segy.get_trace_keys(cdpy, lineinfo[i, 4])
-        x[-1] = x[0]
-        y[-1] = y[0]
-
-    istep = x[1] - x[0]
-    xstep = (lineinfo[0, 2] - lineinfo[0, 1]) // (lineinfo[0, 5] - 1)
+        x, y = geom[:, 2], geom[:, 3]
 
     plt.fill(x, y, color=(0.9, 0.9, 0.9))
     plt.plot(x, y)
@@ -100,11 +62,11 @@ def plot_region(fname: str,
 
     plt.grid(True, linestyle='--')
     if mode == 'line':
-        xlabel = f"Inline Number/interval={istep}"
-        ylabel = f"Crossline Number/interval={xstep}"
+        xlabel = f"Inline Number"
+        ylabel = f"Crossline Number"
     else:
-        xlabel = f"CDP X"
-        ylabel = f"CDP Y"
+        xlabel = f"X"
+        ylabel = f"Y"
 
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -128,13 +90,13 @@ def plot_trace_keys(fname: str,
         segy = fname
     else:
         segy = Pysegy(str(fname))
-    assert beg >= 0 and end > beg, "invalid beg and end"
-    assert end < segy.ntrace, "end > trace_count"
+    assert beg >= 0 and end > beg + 1 and end <= segy.ntrace, "invalid beg and end"
     keys = segy.get_trace_keys([keyloc], [4], beg, end).squeeze()
     x = np.arange(beg, end)
     plt.plot(x, keys)
     plt.xlabel("Trace Number")
     plt.ylabel(f"Key values (at {keyloc})")
+    plt.grid(True, linestyle='--')
     plt.tight_layout()
     if save:
         plt.savefig(save, dpi=200, bbox_inches='tight', pad_inches=0.0)
@@ -156,23 +118,26 @@ def plot_trace_ix(fname: str,
         segy = fname
     else:
         segy = Pysegy(str(fname))
-    assert beg >= 0 and end > beg, "invalid beg and end"
+    assert beg >= 0 and end > beg + 1, "invalid beg and end"
     assert end < segy.ntrace, "end > trace_count"
-    keys = segy.get_trace_keys([iline, xline], [2, 2], beg, end)
+    keys = segy.get_trace_keys([iline, xline], [4, 4], beg, end).squeeze()
     iv = keys[:, 0]
     xv = keys[:, 1]
     x = np.arange(beg, end)
 
-    if figsize is not None:
-        plt.figure(figsize=figsize)
+    if figsize is None:
+        figsize = (9, 4)
+    plt.figure(figsize=figsize)
     plt.subplot(1, 2, 1)
     plt.plot(x, iv)
     plt.xlabel('Trace Number')
     plt.ylabel(f"Inline (at {iline})")
+    plt.grid(True, linestyle='--')
     plt.subplot(1, 2, 2)
     plt.plot(x, xv)
     plt.xlabel('Trace Number')
     plt.ylabel(f"Crossline (at {xline})")
+    plt.grid(True, linestyle='--')
     plt.tight_layout()
     if save:
         plt.savefig(save, dpi=200, bbox_inches='tight', pad_inches=0.0)
@@ -195,7 +160,7 @@ def plot_trace_ixo(fname: str,
         segy = fname
     else:
         segy = Pysegy(str(fname))
-    assert beg >= 0 and end > beg, "invalid beg and end"
+    assert beg >= 0 and end > beg + 1, "invalid beg and end"
     assert end < segy.ntrace, "end > trace_count"
     keys = segy.get_trace_keys([iline, xline, offset], [4, 4, 4], beg, end)
     iv = keys[:, 0]
@@ -203,21 +168,31 @@ def plot_trace_ixo(fname: str,
     ov = keys[:, 2]
     x = np.arange(beg, end)
 
-    if figsize is not None:
-        plt.figure(figsize=figsize)
+    if figsize is None:
+        figsize = (12, 4)
+    plt.figure(figsize=figsize)
     plt.subplot(1, 3, 1)
     plt.plot(x, iv)
     plt.xlabel('Trace Number')
     plt.ylabel(f"Inline (at {iline})")
+    plt.grid(True, linestyle='--')
     plt.subplot(1, 3, 2)
     plt.plot(x, xv)
     plt.xlabel('Trace Number')
     plt.ylabel(f"Crossline (at {xline})")
+    plt.grid(True, linestyle='--')
     plt.subplot(1, 3, 3)
     plt.plot(x, ov)
     plt.xlabel('Trace Number')
     plt.ylabel(f"offset (at {offset})")
+    plt.grid(True, linestyle='--')
     plt.tight_layout()
     if save:
         plt.savefig(save, dpi=200, bbox_inches='tight', pad_inches=0.0)
     plt.show()
+
+
+def plot3d(fname: str):
+    d = SegyNP(fname)
+    nodes = cigvis.create_slices(d)
+    cigvis.plot3D(nodes)

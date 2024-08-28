@@ -17,7 +17,7 @@ So, if you want to use this class in other place, you should check the boundary.
 
 #include "mio.hpp"
 #include "segybase.hpp"
-#include "sutils.hpp"
+#include "utils.hpp"
 
 #include <fstream>
 #include <stdexcept>
@@ -205,6 +205,11 @@ inline void SegyRW::find_idx(std::array<int32_t, 4> &idx, LineInfo &linfo,
   idx[2] = linfo.itstart + (xs - start);
   idx[3] = idx[2] + (xe - xs);
 }
+
+void create_segy(const std::string &segyname, const float *src,
+                 const int32_t *keys, const std::vector<int> &shape,
+                 const std::string &textual, const uchar *bheader,
+                 const uchar *theader, int keysize);
 
 } // namespace segy
 #endif

@@ -9,7 +9,7 @@
 #define CIG_SEGY_BASE_H
 
 #include "mio.hpp"
-#include "sutils.hpp"
+#include "utils.hpp"
 
 #include <vector>
 
@@ -57,9 +57,6 @@ struct MetaInfo {
 
 class SegyBase {
 public:
-  using ReadFunc = std::function<void(float *, const char *, int)>;
-  using WriteFunc = std::function<void(char *, const float *, int)>;
-
   SegyBase() : m_data_ptr(nullptr) {}
 
   ~SegyBase() { this->close_file(); }
@@ -353,75 +350,8 @@ inline void SegyBase::write_traces(const float *data, const int32_t *index,
 /******************************************************/
 
 inline void SegyBase::setRWFunc(int dformat) {
-  switch (dformat) {
-  case 1:
-    m_readfunc = [](float *dst, const char *src, int size) {
-      convert2npibm(dst, src, size);
-    };
-    m_wfunc = [](char *dst, const float *src, int size) {
-      float2sgyibm(dst, src, size);
-    };
-    break;
-  case 2:
-    m_readfunc = [](float *dst, const char *src, int size) {
-      convert2npT<int32_t>(dst, src, size);
-    };
-    m_wfunc = [](char *dst, const float *src, int size) {
-      float2sgyT<int32_t>(dst, src, size);
-    };
-    break;
-  case 3:
-    m_readfunc = [](float *dst, const char *src, int size) {
-      convert2npT<int16_t>(dst, src, size);
-    };
-    m_wfunc = [](char *dst, const float *src, int size) {
-      float2sgyT<int16_t>(dst, src, size);
-    };
-    break;
-  case 5:
-    m_readfunc = [](float *dst, const char *src, int size) {
-      convert2npT<float>(dst, src, size);
-    };
-    m_wfunc = [](char *dst, const float *src, int size) {
-      float2sgyT<float>(dst, src, size);
-    };
-    break;
-  case 8:
-    m_readfunc = [](float *dst, const char *src, int size) {
-      convert2npT<int8_t>(dst, src, size);
-    };
-    m_wfunc = [](char *dst, const float *src, int size) {
-      float2sgyT<int8_t>(dst, src, size);
-    };
-    break;
-  case 10:
-    m_readfunc = [](float *dst, const char *src, int size) {
-      convert2npT<uint32_t>(dst, src, size);
-    };
-    m_wfunc = [](char *dst, const float *src, int size) {
-      float2sgyT<uint32_t>(dst, src, size);
-    };
-    break;
-  case 11:
-    m_readfunc = [](float *dst, const char *src, int size) {
-      convert2npT<uint16_t>(dst, src, size);
-    };
-    m_wfunc = [](char *dst, const float *src, int size) {
-      float2sgyT<uint16_t>(dst, src, size);
-    };
-    break;
-  case 16:
-    m_readfunc = [](float *dst, const char *src, int size) {
-      convert2npT<uint8_t>(dst, src, size);
-    };
-    m_wfunc = [](char *dst, const float *src, int size) {
-      float2sgyT<uint8_t>(dst, src, size);
-    };
-    break;
-  default:
-    throw std::invalid_argument("Unsupported dformat value: " +
-                                std::to_string(dformat));
-  }
+  setRFunc(m_readfunc, dformat);
+  setWFunc(m_wfunc, dformat);
 }
 
 } // namespace segy

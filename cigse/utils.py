@@ -164,12 +164,12 @@ def guess(segy_name: str,
     # eval xloc and yloc
     if xloc is None or yloc is None:
         xys = _get_keys4(segy, [181, 185, 73, 77], 0, 100)
-        if np.unique(xys[:, 2]) == 0 and np.unique(xys[:, 3]) == 0:
+        if len(np.unique(xys[:, 2])) == 0 and len(np.unique(xys[:, 3])) == 0:
             xloc, yloc = 181, 185
-        elif np.unique(xys[:, 0]) == 0 and np.unique(xys[:, 1]) == 0:
+        elif len(np.unique(xys[:, 0])) == 0 and len(np.unique(xys[:, 1])) == 0:
             xloc, yloc = 73, 77
         else:
-            scalar = segy.keyi2(71)
+            scalar = segy.keyi2(0, 71)
             scalar = 1 if scalar == 0 else scalar
             scalar = -1 / scalar if scalar < 0 else scalar
             xys *= xys
