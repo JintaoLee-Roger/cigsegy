@@ -17,7 +17,6 @@ from typing import Tuple
 from cigse.cpp._CXX_SEGY import Pysegy
 from cigse import ExceptionWrapper, tools
 from cigse.interp import arbitray_line
-from cigse import SegyNP
 
 try:
     import matplotlib.pyplot as plt
@@ -192,11 +191,6 @@ def plot_trace_ixo(fname: str,
         plt.savefig(save, dpi=200, bbox_inches='tight', pad_inches=0.0)
     plt.show()
 
-
-def plot3d(fname: str):
-    d = SegyNP(fname)
-    nodes = cigvis.create_slices(d)
-    cigvis.plot3D(nodes)
 
 
 def extract_arbitrary_line_by_view(data: np.ndarray,

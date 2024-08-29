@@ -543,7 +543,7 @@ class SeGyAccessMixin:
             return self._SeGyAccessor(self._segy, name)
         return super().__getattribute__(name)
 
-    def __setattr__(self, name: str, value: np.Any) -> None:
+    def __setattr__(self, name: str, value) -> None:
         if name in ['iline', 'xline', 'offset', 'coordx', 'coordy', 'itrace']:
             return self._SeGyAccessor(self._segy, name)
         return super().__setattr__(name)
