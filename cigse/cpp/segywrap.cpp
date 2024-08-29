@@ -71,6 +71,18 @@ public:
     return out;
   }
 
+  npfloat read_tslice(size_t t, size_t stepi = 1, size_t stepx = 1) {
+    if (stepi < 1 || stepx < 1) {
+      throw std::runtime_error("stepi and stepx must be greater than 0.");
+    }
+    size_t ni = (m_meta.ni + stepi - 1) / stepi;
+    size_t nx = (m_meta.nx + stepx - 1) / stepx;
+    auto data = py::array_t<float>({ni, nx});
+    float *ptr = data.mutable_data();
+    SegyRW::read_tslice(ptr, t, stepi, stepx);
+    return data;
+  }
+
   void create_by_sharing_header(const std::string &segy_name,
                                 const npfloat &src, const py::list &shape,
                                 const py::list &start, bool is2d = false,
@@ -137,6 +149,7 @@ public:
     SegyRW::get_binary_header(ptr);
     return out;
   }
+
   npuchar get_trace_header(size_t n) {
     if (n > ntrace()) {
       throw std::runtime_error("Index out of bound." + std::to_string(n));
@@ -494,6 +507,8 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       .def("read3d", &Pysegy::read3d, py::arg("ib"), py::arg("ie"),
            py::arg("xb"), py::arg("xe"), py::arg("tb"), py::arg("te"))
       .def("read", &Pysegy::read)
+      .def("read_tslice", &Pysegy::read_tslice, py::arg("t"),
+           py::arg("stepi") = 1, py::arg("stepx") = 1)
       .def("tofile", &Pysegy::tofile, py::arg("binary_out_name"),
            py::arg("as_2d") = false)
       .def("cut", &Pysegy::cut, py::arg("outname"), py::arg("ranges"),
@@ -547,7 +562,8 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       .def_property_readonly("ntrace", &Pysegy::ntrace)
       .def_property_readonly("nt", &Pysegy::nt)
       .def_property_readonly("ndim", &Pysegy::ndim)
-
+      .def_property_readonly("shape", &Pysegy::shape)
+      
       ;
 
   m.def(
@@ -557,10 +573,10 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
           &create_segy),
       py::arg("segyname"), py::arg("src"), py::arg("keys"), py::arg("textual"),
       py::arg("bheader"), py::arg("theader"));
-  m.def("ieee_to_ibm", &segy::ieee_to_ibm, py::arg("value"),
-        py::arg("is_little_endian"));
-  m.def("ibm_to_ieee", &segy::ibm_to_ieee, py::arg("value"),
-        py::arg("is_big_endian"));
+  m.def("ieee_to_ibm", py::overload_cast<float, bool>(&segy::ieee_to_ibm),
+        py::arg("value"), py::arg("is_little_endian"));
+  m.def("ibm_to_ieee", py::overload_cast<float, bool>(&segy::ibm_to_ieee),
+        py::arg("value"), py::arg("is_big_endian"));
   m.def("ieees_to_ibms", &ieees_to_ibms, py::arg("ieee_arr"),
         py::arg("is_little_endian"));
   m.def("ibms_to_ieees", &ibms_to_ieees, py::arg("ibm_arr"),

@@ -150,6 +150,7 @@ protected:
   KeyLocs m_keys;
   MetaInfo m_meta;
   ReadFunc m_readfunc;
+  ReadFuncOne m_readfuncone;
   WriteFunc m_wfunc;
 
   inline const char *brheader() const {
@@ -353,6 +354,13 @@ inline void SegyBase::write_traces(const float *data, const int32_t *index,
   size_t len = tend - tbeg;
   for (size_t i = 0; i < n; i++) {
     CHECK_SIGNALS();
+    if (index[i] >= m_meta.ntrace) {
+      throw std::runtime_error("Index out of bound." +
+                               std::to_string(index[i]));
+    }
+    if (index[i] < 0) {
+      continue;
+    }
     m_wfunc(twDataStart(index[i], tbeg), data + i * (uint64_t)len, len);
   }
 }
@@ -364,6 +372,7 @@ inline void SegyBase::write_traces(const float *data, const int32_t *index,
 inline void SegyBase::setRWFunc(int dformat) {
   setRFunc(m_readfunc, dformat);
   setWFunc(m_wfunc, dformat);
+  setRFuncOne(m_readfuncone, dformat);
 }
 
 } // namespace segy

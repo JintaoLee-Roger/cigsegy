@@ -253,7 +253,7 @@ def parse_metainfo(meta: dict):
     kinfo = "(key info) "
     stepinfo = "           "
     if meta['ndim'] == 3:
-        kinfo += f"iline: {meta['iline']:3}, xline: {meta['iline']:3}"
+        kinfo += f"iline: {meta['iline']:3}, xline: {meta['xline']:3}"
         stepinfo += f"istep: {meta['istep']:3}, xstep: {meta['xstep']:3}"
     if meta['ndim'] == 4:
         kinfo += f", offset: {meta['offset']:3}"

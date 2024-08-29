@@ -261,7 +261,7 @@ void SegyRW::scan() {
         << ". If nx < 0, maybe xstep is error.";
     throw std::runtime_error(oss.str());
   }
-  m_meta.nx = ni;
+  m_meta.nx = nx;
 
   if (is4D) {
     m_meta.start_offset = gostart;
@@ -400,6 +400,75 @@ void SegyRW::read3d(float *dst, size_t is, size_t ie, size_t xs, size_t xe,
     LineInfo &linfo = m_iinfos[ii];
     float *dstiline = dst + (ii - is) * sizeXT;
     _read_inner(dstiline, linfo, xs, xe, ts, te);
+  }
+}
+
+// This function is for accelerated reading a time slice of a 3D SEG-Y.
+// We set setpi and setpx to read a part of the data,
+// and remove lots of if conditions.
+void SegyRW::read_tslice(float *dst, size_t t, size_t stepi, size_t stepx) {
+  if (!isScan || m_ndim != 3) {
+    throw std::runtime_error("Not scan or is not a 3d SEG-Y");
+  }
+  if (t > m_meta.nt) {
+    throw std::runtime_error("t > nt");
+  }
+  uint64_t sizeXT = (m_meta.nx + stepx - 1) / stepx;
+
+  for (size_t ii = 0; ii < m_meta.ni; ii += stepi) {
+    CHECK_SIGNALS();
+
+    LineInfo &linfo = m_iinfos[ii];
+    float *dstl = dst + ii / stepi * sizeXT;
+    // no need to check NoOverlap
+    if (linfo.count == 0 && linfo.idx.size() == 0) {
+      std::fill(dstl, dstl + sizeXT, m_meta.fillNoValue);
+      continue;
+    }
+
+    // line is not continuous
+    else if (linfo.count == 0 && linfo.idx.size() > 0) {
+
+      for (size_t ix = 0; ix < m_meta.nx; ix += stepx) {
+        size_t it = linfo.idx[ix];
+        if (it > kMaxSizeOneDimemsion) {
+          *dstl = m_meta.fillNoValue;
+        } else {
+          *dstl = m_readfuncone(trDataStart(it, t));
+        }
+        dstl += 1;
+      }
+
+    }
+
+    // normal line
+    else if (linfo.count == m_meta.nx) {
+
+      for (size_t ix = 0; ix < m_meta.nx; ix += stepx) {
+        size_t it = linfo.itstart + ix;
+        *dstl = m_readfuncone(trDataStart(it, t));
+        dstl += 1;
+      }
+    }
+
+    //
+    else {
+      float *odst = dstl;
+      size_t left = (xl2ix(linfo.lstart) + stepx - 1) / stepx;
+      if (left > 0) {
+        std::fill(dstl, dstl + left, m_meta.fillNoValue);
+        dstl += left;
+      }
+      size_t right = xl2ix(linfo.lend) + 1;
+      for (size_t ix = left * stepx; ix < right; ix += stepx) {
+        *dstl = m_readfuncone(trDataStart(linfo.itstart + ix, t));
+        dstl += 1;
+      }
+      size_t fill = sizeXT - (dstl - odst);
+      if (fill > 0) {
+        std::fill(dstl, dstl + fill, m_meta.fillNoValue);
+      }
+    }
   }
 }
 

@@ -124,12 +124,6 @@ inline void swap_endian_inplace(void *dst, const void *src, size_t n) {
     return;
   }
   if (n <= 8) {
-    // don't do anything if n > 16
-    // uchar u8[17] = {0}; // for src == dst
-    // for (int i = 0; i < n; i++) {
-    //   u8[n - i - 1] = _src[i];
-    // }
-    // memcpy(_dst, u8, n);
     std::reverse(_dst, _dst + n);
   }
 }
@@ -157,8 +151,9 @@ template <typename T> T swap_endian(T u) {
 }
 
 inline float ieee_to_ibm(float value, bool is_litte_endian_input) {
-  if (!is_litte_endian_input)
+  if (!is_litte_endian_input) {
     value = swap_endian<float>(value);
+  }
 
   int32_t *addr = reinterpret_cast<int32_t *>(&value);
   int32_t int_val = *addr;
@@ -252,6 +247,14 @@ inline float ibm_to_ieee(float value, bool is_big_endian_input) {
   return *float_addr;
 }
 
+inline float ibm_to_ieee(const void *src) {
+  return ibm_to_ieee(*reinterpret_cast<const float *>(src), true);
+}
+
+inline float ieee_to_ibm(const void *src) {
+  return ieee_to_ibm(*reinterpret_cast<const float *>(src), true);
+}
+
 inline char getASCIIfromEBCDIC(char c) {
   if (kEBCDICtoASCIImap.find(c) != kEBCDICtoASCIImap.end())
     return kEBCDICtoASCIImap.at(c);
@@ -287,7 +290,7 @@ template <typename T>
 void convert2npT(float *dst, const char *src, size_t size) {
   const T *_src = reinterpret_cast<const T *>(src);
   for (size_t i = 0; i < size; ++i) {
-    dst[i] = ibm_to_ieee(_src[i], true);
+    dst[i] = static_cast<float>(swap_endian<T>(_src[i]));
   }
 }
 
@@ -303,7 +306,7 @@ void float2sgyT(char *dst, const float *src, size_t size) {
   float *_dst = reinterpret_cast<float *>(dst);
 
   for (size_t i = 0; i < size; ++i) {
-    _dst[i] = swap_endian<T>(T(src[i]));
+    _dst[i] = swap_endian<T>(static_cast<T>(src[i]));
   }
 }
 
@@ -317,6 +320,7 @@ inline void float2sgyibm(char *dst, const float *src, size_t size) {
 
 using ReadFunc = std::function<void(float *, const char *, size_t)>;
 using WriteFunc = std::function<void(char *, const float *, size_t)>;
+using ReadFuncOne = std::function<float(const char *)>;
 
 inline void setRFunc(ReadFunc &m_readfunc, int dformat) {
   switch (dformat) {
@@ -342,7 +346,10 @@ inline void setRFunc(ReadFunc &m_readfunc, int dformat) {
     break;
   case 8:
     m_readfunc = [](float *dst, const char *src, size_t size) {
-      convert2npT<int8_t>(dst, src, size);
+      const int8_t *_src = reinterpret_cast<const int8_t *>(src);
+      for (size_t i = 0; i < size; ++i) {
+        dst[i] = static_cast<float>(_src[i]);
+      }
     };
     break;
   case 10:
@@ -357,7 +364,56 @@ inline void setRFunc(ReadFunc &m_readfunc, int dformat) {
     break;
   case 16:
     m_readfunc = [](float *dst, const char *src, size_t size) {
-      convert2npT<uint8_t>(dst, src, size);
+      const uint8_t *_src = reinterpret_cast<const uint8_t *>(src);
+      for (size_t i = 0; i < size; ++i) {
+        dst[i] = static_cast<float>(_src[i]);
+      }
+    };
+    break;
+  default:
+    throw std::invalid_argument("Unsupported dformat value: " +
+                                std::to_string(dformat));
+  }
+}
+
+inline void setRFuncOne(ReadFuncOne &m_readfunc, int dformat) {
+  switch (dformat) {
+  case 1:
+    m_readfunc = [](const char *src) -> float { return ibm_to_ieee(src); };
+    break;
+  case 2:
+    m_readfunc = [](const char *src) -> float {
+      return static_cast<float>(swap_endian<int32_t>(src));
+    };
+    break;
+  case 3:
+    m_readfunc = [](const char *src) -> float {
+      return static_cast<float>(swap_endian<int16_t>(src));
+    };
+    break;
+  case 5:
+    m_readfunc = [](const char *src) -> float {
+      return swap_endian<float>(src);
+    };
+    break;
+  case 8:
+    m_readfunc = [](const char *src) -> float {
+      return static_cast<float>(*reinterpret_cast<const int8_t *>(src));
+    };
+    break;
+  case 10:
+    m_readfunc = [](const char *src) -> float {
+      return static_cast<float>(swap_endian<uint32_t>(src));
+    };
+    break;
+  case 11:
+    m_readfunc = [](const char *src) -> float {
+      return static_cast<float>(swap_endian<uint16_t>(src));
+    };
+    break;
+  case 16:
+    m_readfunc = [](const char *src) -> float {
+      return static_cast<float>(*reinterpret_cast<const uint8_t *>(src));
     };
     break;
   default:

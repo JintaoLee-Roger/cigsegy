@@ -73,6 +73,7 @@ public:
   void read3d(float *dst, size_t ib, size_t ie, size_t xb, size_t xe, size_t tb,
               size_t te);
   void read(float *dst);
+  void read_tslice(float *dst, size_t it, size_t stepi = 1, size_t stepx = 1);
   void tofile(const std::string &binary_out_name, bool is2d = false);
   void cut(const std::string &outname, const std::vector<size_t> &ranges,
            bool is2d = false, const std::string &textual = "");

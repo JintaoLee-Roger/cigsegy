@@ -68,6 +68,12 @@ class Pysegy:
         ndim
         """
 
+    @property
+    def shape():
+        """
+        ndim
+        """
+
     def close() -> None:
         """
         close file
@@ -367,6 +373,15 @@ class Pysegy:
 
     def read(self) -> np.ndarray:
         """
+        """
+
+    def read_tslice(self,
+                    t: int,
+                    stepi: int = 1,
+                    stepx: int = 1) -> np.ndarray:
+        """
+        read time slice with stepi and stepx, which may faster than read()
+        return a 2D array with shape: ((ni+stepi-1)//stepi, (nx+stepx-1)//stepx)
         """
 
     def tofile(
