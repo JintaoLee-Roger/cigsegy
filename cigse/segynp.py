@@ -8,7 +8,7 @@ import numpy as np
 from cigse.cpp import _CXX_SEGY
 from cigse.transform import get_transform_metrix, apply_transform
 from cigse.interp import arbitray_line
-from cigse import utils, plot
+from cigse import utils, plot, tools
 import warnings
 
 
@@ -42,18 +42,103 @@ class ScanMixin:
         self._min = mi
         self._max = ma
 
+    def _scan(self, keylocs=None):
+        if keylocs is None:
+            keylocs = utils.guess(self._segy)
+        elif isinstance(keylocs, dict):
+            keylocs = utils.guess(self._segy, **keylocs)
+        else:
+            keylocs = utils.guess(self._segy, keylocs)
+        self._segy.setLocations(*keylocs[:3])
+        self._segy.setSteps(*keylocs[3:6])
+        self._segy.setXYLocations(*keylocs[6:8])
+        self._segy.scan()
+        self._keylocs = self._segy.get_keylocs()
+        self._metainfo = self._segy.get_metainfo()
+        self._ndim = self._segy.ndim
+        self._shape3 = self._segy.shape
+        self._lineinfo = self._segy.get_lineInfo()
+
+    def _scan_unsorted(self, keylocs=None, keys=None):
+        if keys is not None:
+            pass
+        elif keylocs is None:
+            raise ValueError(
+                "When 'as_unsorted' is True, either 'keylocs' must be set, or 'keys' must be provided."
+            )
+        else:
+            if isinstance(keylocs, List):
+                geom = tools.full_scan(self._segy, *keylocs[:3])
+            else:
+                offset = keylocs.get('offset', 37)
+                geom = tools.full_scan(self._segy, keylocs['iline'],
+                                       keylocs['xline'], offset)
+            self.update_geometry(geom['geom'])
+            self._parser_unsorted_infos(geom)
+
+    def _parser_unsorted_infos(self, geom):
+        self._keylocs = self._segy.get_keylocs()
+        self._metainfo = self._segy.get_metainfo()
+
+        self._shape3 = tuple(geom['shape'])
+        self._ndim = len(self._shape3)
+
+        loc = geom['locations']
+        self._keylocs = dict(iline=loc[0], xline=loc[1])
+        self._keylocs['istep'] = geom['iline']['istep']
+        self._keylocs['xstep'] = geom['xline']['xstep']
+        if len(loc) == 3:
+            self._keylocs['offset'] = loc[2]
+            self._keylocs['ostep'] = geom['offset']['ostep']
+
+        self._metainfo['ni'] = self._shape3[0]
+        self._metainfo['start_iline'] = geom['iline']['min_iline']
+        self._metainfo['end_iline'] = geom['iline']['max_iline']
+        self._metainfo['nx'] = self._shape3[1]
+        self._metainfo['start_xline'] = geom['xline']['min_xline']
+        self._metainfo['end_xline'] = geom['xline']['max_xline']
+        if len(self._shape3) == 4:
+            self._metainfo['no'] = self._shape3[2]
+            self._metainfo['start_offset'] = geom['offset']['min_offset']
+            self._metainfo['end_offset'] = geom['offset']['max_offset']
+        self._metainfo['ndim'] = self._ndim
+
 
 class GeometryMixin:
     _segy: _CXX_SEGY.Pysegy
 
     def map_to_index(self, index):
-        pass
+        if self._geometry is None:
+            raise RuntimeError("geometry is not created, Call `update_geometry` first") # yapf: disable
+        if self.ndim == 2:
+            raise RuntimeError("ndim is 2, unsupport this function") # yapf: disable
 
-    def update_geometry(self, ic=None):
-        pass
+        index = np.array(index)
+        assert index.ndim == 2
+        if self.ndim == 3:
+            assert index.shape[1] == 2
+            index = self._geometry[index[:, 0], index[:, 1]]
+        elif self.ndim == 4:
+            assert index.shape[1] == 3
+            index = self._geometry[index[:, 0], index[:, 1], index[:, 2]]
+        return index
+
+    def update_geometry(self, geom=None):
+        if geom is not None:
+            self._geometry = geom
+            return
+        warnings.warn("This may be slow...")
+        geom = tools.full_scan(self._segy, self._keylocs['iline'],
+                               self._keylocs['xline'], self._keylocs['offset'])
+        self._geometry = geom['geom']
 
     def update_trans_matrix(self, xyic=None):
-        pass
+        if self.ndim == 2:
+            raise RuntimeError("ndim is 2, unsupport this function")
+        if xyic is None:
+            xyic = tools.get_lineInfo(self._segy, mode='geom')
+            xyic = xyic[:, [2, 3, 0, 1]]
+        self._trans_matrix = get_transform_metrix(xyic[:, 2:], xyic[:, :2])
 
     def xy_to_ix(self, xy, zero_origin=True):
         """
@@ -67,6 +152,17 @@ class GeometryMixin:
             Whether the x/y is zero-based, by default True,
             if is False, the x/y will be added by the min_x/min_y
         """
+        xy = np.array(xy)
+        shape = xy.shape
+        if xy.ndim == 1:
+            xy = xy.reshape(1, -1)
+        if self._trans_matrix is None:
+            self.update_trans_matrix()
+        ic = apply_transform(xy, self._trans_matrix, inv=True)
+        if zero_origin:
+            ic[:, 0] -= self._metainfo['start_iline']
+            ic[:, 1] -= self._metainfo['start_xline']
+        return np.round(ic, 2).reshape(shape)
 
     def ix_to_xy(self, ix, zero_origin=True):
         """
@@ -80,6 +176,16 @@ class GeometryMixin:
             Whether the inline/crossline is zero-based, by default True,
             if is False, the inline/crossline will be added by the min_inline/min_crossline
         """
+        ix = np.array(ix)
+        shape = ix.shape
+        if ix.ndim == 1:
+            ix = ix.reshape(1, -1)
+        if zero_origin:
+            ix[:, 0] += self._metainfo['start_iline']
+            ix[:, 1] += self._metainfo['start_xline']
+        if self._trans_matrix is None:
+            self.update_trans_matrix()
+        return np.round(apply_transform(ix, self._trans_matrix), 2).reshape(shape) # yapf: disable
 
 
 class PlotMixin:
@@ -106,7 +212,7 @@ class PlotMixin:
         """
         plot.plot_trace_keys(self._segy, keyloc, beg, end)
 
-    def plot_trace_2(
+    def plot_trace_keys2(
         self,
         beg: int = 0,
         end: int = 1000,
@@ -118,12 +224,12 @@ class PlotMixin:
         If k1 and k2 is None, will plot iline/xline
         """
         if k1 is None:
-            k1 = self._keyloc['iline']
+            k1 = self._keylocs['iline']
         if k2 is None:
-            k2 = self._keyloc['xline']
+            k2 = self._keylocs['xline']
         plot.plot_trace_ix(self._segy, k1, k2, beg, end)
 
-    def plot_trace_3(
+    def plot_trace_keys3(
         self,
         beg: int = 0,
         end: int = 1000,
@@ -136,11 +242,11 @@ class PlotMixin:
         If k1, k2 and k3 is None, will plot iline/xline/offset
         """
         if k1 is None:
-            k1 = self._keyloc['iline']
+            k1 = self._keylocs['iline']
         if k2 is None:
-            k2 = self._keyloc['xline']
+            k2 = self._keylocs['xline']
         if k3 is None:
-            k3 = self._keyloc['offset']
+            k3 = self._keylocs['offset']
         plot.plot_trace_ixo(self._segy, k1, k2, k3, beg, end)
 
     def plot3d(self):
@@ -172,11 +278,17 @@ class InterpMixin:
         di : float
             the interval between two points of the path
         """
+        points = self._process_points(points, ptype)
+        out, p, indices = arbitray_line(self, points, di)
+        if not return_path:
+            return out
+        return out, p, indices
 
     def extract_arbitrary_line_by_view(self,
                                        bmap: str = 'data',
                                        draw_arb: bool = True,
                                        *,
+                                       return_values: bool = True,
                                        line: bool = True,
                                        idx: int = 50,
                                        cline='#F3AA3C'):
@@ -203,11 +315,43 @@ class InterpMixin:
         - coords: np.ndarray
             the coordinates by clicking
         """
+        out = plot.extract_arbitrary_line_by_view(
+            self,
+            bmap,
+            draw_arb,
+            line=line,
+            idx=idx,
+            cline=cline,
+        )
+        if return_values:
+            return out
 
     def align_coordinates(self, fname: str):
         """
         Interpolate the input SEG-Y data to align with the self coordinate system.
         """
+
+    def _process_points(self, points, ptype='auto'):
+        assert self.ndim == 3, "The data is not 3D"
+        points = np.array(points)
+        # HACK: Need optimize
+        if ptype == 'auto':
+            if points.max() > 100000:
+                ptype = 'xy'
+            elif points[:, 0].max() >= self.shape[0] or points[:, 1].max() >= self.shape[1]: # yapf: disable
+                ptype = 'line'
+            else:
+                ptype = 'zero'
+
+        if ptype == 'line':
+            points[:, 0] -= self.iline_range[0]
+            points[:, 1] -= self.xline_range[0]
+        elif ptype == 'xy':
+            points = self.xy_to_ix(points)
+
+        self._check_bound(0, points[:, 0].min(), points[:, 0].max())
+        self._check_bound(1, points[:, 1].min(), points[:, 1].max())
+        return points
 
 
 class RWMixin:
@@ -506,8 +650,13 @@ class CheckMixin:
         for i in range(self.ndim):
             self._check_bound(i, idx[i*2], idx[i*2+1])
 
+
+    def _check_bound_idx(self, index, dim):
+        assert isinstance(index, (int, np.integer)), "index must be int"
+        assert index >= 0 and index < self.shape[dim], f"In dimension {dim}, index {index} out of range"
+
     def _check_wmode(self):
-        if not self._wmode:
+        if self._mode == 'r':
             raise RuntimeError("The SEG-Y file is not writable, as you set the `mode` to 'r'. If you want to enable write mode, set to `rw`")
 
     def _check_wmode_lastdim(self, idx):
@@ -523,43 +672,197 @@ class CheckMixin:
                 dstshape.append(idx[i * 2 + 1] - idx[i * 2])
         dstshape = [k for k in dstshape if k != 1]
         assert tuple(dstshape) == data.squeeze().shape, "shape of the input data is not match the shape of the data to write"
-# fmt: on
 
 
 class SegyCMixin:
+    _segy: _CXX_SEGY.Pysegy
 
-    def cut(self):
-        pass
+    def cut(self,
+            outname: str,
+            ranges: List,
+            as2d: bool = False,
+            textual: str = '') -> None:
+        if as2d:
+            assert len(ranges) == 4, "The length of `ranges` must be 4, as you set the `as2d` to True"
+        else:
+            assert len(ranges) == self.ndim * 2, f"ndim is {self.ndim}, need {self.ndim*2} idx, but got {len(ranges)}"
 
-    def create_by_sharing_header(self):
-        pass
+        # TODO: parser textual header
+
+        self._segy.cut(outname, ranges, as2d, textual)
+
+    def create_by_sharing_header(self,
+                                 outname: str,
+                                 src,
+                                 shape=None,
+                                 *,
+                                 start=None,
+                                 as2d=False,
+                                 textual='') -> None:
+        if isinstance(src, np.ndarray):
+            if shape is not None:
+                warnings.warn("The shape is ignored, as the src is ndarray")
+            shape = src.shape
+        elif shape is None:
+            raise ValueError("src (filename) is not ndarray, shape is None, need to specify the shape")
+
+        if as2d:
+            assert len(shape) == 2, "The shape must be 2D, as you set the `as2d` to True"
+
+        if start is None:
+            start = [0] * len(shape)
+
+        if len(textual) > 0 and len(textual) != 3200:
+            pass # TODO: parser textual header
+            # textual =
+
+        if isinstance(src, np.ndarray):
+            self._segy.create_by_sharing_header(outname, src, start, as2d, textual)
+        else:
+            self._segy.create_by_sharing_header(outname, src, shape, start, as2d, textual)
 
 
-# TODO:
-class SeGyAccessMixin:
+class AccessMixin:
+    _segy: _CXX_SEGY.Pysegy
 
     def __getattr__(self, name):
         if name in ['iline', 'xline', 'offset', 'coordx', 'coordy', 'itrace']:
-            return self._SeGyAccessor(self._segy, name)
-        return super().__getattribute__(name)
+            return self._SegyAccessor(self._segy, name)
+
+        return super().__getattr__(name)
+
 
     def __setattr__(self, name: str, value) -> None:
         if name in ['iline', 'xline', 'offset', 'coordx', 'coordy', 'itrace']:
-            return self._SeGyAccessor(self._segy, name)
-        return super().__setattr__(name)
+            accessor = self._SegyAccessor(self._segy, name)
+            accessor[:] = value
+            return
+        else:
+            super().__setattr__(name, value)
 
-    class _SeGyAccessor:
+    class _SegyAccessor:
 
-        def __init__(self, segy, attribute):
+        def __init__(self, segy, attribute, mode='r'):
+            assert mode in ['r', 'rw']
             self._segy = segy
             self.attribute = attribute
+            self._mode = mode
 
         def __getitem__(self, index):
+            index = self._process_index(index)
             method = getattr(self._segy, self.attribute)
-            return method(index)
+            if isinstance(index, (int, np.integer)):
+                return method(index)
+            else:
+                return np.array([method(i) for i in index])
 
         def __setitem__(self, index, value):
-            return
+            if self._mode == 'r':
+                raise RuntimeError("The SEG-Y file is not writable, as you set the `mode` to 'r'. If you want to enable write mode, set to `rw`") # yapf: disable
+            index = self._process_index(index)
+            # TODO: check the value size?
+
+            if self.attribute == 'itrace':
+                method = getattr(self._segy, f"write_{self.attribute}")
+            else:
+                method = getattr(self._segy, f"set_{self.attribute}")
+            if isinstance(index, (int, np.integer)):
+                method(index, value)
+            else:
+                for i, v in zip(index, value):
+                    method(i, v)
+
+        def _process_index(self, keys):
+            if isinstance(keys, tuple):
+                # Raise an error if more than one dimension is indexed
+                raise IndexError("Only 1D indexing is supported.")
+
+            if isinstance(keys, (int, np.integer)):
+                if keys < 0:
+                    keys += self._segy.ntrace
+                return keys
+
+            elif isinstance(keys, slice):
+                # Slice index
+                start, stop, step = keys.start, keys.stop, keys.step
+                if keys.start < 0:
+                    start += self._segy.ntrace
+                if keys.stop < 0:
+                    stop += self._segy.ntrace
+                keys = np.arange(start, stop, step)
+                assert keys.min() >= 0 and keys.max() < self._segy.ntrace, "Index out of range"
+                return keys
+
+            elif isinstance(keys, list) or isinstance(keys, np.ndarray):
+                # List or numpy array of indices
+                keys = np.array(keys).squeeze()
+                assert keys.ndim == 1, "Only 1D indexing is supported."
+                assert keys.min() >= 0 and keys.max() < self._segy.ntrace, "Index out of range"
+                return keys
+
+            else:
+                raise TypeError("Unsupported index type.")
+
+
+        def __repr__(self) -> str:
+            d = np.array([self.__getitem__(i) for i in [0, 1, -2, -1]])
+            if self.attribute == 'itrace':
+                usage = "traces: \n"
+                for i in range(4):
+                    idx = i
+                    if idx > 1:
+                        idx = self._segy.ntrace - 4 + i
+                    usage += f"trace {idx}: [{d[i, 0]:.4f}, {d[i, 1]:.4f}, {d[i, 2]:.4f}, {d[i, 3]:.4f}, ...]\n"
+                    if i == 1:
+                        usage += "...\n"
+            else:
+                usage = f"{self.attribute}: [{d[0]}, {d[1]}, ..., {d[2]}, {d[3]}]"
+            return usage
+
+    def bkeyi2(self, loc):
+        """get binary header value at loc, view it as int16_t"""
+        return self._segy.bkeyi2(loc)
+
+    def bkeyi4(self, loc):
+        """get binary header value at loc, view it as int32_t"""
+        return self._segy.bkeyi4(loc)
+
+    def keyi2(self, idx, loc):
+        """get idx-th trace header value at loc, view it as int16_t"""
+        return self._segy.keyi2(idx, loc)
+
+    def keyi4(self, idx, loc):
+        """get idx-th trace header value at loc, view it as int16_t"""
+        return self._segy.keyi4(idx, loc)
+
+    def set_bkeyi2(self, loc, value):
+        """set binary header value at loc, view it as int16_t"""
+        self._check_wmode()
+        return self._segy.set_bkeyi2(loc, value)
+
+    def set_bkeyi4(self, loc, value):
+        """set binary header value at loc, view it as int32_t"""
+        self._check_wmode()
+        return self._segy.set_bkeyi4(loc, value)
+
+    def set_keyi2(self, idx, loc, value):
+        """set idx-th trace header value at loc, view it as int16_t"""
+        self._check_wmode()
+        return self._segy.set_keyi2(idx, loc, value)
+
+    def set_keyi4(self, idx, loc, value):
+        """set idx-th trace header value at loc, view it as int16_t"""
+        self._check_wmode()
+        return self._segy.set_keyi4(idx, loc, value)
+
+    def textual_header(self, code='u', printtext=True):
+        """get textual header"""
+        t = self._segy.textual_header(code)
+        if printtext:
+            print(t)
+        else:
+            return t
+# fmt: on
 
 
 class InnerMixin:
@@ -607,14 +910,15 @@ class InnerMixin:
             f"Function {func} is not implemented for SegyNP")
 
     def __del__(self):
-        self._segy.close()
+        if hasattr(self, '_segy'):
+            self._segy.close()
 
     def __repr__(self) -> str:
-        out = f"cigsey.SegyNP class, file name: '{self.fname}'\n\n"
+        out = f"cigsegy.SegyNP class, file name: '{self.file_name}'\n\n"
         keys = self._segy.get_keylocs()
         meta = self._segy.get_metainfo()
         meta = {**keys, **meta}
-        meta = utils.post_process_meta(meta)
+        meta = utils.post_process_meta(self._segy, meta)
         out += utils.parse_metainfo(meta)
         return out
 
@@ -623,7 +927,7 @@ class InnerMixin:
 
 
 class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
-             ScanMixin, CheckMixin):
+             ScanMixin, CheckMixin, AccessMixin):
 
     def __init__(self,
                  filename: str,
@@ -638,30 +942,47 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         assert mode in ['r', 'rw'], "`mode` only can be 'r' or 'rw'"
         self._ndim = ndim
         self._fname = filename
+
         self._segy = _CXX_SEGY.Pysegy(str(filename))
-        self._wmode = False if mode == 'r' else True
-        if self._wmode:
+        self._mode = mode
+        if self._mode == 'rw':
             warnings.warn(
-                "Dangerous!!! You are using a writable mode ('rw'), which may **alter** the SEG-Y file. "
+                "\n**Dangerous!!!** You are using a writable mode ('rw'), which may **alter** the SEG-Y file. \n"
                 "It is strongly recommended to make a **backup copy** of the file before proceeding "
                 "to avoid any potential irreversible changes.", UserWarning)
-
-        self._shape2 = None
-        self._shape3 = None
-        self._unsorted = as_unsorted
-
-        # for coordinates transform
-        self._trans_matrix = None
-        self._geomety = None
-        self._north = None
 
         # for values
         self._min = None
         self._max = None
+        self._eval_range()
 
-        self._keyloc = None
+        # for coordinates transform
+        self._trans_matrix = None
+        self._geometry = None
+        self._north = None
+
+        self._keylocs = None
         self._metainfo = None
-        self._lininfo = None
+        self._lineinfo = None
+
+        self._shape2 = (self._segy.ntrace, self._segy.nt)
+        self._shape3 = None
+
+        if ndim == 2 and as_unsorted:
+            warnings.warn("`ndim` is 2, so `as_unsorted` will be ignored")
+            as_unsorted = False
+        self._unsorted = as_unsorted
+
+        if ndim is None or ndim != 2:
+            if self._unsorted:
+                self._scan_unsorted(keyloc, keys)
+            else:
+                try:
+                    self._scan(keyloc)
+                except Exception as e:
+                    raise RuntimeError(f"{str(e)}\n This SEG-Y file may be unsorted, you can pass `as_unsorted` to view it as unsorted file, but it may be slow") from e # yapf: disable
+            if ndim is not None and self.ndim != ndim:
+                raise RuntimeError(f"You set ndim as {ndim}, but the SEG-Y file's ndim is {self.ndim}") # yapf: disable
 
     @property
     def ntrace(self) -> int:
@@ -683,9 +1004,9 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         the shape of the data
         """
         if self.ndim == 2:
-            return self._shape2
+            return tuple(self._shape2)
         else:
-            return self._shape3
+            return tuple(self._shape3)
 
     @property
     def dtype(self) -> np.dtype:
@@ -714,7 +1035,13 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         the north direction of the SEG-Y file, only available for 3D/4D data
         """
         if self._north is None:
-            pass
+            N = self.ntrace // 3
+            xy1 = [self.coordx[N], self.coordy[N]]
+            xy2 = xy1.copy()
+            xy2[1] += 1000
+            n = self.xy_to_ix(np.array([xy1, xy2]))
+            di = n[1] - n[0]
+            self._north = di / np.linalg.norm(di)
 
         return self._north
 
@@ -736,7 +1063,8 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         """
         close the SEG-Y file
         """
-        self._segy.close()
+        if hasattr(self, '_segy'):
+            self._segy.close()
 
     def to_2d(self):
         """
@@ -748,7 +1076,8 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         """
         Treat the SEG-Y file as a 3D/4D array. If the SEG-Y file is scanned, the keylocs will be ignored 
         """
-        # TODO:
+        if self._shape3 is None:
+            self._scan()
         self._ndim = self._segy.ndim
 
     def max(self, real=False) -> float:
@@ -773,7 +1102,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
 
     @property
     def lineinfo(self):
-        return self._lininfo
+        return self._lineinfo
 
     @property
     def metainfo(self):
@@ -781,4 +1110,8 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
 
     @property
     def keylocs(self):
-        return self._keyloc
+        return self._keylocs
+
+    @property
+    def access_mode(self) -> str:
+        return self._mode

@@ -55,7 +55,9 @@ def interpolate_path(points, di=1):
     x_points = np.interp(distances_interp, cum_distances, points[:, 0])
     y_points = np.interp(distances_interp, cum_distances, points[:, 1])
 
-    return np.column_stack((x_points, y_points))
+    indices = np.searchsorted(distances_interp, cum_distances)
+
+    return np.column_stack((x_points, y_points)), indices
 
 
 def extract_data(data, p):
@@ -100,7 +102,6 @@ def extract_data(data, p):
 
     all_points = grid_points.reshape(-1, 2)
     unique, inverse = np.unique(all_points, axis=0, return_inverse=True)
-    # TODO: test the speed compared with give geometry
     unique_data = np.array([data[i, j] for i, j in unique])
 
     return pout, unique_data[inverse].reshape(N, 4, n3)
@@ -112,8 +113,8 @@ def arbitray_line(data, points, di: float = 1):
     points : the points to interpolate a path
     di : step
     """
-    p = interpolate_path(points, di)
+    p, indices = interpolate_path(points, di)
     pout, pdata = extract_data(data, p)
     out = interp(pout, pdata)
 
-    return out, p
+    return out, p, indices

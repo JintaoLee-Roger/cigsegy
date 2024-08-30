@@ -62,37 +62,11 @@ pip install cigsegy
 ```
 
 - 本地安装
-首先你需要安装依赖库 `fmt` 和 `pybind11`.
-```bash
-# linux
-sudo apt-get install python3-pybind11 libfmt-dev
-
-# mac
-brew install pybind11 fmt
-```
-你也可以手动安装依赖哭 `fmt` 和 `pybind11` .
-```bash
-# 安装 fmt
-mkdir thridPart && cd thridPart/
-git clone https://github.com/fmtlib/fmt.git
-# 现在 fmt 被安装到 /xxx/cigsegy/thridPart/fmt
-
-
-# 使用 pypi 安装 pybind11
-pip install pybind11
-# 现在 pybind11 被安装到 /xxx/lib/python3.8/site-packages/pybind11/
-```
 
 如果你仅需要python的版本，你可以运行:
 ```bash
 pip install -U pip
-pip install .
-
-# 如果 fmt 没有被包含在系统的路径里
-pip install . --install-option="--fmt_root=/xxx/fmt"
-
-# 如果你需要的是一个 wheel 文件
-# pip wheel . --build-option="--fmt_root=/xxx/fmt"
+pip install . --config-settings editable_mode=strict
 ```
 
 

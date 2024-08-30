@@ -84,13 +84,13 @@ public:
   }
 
   void create_by_sharing_header(const std::string &segy_name,
-                                const npfloat &src, const py::list &shape,
-                                const py::list &start, bool is2d = false,
+                                const npfloat &src, const py::list &start,
+                                bool is2d = false,
                                 const std::string &textual = "") {
     const float *ptr = src.data();
-    auto sha = shape.cast<std::vector<size_t>>();
+    std::vector<size_t> shape(src.shape(), src.shape() + src.ndim());
     auto sta = start.cast<std::vector<size_t>>();
-    SegyRW::create_by_sharing_header(segy_name, ptr, sha, sta, is2d, textual);
+    SegyRW::create_by_sharing_header(segy_name, ptr, shape, sta, is2d, textual);
   }
 
   void create_by_sharing_header(const std::string &segy_name,
@@ -515,11 +515,10 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
            py::arg("is2d") = false, py::arg("textual") = "")
       .def("create_by_sharing_header",
            py::overload_cast<const std::string &, const npfloat &,
-                             const py::list &, const py::list &, bool,
-                             const std::string &>(
+                             const py::list &, bool, const std::string &>(
                &Pysegy::create_by_sharing_header),
-           py::arg("segy_name"), py::arg("src"), py::arg("shape"),
-           py::arg("start"), py::arg("is2d") = false, py::arg("textual") = "")
+           py::arg("segy_name"), py::arg("src"), py::arg("start"),
+           py::arg("is2d") = false, py::arg("textual") = "")
       .def("create_by_sharing_header",
            py::overload_cast<const std::string &, const std::string &,
                              const py::list &, const py::list &, bool,
@@ -563,7 +562,7 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       .def_property_readonly("nt", &Pysegy::nt)
       .def_property_readonly("ndim", &Pysegy::ndim)
       .def_property_readonly("shape", &Pysegy::shape)
-      
+
       ;
 
   m.def(

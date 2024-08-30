@@ -405,7 +405,6 @@ class Pysegy:
         self,
         segy_name: str,
         src: np.ndarray,
-        shape: List,
         start: List,
         is2d: bool = False,
         textual: str = "",

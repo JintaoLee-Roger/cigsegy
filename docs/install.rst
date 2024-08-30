@@ -18,44 +18,12 @@ You can install cigsegy via PyPi, just use:
 Install Locally
 ---------------
 
-
-First, you need to install ``fmt`` and ``pybind11``.
-
-.. code-block:: bash
-
-    # linux
-    sudo apt-get install python3-pybind11 libfmt-dev
-
-    # mac
-    brew install pybind11 fmt
-
-
-You can also install ``fmt`` and ``pybind11`` manually.
-
-.. code-block:: bash
-
-    # install fmt
-    mkdir thridPart && cd thridPart/
-    git clone https://github.com/fmtlib/fmt.git
-    # Now fmt is installed into /xxx/cigsegy/thridPart/fmt
-
-    # install pybind11 using pypi
-    pip install pybind11
-    # Now pybind11 is installed into /xxx/lib/python3.8/site-packages/pybind11/
-
-
-If you need the python package only, run:
+If you want to install cigsegy locally, you can use the following commands:
 
 .. code-block:: bash
 
     pip install -U pip
-    pip install .
-
-    # if fmt is not in the env path
-    pip install . --install-option="--fmt_root=/xxx/fmt"
-
-    # if you need to build a wheel
-    # pip wheel . --build-option="--fmt_root=/xxx/fmt"
+    pip install . --config-settings editable_mode=strict
 
 
 If you need the two executables files:
