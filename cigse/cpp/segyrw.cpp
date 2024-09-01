@@ -107,16 +107,37 @@ void SegyRW::scan() {
       }
     }
 
+    // missing line
     if (it < ntrace() &&
         (iline(it) != (iiline + istep) || iline(it - 1) != iiline)) {
-      std::ostringstream oss;
-      oss << "Error when scan this file. We except `iline(i) == (line+istep)` "
-             "and `iline(i-1)==line` when the line breaking, however, we got "
-             "line = "
-          << iiline << ", istep = " << istep << ", iline(i) = " << iline(it)
-          << ", iline(i-1) = " << iline(it - 1) << ", i = " << it
-          << ". Maybe this file is unsorted." << ntrace();
-      throw std::runtime_error(oss.str());
+      if (iline(it - 1) == iiline) {
+        skipi = iline(it) - (iiline + istep);
+        if (skipi % istep != 0) {
+          std::ostringstream oss;
+          oss << "Error when scan this file. In this line, there are "
+                "missing some xlines, i.e., iline(i) != (line+istep). "
+                "But we got iline(i) = "
+              << iline(it) << ", line = " << iiline << ", istep = " << istep
+              << ". iline(i) - (line+istep) = " << skipi
+              << ", and skipi % istep != 0. Maybe the istep is wrong.";
+          throw std::runtime_error(oss.str());
+        }
+        skipi /= istep;
+        if (skipi < 0) {
+          // std::cout << iline(it-1) << " " << iline(it) << " " << istep << " " << it << "\n";
+          throw std::runtime_error(
+              "Error when scan this file. skipi < 0. Maybe the istep is wrong.");
+        }
+      } else {
+        std::ostringstream oss;
+        oss << "Error when scan this file. We except `iline(i) == (line+istep)` "
+              "and `iline(i-1)==line` when the line breaking, however, we got "
+              "line = "
+            << iiline << ", istep = " << istep << ", iline(i) = " << iline(it)
+            << ", iline(i-1) = " << iline(it - 1) << ", i = " << it
+            << ". Maybe this file is unsorted." << ntrace();
+        throw std::runtime_error(oss.str());
+      }
     }
 
     // assign lineInfo
@@ -157,7 +178,7 @@ void SegyRW::scan() {
           continue;
         }
 
-        int xxline = iline(xt);
+        int xxline = xline(xt);
         size_t xtstart = xt;
         int ostart = offset(xt);
 
@@ -181,14 +202,33 @@ void SegyRW::scan() {
 
         if (xt < xtmax &&
             (xline(xt) != (xxline + xstep) || xline(xt - 1) != xxline)) {
-          std::ostringstream oss;
-          oss << "Error when scan this file. We except `xline(i) == "
-                 "(line+xstep)` and `xline(i-1)==line` when the xline "
-                 "breaking, however, we got line = "
-              << xxline << ", xstep = " << xstep << ", iline(i) = " << xline(xt)
-              << ", xline(i-1) = " << xline(xt - 1)
-              << ". Maybe this file is unsorted.";
-          throw std::runtime_error(oss.str());
+          if (xline(xt - 1) == xxline) {
+            skipx = xline(xt) - (xxline + xstep);
+            if (skipx % xstep != 0) {
+              std::ostringstream oss;
+              oss << "Error when scan this file. In this xline, there are "
+                    "missing some offset lines, i.e., xline(i) != (line+xstep). "
+                    "But we got xline(i) = "
+                  << xline(xt) << ", line = " << xxline << ", xstep = " << xstep
+                  << ". xline(i) - (line+xstep) = " << skipx
+                  << ", and skipx % xstep != 0. Maybe the xstep is wrong.";
+              throw std::runtime_error(oss.str());
+            }
+            skipx /= xstep;
+            if (skipx < 0) {
+              throw std::runtime_error("Error when scan this file. skipx < 0. "
+                                      "Maybe the xstep is wrong.");
+            }
+          } else {
+            std::ostringstream oss;
+            oss << "Error when scan this file. We except `xline(i) == "
+                  "(line+xstep)` and `xline(i-1)==line` when the xline "
+                  "breaking, however, we got line = "
+                << xxline << ", xstep = " << xstep << ", iline(i) = " << xline(xt)
+                << ", xline(i-1) = " << xline(xt - 1)
+                << ". Maybe this file is unsorted.";
+            throw std::runtime_error(oss.str());
+          }
         }
 
         // assign xline info
@@ -203,46 +243,6 @@ void SegyRW::scan() {
         // update global offset range
         gostart = ostep > 0 ? MMIN(gostart, ostart) : MMAX(gostart, ostart);
         goend = ostep > 0 ? MMAX(goend, oend) : MMIN(goend, oend);
-
-        // missing xline
-        if (xt < xtmax && xline(xt) != (xxline + xstep)) {
-          skipx = xline(xt) - (xxline + xstep);
-          if (skipx % xstep != 0) {
-            std::ostringstream oss;
-            oss << "Error when scan this file. In this xline, there are "
-                   "missing some offset lines, i.e., xline(i) != (line+xstep). "
-                   "But we got xline(i) = "
-                << xline(xt) << ", line = " << xxline << ", xstep = " << xstep
-                << ". xline(i) - (line+xstep) = " << skipx
-                << ", and skipx % xstep != 0. Maybe the xstep is wrong.";
-            throw std::runtime_error(oss.str());
-          }
-          skipx /= xstep;
-          if (skipx < 0) {
-            throw std::runtime_error("Error when scan this file. skipx < 0. "
-                                     "Maybe the xstep is wrong.");
-          }
-        }
-      }
-    }
-
-    // missing line
-    if (it < ntrace() && iline(it) != (iiline + istep)) {
-      skipi = xline(it) - (iiline + istep);
-      if (skipi % istep != 0) {
-        std::ostringstream oss;
-        oss << "Error when scan this file. In this line, there are "
-               "missing some xlines, i.e., iline(i) != (line+istep). "
-               "But we got iline(i) = "
-            << iline(it) << ", line = " << iiline << ", istep = " << istep
-            << ". iline(i) - (line+istep) = " << skipi
-            << ", and skipi % istep != 0. Maybe the istep is wrong.";
-        throw std::runtime_error(oss.str());
-      }
-      skipi /= istep;
-      if (skipi < 0) {
-        throw std::runtime_error(
-            "Error when scan this file. skipi < 0. Maybe the istep is wrong.");
       }
     }
   }
@@ -279,6 +279,7 @@ void SegyRW::scan() {
 
   // if line or xline is not continouse, we record their idx for fast indexing
   for (auto linfo : m_iinfos) {
+    CHECK_SIGNALS();
     if (!is4D) {
       if (linfo.count == 0) {
         continue;
@@ -641,25 +642,31 @@ void SegyRW::_read4d_xo(float *dst, LineInfo &linfo, size_t xs, size_t xe,
 
   // float *odst = dst;
 
-  std::array<size_t, 4> idx;
-  find_idx(idx, linfo, xs, xe);
+  size_t start = xl2ix(linfo.lstart);
+  size_t end = xl2ix(linfo.lend) + 1;
 
   // fill the left
-  if (idx[0] > 0) {
-    std::fill(dst, dst + idx[0] * sizeOT, m_meta.fillNoValue);
-    dst += idx[0] * sizeOT;
+  if (xs < start) {
+    std::fill(dst, dst + (start - xs) * sizeOT, m_meta.fillNoValue);
+    dst += (start - xs) * sizeOT;
+    xs = start;
+  }
+  size_t xend = xe, tofill = 0;
+  if (xe > end) {
+    xend = end;
+    tofill = xe - end;
   }
 
   // read, when is 4D, xlines are always continuous as we filled
-  for (size_t ix = idx[2]; ix < idx[3]; ix++) {
-    _read_inner(dst, linfo.xinfos[ix], os, oe, ts, te);
+  for (size_t ix = xs; ix < xend; ix++) {
+    _read_inner(dst, linfo.xinfos[ix-start], os, oe, ts, te);
     dst += sizeOT;
   }
 
   // fill the right
-  if (idx[1] > 0) {
-    std::fill(dst, dst + idx[1] * sizeOT, m_meta.fillNoValue);
-    dst += idx[1] * sizeOT;
+  if (tofill) {
+    std::fill(dst, dst + tofill * sizeOT, m_meta.fillNoValue);
+    dst += tofill * sizeOT;
   }
   // assert((dst - odst) == sizeXOT);
   // assert
@@ -705,15 +712,23 @@ void SegyRW::_write4d_xo(const float *src, LineInfo &linfo, size_t xs,
     return;
   }
 
-  std::array<size_t, 4> idx;
-  find_idx(idx, linfo, xs, xe);
+  size_t start = xl2ix(linfo.lstart);
+  size_t end = xl2ix(linfo.lend) + 1;
+  size_t skip = 0;
 
-  const float *srcf = src + idx[0] * sizeOT;
+  if (xs < start) {
+    skip = start - xs;
+    xs = start;
+  }
+  if (xe > end) {
+    xe = end;
+  }
+
+  const float *srcf = src + skip * sizeOT;
 
   // read, when is 4D, xlines are always continuous as we filled
-  for (size_t ix = idx[2]; ix < idx[3]; ix++) {
-    _write_inner(srcf + (ix - idx[2]) * sizeOT, linfo.xinfos[ix], os, oe, ts,
-                 te);
+  for (size_t ix = xs; ix < xe; ix++) {
+    _write_inner(srcf + (ix - xs) * sizeOT, linfo.xinfos[ix - start], os, oe, ts, te);
   }
 }
 
@@ -805,15 +820,25 @@ uint64_t SegyRW::_copy4d_xo(char *dst, const float *src, LineInfo &linfo,
 
   uint64_t jump = 0;
 
-  std::array<size_t, 4> idx;
-  find_idx(idx, linfo, xs, xe);
+  size_t start = xl2ix(linfo.lstart);
+  size_t end = xl2ix(linfo.lend) + 1;
+  size_t skip = 0;
+
+  if (xs < start) {
+    skip = start - xs;
+    xs = start;
+  }
+  if (xe > end) {
+    xe = end;
+  }
+
 
   char *odst = dst;
-  const float *srcf = src + idx[0] * sizeXOT;
+  const float *srcf = src + skip * sizeXOT;
 
   // read, when is 4D, xlines are always continuous as we filled
-  for (size_t ix = idx[2]; ix < idx[3]; ix++) {
-    jump = _copy_inner(dst, srcf + (ix - idx[2]) * sizeXOT, linfo.xinfos[ix],
+  for (size_t ix = xs; ix < xe; ix++) {
+    jump = _copy_inner(dst, srcf + (ix - xs) * sizeXOT, linfo.xinfos[ix-start],
                        os, oe, ts, te, fromsrc);
     dst += jump;
   }

@@ -52,12 +52,14 @@ class ScanMixin:
         self._segy.setLocations(*keylocs[:3])
         self._segy.setSteps(*keylocs[3:6])
         self._segy.setXYLocations(*keylocs[6:8])
+        ndim = 4 if keylocs[-1] is True else 3
+        self._segy.set_segy_type(ndim)
         self._segy.scan()
         self._keylocs = self._segy.get_keylocs()
         self._metainfo = self._segy.get_metainfo()
         self._ndim = self._segy.ndim
         self._shape3 = self._segy.shape
-        self._lineinfo = self._segy.get_lineInfo()
+        # self._lineinfo = self._segy.get_lineInfo()
 
     def _scan_unsorted(self, keylocs=None, keys=None):
         if keys is not None:
@@ -408,7 +410,10 @@ class RWMixin:
         self._check_bound2(idx)
         num = idx[1::2].count(-1)
         if num == 0 and not self.unsorted:
-            d = self._segy.read3d(*idx)
+            if self._fast_read and self._is_time_slice(idx):
+                d = self._segy.read_tslice(idx[4], 2, 2) # TODO: fix the hard code
+            else:
+                d = self._segy.read3d(*idx)
         else:
             if not self.is_create_geometry:
                 raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
@@ -633,6 +638,11 @@ class RWMixin:
 
         return out
 
+    def _is_time_slice(self, idx):
+        # Only used in _read3d and num==0 and not unsorted
+        if idx[1] - idx[0] == self.shape[0] and idx[3] - idx[2] == self.shape[1] and idx[5]-idx[4]==1: # yapf: disable
+            return True
+        return False
 
 
 class CheckMixin:
@@ -936,6 +946,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
                  *,
                  ndim: int = None,
                  as_unsorted: bool = False,
+                 fast_read: bool = False,
                  keys: dict = None) -> None:
         np.set_printoptions(suppress=True)
 
@@ -950,6 +961,8 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
                 "\n**Dangerous!!!** You are using a writable mode ('rw'), which may **alter** the SEG-Y file. \n"
                 "It is strongly recommended to make a **backup copy** of the file before proceeding "
                 "to avoid any potential irreversible changes.", UserWarning)
+
+        self._fast_read = fast_read # TODO: set as 'auto'? and how to set step?
 
         # for values
         self._min = None
@@ -1115,3 +1128,11 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
     @property
     def access_mode(self) -> str:
         return self._mode
+
+    @property
+    def fast_read(self) -> bool:
+        return self._fast_read
+
+    @fast_read.setter
+    def fast_read(self, value: bool) -> None:
+        self._fast_read = value

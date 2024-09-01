@@ -55,6 +55,8 @@ def get_metaInfo(
     ostep: int = None,
     xloc: int = None,
     yloc: int = None,
+    *,
+    is4d: bool = None,
     apply_scalar: bool = False,
 ) -> Dict:
     """
@@ -89,10 +91,15 @@ def get_metaInfo(
     else:
         segy = Pysegy(str(segyname))
 
-    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, None, None) # yapf: disable
+    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, _is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
+    if is4d is None:
+        is4d = _is4d
+    print(iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d)
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
     segy.setXYLocations(xloc, yloc)
+    ndim = 4 if is4d else 3
+    segy.set_segy_type(ndim)
     segy.scan()
     keys = segy.get_keylocs()
     meta = segy.get_metainfo()
@@ -180,8 +187,8 @@ def trace_count(fname: str) -> int:
     if isinstance(fname, Pysegy):
         return fname.ntrace
     segy = Pysegy(str(fname))
-    count = segy.trace_count
-    segy.close_file()
+    count = segy.ntrace
+    segy.close()
     return count
 
 

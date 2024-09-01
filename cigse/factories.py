@@ -55,6 +55,8 @@ def metaInfo(
     ostep: int = None,
     xloc: int = None,
     yloc: int = None,
+    *,
+    is4d: bool = None,
     apply_scalar: bool = True,
 ) -> None:
     """
@@ -76,7 +78,7 @@ def metaInfo(
         cdp y (real world) value location in trace header
     """
 
-    meta = get_metaInfo(segy_name, iline, xline, offset, istep, xstep, ostep, xloc, yloc, apply_scalar) # yapf: disable
+    meta = get_metaInfo(segy_name, iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d=is4d, apply_scalar=apply_scalar) # yapf: disable
     out = utils.parse_metainfo(meta)
     print(out)
 
@@ -89,6 +91,8 @@ def fromfile(
     istep: int = None,
     xstep: int = None,
     ostep: int = None,
+    *,
+    is4d: bool = None,
 ) -> np.ndarray:
     """
     reading from a segy file.
@@ -111,7 +115,10 @@ def fromfile(
     numpy.ndarray :
         shape as (n-inline, n-crossline, n-time)
     """
-    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
+    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, _is4d] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
+
+    if is4d is not None:
+        is4d = _is4d
 
     if isinstance(segy_name, _CXX_SEGY.Pysegy):
         segy = segy_name
@@ -120,6 +127,8 @@ def fromfile(
 
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
+    ndim = 4 if is4d else 3
+    segy.set_segy_type(ndim)
     segy.scan()
     d = segy.read()
 

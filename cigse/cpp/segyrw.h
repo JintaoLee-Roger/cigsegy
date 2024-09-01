@@ -34,7 +34,7 @@ struct LineInfo {
   size_t line;    // iline/xline number for this line
   size_t itstart; // for this line, start trace index
   size_t itend;   // for this line, end trace index
-  size_t count;   // the number of traces for this line // TODO:
+  size_t count;   // the number of traces for this line
   size_t lstart;  // the start xline/offset
   size_t lend;    // the end xline/offset
 

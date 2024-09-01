@@ -57,8 +57,8 @@ def eval_iline(segy: Pysegy) -> List:
         possible result
     """
     ntrace = segy.ntrace
-    options = [189, 5, 9, 221, 13]
-    select = [189, 5, 9, 221, 13]
+    options = [189, 5, 9, 221, 13, 17]
+    select = [189, 5, 9, 221, 13, 17]
 
     for op in options:
         l0 = _get_keys4(segy, op, 0)
@@ -78,6 +78,10 @@ def eval_iline(segy: Pysegy) -> List:
             continue
         # line number should be increasing/decreasing
         if (l0 < l2 and l2 > ll) or (l0 > l2 and l2 < ll):
+            select.remove(op)
+            continue
+        ls = _get_keys4(segy, op, ntrace // 2, ntrace // 2 + 50)
+        if len(np.unique(ls)) > 10:
             select.remove(op)
             continue
         return op
@@ -104,7 +108,9 @@ def guess(segy_name: str,
 
     N = segy.ntrace
     offset = 37 if offset is None else offset
-    ostep, is4d = eval_offset(segy, offset)
+    # ostep, is4d = eval_offset(segy, offset)
+    is4d = False
+    ostep = 0
 
     iline = eval_iline(segy) if iline is None else iline
 
@@ -113,53 +119,90 @@ def guess(segy_name: str,
     lines = set()
     oix = []
     xlines = [193, 17, 21, 13] if xline is None else [xline]
-    while True:
-        part = _get_keys4(segy, [offset, iline, *xlines], start, start + 200)
+    while True and (start + 400) <= segy.ntrace:
+        part = _get_keys4(segy, [offset, iline, *xlines], start, start + 400)
         oix.append(part)
         lines.update(np.unique(part[:, 1]))
-        start += 1000
+        start += 400
         if len(lines) >= 3:
             break
 
     # eval istep
     lines = np.array(sorted(list(lines)))
+    # print(lines)
     dif = np.diff(lines)
     istepx = dif.min() if dif[0] > 0 else dif.max()
-    if istep is not None and istep != istepx:
-        warnings.warn(f"You set istep={istep}, but we scan the istep is {istepx}, be careful!") # yapf: disable
-    else:
-        istep = istepx
 
     # line: n, n+1, n+2, extract the data of line n+1
     oix = np.concatenate(oix)
     idx = np.where(np.diff(oix[:, 1]) != 0)[0][:2] + 1
     oix = oix[idx[0]:idx[1], :]
+    nig = oix.shape[0]
+
+    def _double_check_istep():
+        start2 = int(N // 3 * 2)
+        oix2 = []
+        lines2 = set()
+        while True and (start2 + nig) <= segy.ntrace:
+            part2 = _get_keys4(segy, iline, start2, start2 + nig)
+            oix2.append(part2)
+            lines2.update(np.unique(part2))
+            start2 += nig
+            if len(lines2) >= 3:
+                break
+        lines2 = np.array(sorted(list(lines2)))
+        dif2 = np.diff(lines2)
+        istepx2 = dif2.min() if dif2[0] > 0 else dif2.max()
+        return istepx2
+
+    if abs(istepx) > 1:  # if istep is not 1, double check
+        istepx2 = _double_check_istep()
+        if abs(istepx2) < abs(istepx):
+            istepx = istepx2
+
+    if istep is not None and istep != istepx:
+        warnings.warn(f"You set istep={istep}, but we scan the istep is {istepx}, be careful!") # yapf: disable
+    else:
+        istep = istepx
 
     # eval xline
     def _eval_xline(i):
-        # if abs(_get_keys4(segy, , ntrace - 1) - _get_keys4(segy, op, 0)) > ntrace // 2
         dif = np.diff(oix[:, i])
         idx = np.where(dif != 0)[0]
-        values, counts = np.unique(idx, return_counts=True)
-        xstepi = int(dif[dif != 0].min())
+        # values, counts = np.unique(idx, return_counts=True)
+        dif = dif[dif != 0]
+        if len(dif) == 0:
+            return 0
+        xstepi = dif.min() if dif[0] > 0 else dif.max()
         return xstepi
 
     if len(xlines) == 1:
         xstepx = _eval_xline(2)
+        xidx = 2
     else:
         for i in range(len(xlines)):
-            if abs(_get_keys4(segy, xlines[i], N - 1) - _get_keys4(segy, xlines[i], 0)) > N // 2: # yapf: disable
+            if abs(_get_keys4(segy, xlines[i], N - 1) - _get_keys4(segy, xlines[i], 0)) > N // 10: # yapf: disable
                 continue
             xstepx = _eval_xline(i + 2)
-            if xstepx:
+            if abs(xstepx) > 0 and abs(xstepx) < 100:
                 xline = xlines[i]
+                xidx = i + 2
                 # oix = oix[:, [0, 1, i + 2]]
                 break
 
     if xstep is not None and xstep != xstepx:
         warnings.warn(f"You set xstep={xstep}, but we scan the xstep is {xstepx}, be careful!") # yapf: disable
+    elif xstepx == 0:
+        raise RuntimeError("Cannot evaluate xline location, we evaluate xstep is 0") # yapf: disable
     else:
         xstep = xstepx
+
+    # eval offset
+    change_points = np.where(np.diff(oix[:, xidx]) != 0)[0] + 1
+    segments = np.split(oix[:, xidx], change_points)
+    count = sum(1 for seg in segments if len(seg) > 1)
+    if count > 4:
+        ostep, is4d = eval_offset(segy, offset)
 
     # eval xloc and yloc
     if xloc is None or yloc is None:
@@ -172,11 +215,9 @@ def guess(segy_name: str,
             scalar = segy.keyi2(0, 71)
             scalar = 1 if scalar == 0 else scalar
             scalar = -1 / scalar if scalar < 0 else scalar
-            xys *= xys
-            d1 = ((xys[-1, 0] - xys[0, 0])**2 +
-                  (xys[-1, 1] - xys[0, 1])**2)**0.5
-            d2 = ((xys[-1, 2] - xys[0, 2])**2 +
-                  (xys[-1, 3] - xys[0, 3])**2)**0.5
+            xys = xys * scalar
+            d1 = ((xys[-1, 0] - xys[0, 0])**2 + (xys[-1, 1] - xys[0, 1])**2)**0.5
+            d2 = ((xys[-1, 2] - xys[0, 2])**2 + (xys[-1, 3] - xys[0, 3])**2)**0.5
             if d1 < 3 and d2 > 3:
                 xloc, yloc = 73, 77
             else:
@@ -205,9 +246,13 @@ def eval_offset(segyname, offset: int = 37) -> int:
     dif = np.diff(ks)
     udif, count = np.unique(dif, return_counts=True)
     if (len(udif) > 10):
-        raise RuntimeError("offset may be unsorted, can not evaluate this file") # yapf: disable
+        raise RuntimeError("offset is not constant, but is unsorted") # yapf: disable
+        # return 0, False
 
-    return udif[np.argmax(count)], True
+    ostep = udif[np.argmax(count)]
+    if ostep == 0:
+        return 0, False
+    return ostep, True
 
 
 def parse_metainfo(meta: dict):
