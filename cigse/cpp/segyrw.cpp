@@ -27,7 +27,7 @@ inline static void set_keyi4(char *theader, size_t loc, int32_t val) {
   *reinterpret_cast<int32_t *>(theader + loc - 1) = swap_endian<int32_t>(val);
 }
 
-void SegyRW::scan() {
+void SegyRW::scan(bool fast) {
   m_meta.start_time = keyi2(0, kTStartTimeField);
   m_meta.scalar = keyi2(0, kTScalarField);
 
@@ -288,6 +288,7 @@ void SegyRW::scan() {
   }
 
   // if line or xline is not continouse, we record their idx for fast indexing
+  if (!fast) {
   for (auto linfo : m_iinfos) {
     CHECK_SIGNALS();
     if (!is4D) {
@@ -299,7 +300,7 @@ void SegyRW::scan() {
         continue;
       }
 
-      // we set count = kInvalid for not continous line
+      // we set count = kInvalid for not continous line // TODO: to speed this
       linfo.idx.resize(m_meta.nx, kInvalid);
       for (size_t xt = linfo.itstart; xt < linfo.itend + 1; xt++) {
         linfo.idx[xl2ix(xline(xt))] = xt;
@@ -323,6 +324,7 @@ void SegyRW::scan() {
         xinfo.count = 0;
       }
     }
+  }
   }
 
   { /********** calculate interval **********/
@@ -630,7 +632,7 @@ void SegyRW::_read_inner(float *dst, LineInfo &linfo, size_t ks, size_t ke,
 
     if (idx[1] > 0) {
       std::fill(dst, dst + idx[1] * nt, m_meta.fillNoValue);
-      dst += idx[1] * nt; // TODO: remove
+      dst += idx[1] * nt;
     }
     // assert((dst - odst) == sizeKT);
   }
@@ -762,7 +764,7 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
         // copy trace header
         memcpy(dst, trheader(it), kTraceHeaderSize);
         if (tchanged) {
-          if (ts > 0) { // TODO: ts need *1000 ?
+          if (ts > 0) { // : ts need *1000 ?
             segy::set_keyi2(dst, kTStartTimeField, ts * m_meta.dt / 1000);
           }
           segy::set_keyi2(dst, kTSampleCountField, nt);
@@ -792,7 +794,7 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
       // copy trace header
       memcpy(dst, trheader(tx), kTraceHeaderSize);
       if (tchanged) {
-        if (ts > 0) { // TODO: ts need *1000 ?
+        if (ts > 0) { 
           segy::set_keyi2(dst, kTStartTimeField, ts * m_meta.dt / 1000);
         }
         segy::set_keyi2(dst, kTSampleCountField, nt);
@@ -987,7 +989,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
       CHECK_SIGNALS();
       memcpy(outptr, trheader(it), kTraceHeaderSize);
       if (tchanged) {
-        if (ts > 0) { // TODO: ts need *1000 ?
+        if (ts > 0) {
           segy::set_keyi2(outptr, kTStartTimeField, ts);
         }
         segy::set_keyi2(outptr, kTSampleCountField, nt);

@@ -63,7 +63,7 @@ public:
   }
 
   void set_segy_type(size_t ndim);
-  void scan();
+  void scan(bool fast = false);
   std::vector<size_t> shape() const;
   inline size_t ndim() const { return m_ndim; }
 

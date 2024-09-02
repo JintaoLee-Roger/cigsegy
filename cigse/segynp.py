@@ -8,7 +8,7 @@ import numpy as np
 from cigse.cpp import _CXX_SEGY
 from cigse.transform import get_transform_metrix, apply_transform
 from cigse.interp import arbitray_line
-from cigse import utils, plot, tools
+from cigse import utils, plot, tools, createtool
 import warnings
 
 
@@ -59,11 +59,11 @@ class ScanMixin:
         self._metainfo = self._segy.get_metainfo()
         self._ndim = self._segy.ndim
         self._shape3 = self._segy.shape
-        # self._lineinfo = self._segy.get_lineInfo()
+        # self._lineinfo = self._segy.get_lineInfo() # TODO:
 
     def _scan_unsorted(self, keylocs=None, keys=None, ndim=None):
         if keys is not None:
-            pass
+            geom = tools.full_scan(self._segy, keys=keys)
         elif keylocs is None:
             raise ValueError(
                 "When 'as_unsorted' is True, either 'keylocs' must be set, or 'keys' must be provided."
@@ -79,8 +79,8 @@ class ScanMixin:
                 offset = keylocs.get('offset', 37)
                 geom = tools.full_scan(self._segy, keylocs['iline'],
                                        keylocs['xline'], offset)
-            self.update_geometry(geom['geom'])
-            self._parser_unsorted_infos(geom)
+        self.update_geometry(geom['geom'])
+        self._parser_unsorted_infos(geom)
 
     def _parser_unsorted_infos(self, geom):
         self._keylocs = self._segy.get_keylocs()
@@ -336,6 +336,7 @@ class InterpMixin:
         """
         Interpolate the input SEG-Y data to align with the self coordinate system.
         """
+        raise NotImplementedError("Not Implemented yet")
 
     def _process_points(self, points, ptype='auto'):
         assert self.ndim == 3, "The data is not 3D"
@@ -415,7 +416,7 @@ class RWMixin:
         num = idx[1::2].count(-1)
         if num == 0 and not self.unsorted:
             if self._fast_read and self._is_time_slice(idx):
-                d = self._segy.read_tslice(idx[4], 2, 2) # TODO: fix the hard code
+                d = self._segy.read_tslice(idx[4], self._fstep[0], self._fstep[1])
             else:
                 d = self._segy.read3d(*idx)
         else:
@@ -701,7 +702,7 @@ class SegyCMixin:
         else:
             assert len(ranges) == self.ndim * 2, f"ndim is {self.ndim}, need {self.ndim*2} idx, but got {len(ranges)}"
 
-        # TODO: parser textual header
+        textual = createtool.generate_textual(self._metainfo, textual)
 
         self._segy.cut(outname, ranges, as2d, textual)
 
@@ -727,8 +728,7 @@ class SegyCMixin:
             start = [0] * len(shape)
 
         if len(textual) > 0 and len(textual) != 3200:
-            pass # TODO: parser textual header
-            # textual =
+            textual = createtool.generate_textual(textual)
 
         if isinstance(src, np.ndarray):
             self._segy.create_by_sharing_header(outname, src, start, as2d, textual)
@@ -981,6 +981,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         self._keylocs = None
         self._metainfo = None
         self._lineinfo = None
+        self._fstep = (2, 2)
 
         self._shape2 = (self._segy.ntrace, self._segy.nt)
         self._shape3 = None
@@ -1140,3 +1141,6 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
     @fast_read.setter
     def fast_read(self, value: bool) -> None:
         self._fast_read = value
+
+    def set_fast_read_steps(self, istep, xstep):
+        self._fstep = (istep, xstep)

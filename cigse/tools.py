@@ -100,7 +100,7 @@ def get_metaInfo(
     segy.setXYLocations(xloc, yloc)
     ndim = 4 if is4d else 3
     segy.set_segy_type(ndim)
-    segy.scan()
+    segy.scan(True)
     keys = segy.get_keylocs()
     meta = segy.get_metainfo()
     meta = {**keys, **meta}
@@ -135,7 +135,7 @@ def get_lineInfo(
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
     segy.setXYLocations(xloc, yloc)
-    segy.scan()
+    segy.scan(True)
     lineinfo = segy.get_lineInfo()
     ndim = segy.ndim
 
@@ -193,9 +193,10 @@ def trace_count(fname: str) -> int:
 
 
 def full_scan(fname: str,
-              iline: int,
-              xline: int,
+              iline: int = None,
+              xline: int = None,
               offset: int = 37,
+              keys: np.ndarray = None,
               is4d: bool = None) -> dict:
     """
     Scan all keys of the SEG-Y file. This is useful for unsorted SEG-Y file.
@@ -205,7 +206,19 @@ def full_scan(fname: str,
     else:
         segy = Pysegy(str(fname))
 
-    keys = segy.get_trace_keys([iline, xline, offset], [4] * 3, 0, segy.ntrace)
+    if keys is None:
+        if iline is None or xline is None:
+            raise ValueError("keys is None, so iline and xline must be inputed, but got None")
+        keys = segy.get_trace_keys([iline, xline, offset], [4] * 3, 0, segy.ntrace)
+    else:
+        assert keys.ndim == 2
+        if keys.shape[1] == 2:
+            is4d = False 
+        elif keys.shape[1] == 3:
+            is4d = True
+        else:
+            raise ValueError("keys' shape must be (N, 2) or (N, 3)")
+
     ib = keys[:, 0].min()
     ie = keys[:, 0].max()
     diff = np.diff(np.sort(keys[:, 0]))
@@ -222,7 +235,7 @@ def full_scan(fname: str,
     if (xe - xb) % xstep != 0:
         raise RuntimeError("can not create geomtry (error when determine xline/xstep)") # yapf: disable
 
-    if is4d is None:
+    if is4d is None or is4d == True:
         is4d = True
         ob = keys[:, 2].min()
         oe = keys[:, 2].max()
@@ -276,7 +289,6 @@ def full_scan(fname: str,
     return geominfo
 
 
-# TODO: what's name of this function?
 def load_by_geom(
     fname,
     geominfo: dict,

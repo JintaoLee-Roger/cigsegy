@@ -59,3 +59,5 @@ from . import utils
 from . import interp
 from . import transform
 from . import constinfo
+from . import createtool
+from .createtool import SegyCreate

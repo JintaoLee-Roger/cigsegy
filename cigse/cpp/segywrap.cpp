@@ -500,7 +500,7 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
 
       // read
       .def("set_segy_type", &Pysegy::set_segy_type, py::arg("ndim"))
-      .def("scan", &Pysegy::scan)
+      .def("scan", &Pysegy::scan, py::arg("fast") = false)
       .def("read4d", &Pysegy::read4d, py::arg("ib"), py::arg("ie"),
            py::arg("xb"), py::arg("xe"), py::arg("ob"), py::arg("oe"),
            py::arg("tb"), py::arg("te"))

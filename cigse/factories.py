@@ -15,7 +15,7 @@ import numpy as np
 from cigse.cpp import _CXX_SEGY
 from cigse.constinfo import kBinaryHeaderHelp, kTraceHeaderHelp
 from cigse.tools import get_metaInfo
-from cigse import utils
+from cigse import utils, createtool
 
 
 def textual_header(segy_name: str, coding: str = None) -> None:
@@ -479,15 +479,11 @@ def ibm_to_ieee(value, is_big_endian: bool):
         return _CXX_SEGY.ibm_to_ieee(value, is_big_endian)
     elif isinstance(value, np.ndarray):
         if value.dtype != np.float32:
-            warnings.warn(
-                f"value.dtype = {value.dtype} is not np.float32, it will be converted to np.float32."
-            )
+            warnings.warn(f"value.dtype = {value.dtype} is not np.float32, it will be converted to np.float32.")  # yapf: disable
             value = value.astype(np.float32)
         return _CXX_SEGY.ibms_to_ieees(value, is_big_endian)
     else:
-        raise ValueError(
-            f"value = {value} is not a valid type, it should be one of {float, int, np.ndarray}"
-        )
+        raise ValueError(f"value = {value} is not a valid type, it should be one of float, int, np.ndarray") # yapf: disable
 
 
 def ieee_to_ibm(value, is_little_endian: bool):
@@ -498,21 +494,16 @@ def ieee_to_ibm(value, is_little_endian: bool):
         return _CXX_SEGY.ieee_to_ibm(value, is_little_endian)
     elif isinstance(value, np.ndarray):
         if value.dtype != np.float32:
-            warnings.warn(
-                f"value.dtype = {value.dtype} is not np.float32, it will be converted to np.float32."
-            )
+            warnings.warn(f"value.dtype = {value.dtype} is not np.float32, it will be converted to np.float32.") # yapf: disable
             value = value.astype(np.float32)
         return _CXX_SEGY.ieees_to_ibms(value, is_little_endian)
     else:
-        raise ValueError(
-            f"value = {value} is not a valid type, it should be one of {float, int, np.ndarray}"
-        )
+        raise ValueError(f"value = {value} is not a valid type, it should be one of float, int, np.ndarray") # yapf: disable
 
 
 def create(
     segy_out: str,
-    binary_in,
-    shape=None,
+    src: np.ndarray,
     format: int = 5,
     dt: int = 2000,
     start_time: int = 0,
@@ -554,3 +545,15 @@ def create(
         "create function is deprecated and will remove in the future version, please consider use `cigsegy.SegyCreate` class instead.",
         DeprecationWarning,
     )
+    if not isinstance(src, np.ndarray):
+        raise TypeError("src only support np.ndarray")
+
+    assert src.shape == 3, "this function only support 3D Volumes"
+    start = [min_iline, min_xline, start_time]
+    interval = [iline_interval, xline_interval, dt]
+
+    meta = createtool.assemble_metainfo(src.shape, dformat=format, start=start, interval=interval)
+
+    segyc = createtool.SegyCreate(segy_out, src, meta)
+    segyc.set_textual_header(custom_info)
+    segyc.create()

@@ -340,9 +340,14 @@ class Pysegy:
         4 for prestack 4D volume/gather
         """
 
-    def scan(self) -> None:
+    def scan(self, fast=False) -> None:
         """
         fast scan the file to obtain some meta infos
+
+        Parameters
+        -----------
+        fast : bool
+            whether fast to scan. We recommand use this to get metainfo
         """
 
     def read4d(
