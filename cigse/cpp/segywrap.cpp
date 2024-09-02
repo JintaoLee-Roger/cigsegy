@@ -31,7 +31,7 @@ public:
     }
     if (ib > ie || ie > m_meta.ni || xb > xe || xe > m_meta.nx || ob > oe ||
         oe > m_meta.no || tb > te || te > m_meta.nt) {
-      throw std::runtime_error("Index out of bound.");
+      throw std::out_of_range("Index out of bound.");
     }
 
     size_t nt = te - tb;
@@ -52,7 +52,7 @@ public:
     }
     if (ib > ie || ie > m_meta.ni || xb > xe || xe > m_meta.nx || tb > te ||
         te > m_meta.nt) {
-      throw std::runtime_error("Index out of bound.");
+      throw std::out_of_range("Index out of bound.");
     }
 
     size_t nt = te - tb;
@@ -106,7 +106,7 @@ public:
 
   npfloat itrace(size_t n) {
     if (n >= m_meta.ntrace) {
-      throw std::runtime_error("Index out of bound " + std::to_string(n));
+      throw std::out_of_range("Index out of bound. Index: " + std::to_string(n));
     }
 
     py::array_t<float> out(m_meta.nt);
@@ -117,7 +117,7 @@ public:
 
   npfloat collect(size_t beg, size_t end, size_t tbeg, size_t tend) {
     if (beg > end || end > m_meta.ntrace || tbeg > tend || tend > m_meta.nt) {
-      throw std::runtime_error("Index out of bound.");
+      throw std::out_of_range("Index out of bound.");
     }
 
     auto data = py::array_t<float>({end - beg, tend - tbeg});
@@ -131,7 +131,7 @@ public:
       throw std::runtime_error("Input index must be a 1D data.");
     }
     if (tbeg > tend || tend > m_meta.nt) {
-      throw std::runtime_error("`tbeg` or `tend` index out of bound.");
+      throw std::out_of_range("`tbeg` or `tend` index out of bound.");
     }
 
     size_t N = index.shape()[0];
@@ -152,7 +152,7 @@ public:
 
   npuchar get_trace_header(size_t n) {
     if (n > ntrace()) {
-      throw std::runtime_error("Index out of bound." + std::to_string(n));
+      throw std::out_of_range("Index out of bound." + std::to_string(n));
     }
 
     py::array_t<uchar> out(segy::kTraceHeaderSize);
@@ -164,7 +164,7 @@ public:
   npint32 get_trace_keys(const py::list &keys, const py::list &length,
                          size_t beg, size_t end) {
     if (beg > end || end > ntrace()) {
-      throw std::runtime_error("`beg` or `end` Index out of bound.");
+      throw std::out_of_range("`beg` or `end` Index out of bound.");
     }
     if (keys.size() != length.size()) {
       throw std::runtime_error("`keys` and `length` must have the same size.");
@@ -184,7 +184,7 @@ public:
   //  for write
   void write_itrace(const npfloat &data, size_t n) {
     if (n >= m_meta.ntrace) {
-      throw std::runtime_error("Index out of bound: " + std::to_string(n));
+      throw std::out_of_range("Index out of bound: " + std::to_string(n));
     }
     if (data.ndim() != 1 || data.size() != m_meta.nt) {
       throw std::runtime_error("Input data shape not match.");
@@ -197,7 +197,7 @@ public:
   void write_traces(const npfloat &data, size_t beg, size_t end, size_t tbeg,
                     size_t tend) {
     if (beg > end || end > m_meta.ntrace || tbeg > tend || tend > m_meta.nt) {
-      throw std::runtime_error("Index out of bound.");
+      throw std::out_of_range("Index out of bound.");
     }
     if (data.size() != (uint64_t)(end - beg) * (tend - tbeg)) {
       throw std::runtime_error("Input data size not match.");
@@ -213,7 +213,7 @@ public:
       throw std::runtime_error("Input index must be a 1D data.");
     }
     if (tbeg > tend || tend > m_meta.nt) {
-      throw std::runtime_error("`tbeg` or `tend` index out of bound.");
+      throw std::out_of_range("`tbeg` or `tend` index out of bound.");
     }
     if (data.size() != index.size() * (tend - tbeg)) {
       throw std::runtime_error("Input data size not match.");
@@ -248,7 +248,7 @@ public:
     }
     if (ib > ie || ie > m_meta.ni || xb > xe || xe > m_meta.nx || tb > te ||
         te > m_meta.nt) {
-      throw std::runtime_error("Index out of bound.");
+      throw std::out_of_range("Index out of bound.");
     }
     if (data.size() != (uint64_t)(ie - ib) * (xe - xb) * (te - tb)) {
       throw std::runtime_error("Input data size not match.");
@@ -265,7 +265,7 @@ public:
     }
     if (ib > ie || ie > m_meta.ni || xb > xe || xe > m_meta.nx || ob > oe ||
         oe > m_meta.no || tb > te || te > m_meta.nt) {
-      throw std::runtime_error("Index out of bound.");
+      throw std::out_of_range("Index out of bound.");
     }
     if (data.size() !=
         (uint64_t)(ie - ib) * (xe - xb) * (oe - ob) * (te - tb)) {

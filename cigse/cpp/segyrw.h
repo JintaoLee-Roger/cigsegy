@@ -158,6 +158,8 @@ inline std::vector<size_t> SegyRW::shape() const {
   }
 }
 
+// This function is too simple, so we recommend to
+// set dim by `set_segy_type` function
 inline bool SegyRW::isPreStack() {
   int o0 = offset(0);
   size_t n = m_meta.ntrace < 500 ? m_meta.ntrace : 500;

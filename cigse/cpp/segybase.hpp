@@ -10,6 +10,7 @@
 
 #include "mio.hpp"
 #include "utils.hpp"
+#include <iostream>
 
 #include <vector>
 
@@ -301,8 +302,8 @@ inline void SegyBase::collect(float *data, const int32_t *index, size_t n,
   for (size_t i = 0; i < n; i++) {
     CHECK_SIGNALS();
     // TODO: remove this?
-    if (index[i] >= m_meta.ntrace) {
-      throw std::runtime_error("Index out of bound." +
+    if (index[i] >= static_cast<int32_t>(m_meta.ntrace)) {
+      throw std::runtime_error("Index out of bound. Index: " +
                                std::to_string(index[i]));
     }
     if (index[i] < 0) {
@@ -354,7 +355,7 @@ inline void SegyBase::write_traces(const float *data, const int32_t *index,
   size_t len = tend - tbeg;
   for (size_t i = 0; i < n; i++) {
     CHECK_SIGNALS();
-    if (index[i] >= m_meta.ntrace) {
+    if (index[i] >= static_cast<int32_t>(m_meta.ntrace)) {
       throw std::runtime_error("Index out of bound." +
                                std::to_string(index[i]));
     }

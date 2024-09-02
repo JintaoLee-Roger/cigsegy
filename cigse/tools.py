@@ -192,7 +192,11 @@ def trace_count(fname: str) -> int:
     return count
 
 
-def full_scan(fname: str, iline: int, xline: int, offset: int = 37) -> dict:
+def full_scan(fname: str,
+              iline: int,
+              xline: int,
+              offset: int = 37,
+              is4d: bool = None) -> dict:
     """
     Scan all keys of the SEG-Y file. This is useful for unsorted SEG-Y file.
     """
@@ -218,22 +222,25 @@ def full_scan(fname: str, iline: int, xline: int, offset: int = 37) -> dict:
     if (xe - xb) % xstep != 0:
         raise RuntimeError("can not create geomtry (error when determine xline/xstep)") # yapf: disable
 
-    is4d = True
-    ob = keys[:, 2].min()
-    oe = keys[:, 2].max()
-    if oe == ob:
-        is4d = False
-    else:
-        try:
-            diff = np.diff(np.sort(keys[:, 2]))
-            diff = diff[diff != 0]
-            ostep = diff.min()
-            if (oe - ob) % ostep != 0:
-                raise RuntimeError("can not create geomtry (error when determine xline/xstep)") # yapf: disable
-
-            no = int((oe - ob) // ostep + 1)
-        except:
+    if is4d is None:
+        is4d = True
+        ob = keys[:, 2].min()
+        oe = keys[:, 2].max()
+        if oe == ob:
             is4d = False
+        elif np.unique(keys[:, 2]).size > 500:
+            is4d = False
+        else:
+            try:
+                diff = np.diff(np.sort(keys[:, 2]))
+                diff = diff[diff != 0]
+                ostep = diff.min()
+                if (oe - ob) % ostep != 0:
+                    raise RuntimeError("can not create geomtry (error when determine xline/xstep)") # yapf: disable
+
+                no = int((oe - ob) // ostep + 1)
+            except:
+                is4d = False
 
     ni = int((ie - ib) // istep + 1)
     nx = int((xe - xb) // xstep + 1)

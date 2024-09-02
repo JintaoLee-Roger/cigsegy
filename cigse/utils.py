@@ -201,7 +201,7 @@ def guess(segy_name: str,
     change_points = np.where(np.diff(oix[:, xidx]) != 0)[0] + 1
     segments = np.split(oix[:, xidx], change_points)
     count = sum(1 for seg in segments if len(seg) > 1)
-    if count > 4:
+    if count > 15:
         ostep, is4d = eval_offset(segy, offset)
 
     # eval xloc and yloc

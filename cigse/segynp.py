@@ -61,7 +61,7 @@ class ScanMixin:
         self._shape3 = self._segy.shape
         # self._lineinfo = self._segy.get_lineInfo()
 
-    def _scan_unsorted(self, keylocs=None, keys=None):
+    def _scan_unsorted(self, keylocs=None, keys=None, ndim=None):
         if keys is not None:
             pass
         elif keylocs is None:
@@ -69,8 +69,12 @@ class ScanMixin:
                 "When 'as_unsorted' is True, either 'keylocs' must be set, or 'keys' must be provided."
             )
         else:
+            if ndim is None:
+                is4d = None
+            else:
+                is4d = ndim == 4
             if isinstance(keylocs, List):
-                geom = tools.full_scan(self._segy, *keylocs[:3])
+                geom = tools.full_scan(self._segy, *keylocs[:3], is4d=is4d)
             else:
                 offset = keylocs.get('offset', 37)
                 geom = tools.full_scan(self._segy, keylocs['iline'],
@@ -85,7 +89,7 @@ class ScanMixin:
         self._shape3 = tuple(geom['shape'])
         self._ndim = len(self._shape3)
 
-        loc = geom['locations']
+        loc = geom['location']
         self._keylocs = dict(iline=loc[0], xline=loc[1])
         self._keylocs['istep'] = geom['iline']['istep']
         self._keylocs['xstep'] = geom['xline']['xstep']
@@ -962,7 +966,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
                 "It is strongly recommended to make a **backup copy** of the file before proceeding "
                 "to avoid any potential irreversible changes.", UserWarning)
 
-        self._fast_read = fast_read # TODO: set as 'auto'? and how to set step?
+        self._fast_read = fast_read  # TODO: set as 'auto'? and how to set step?
 
         # for values
         self._min = None
@@ -988,7 +992,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
 
         if ndim is None or ndim != 2:
             if self._unsorted:
-                self._scan_unsorted(keyloc, keys)
+                self._scan_unsorted(keyloc, keys, ndim)
             else:
                 try:
                     self._scan(keyloc)

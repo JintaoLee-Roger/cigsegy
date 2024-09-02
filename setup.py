@@ -47,18 +47,23 @@ ext_modules = [
     ),
 ]
 
-setup(name=package_name,
-      version=version,
-      long_description=open('README.rst').read(),
-      long_description_content_type='text/x-rst',
-      author='Jintao Li',
-      url='https://github.com/JintaoLee-Roger/cigse',
-      license='MIT',
-      install_requires=['numpy'],
-      python_requires=">=3.6",
-      setup_requires=['pybind11'],
-      ext_modules=ext_modules,
-      cmdclass={"build_ext": build_ext},
-      packages=find_packages(exclude=['docs', 'python', 'tools']),
-      include_package_data=True,
-      exclude_package_data={'cigse': ['*.cpp', '*.txt', 'setup.py']})
+setup(
+    name=package_name,
+    version=version,
+    long_description=open('README.rst').read(),
+    long_description_content_type='text/x-rst',
+    author='Jintao Li',
+    url='https://github.com/JintaoLee-Roger/cigse',
+    license='MIT',
+    install_requires=['numpy'],
+    python_requires=">=3.6",
+    setup_requires=['pybind11'],
+    ext_modules=ext_modules,
+    cmdclass={"build_ext": build_ext},
+    packages=find_packages(exclude=['docs', 'python', 'tools']),
+    include_package_data=True,
+    package_data={
+        "cigse": ["*.pyi"],
+        "cigse.cpp": ["*.pyi"],
+    },
+)

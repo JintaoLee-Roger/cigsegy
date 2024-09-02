@@ -44,7 +44,9 @@ void SegyRW::scan() {
     std::ostringstream oss;
     oss << "Error when scan this file. The size of inline is error. ni = " << ni
         << ", max size = " << kMaxSizeOneDimemsion
-        << ". If ni < 0, maybe istep is error.";
+        << ". If ni < 0, maybe istep is error. We got iline(0) = " 
+        << is << ", iline(ntrace-1) = " << ie << ", istep = " 
+        << istep << ".";
     throw std::runtime_error(oss.str());
   }
 
@@ -124,9 +126,11 @@ void SegyRW::scan() {
         }
         skipi /= istep;
         if (skipi < 0) {
-          // std::cout << iline(it-1) << " " << iline(it) << " " << istep << " " << it << "\n";
-          throw std::runtime_error(
-              "Error when scan this file. skipi < 0. Maybe the istep is wrong.");
+          std::ostringstream oss;
+          oss << "Error when scan this file. skipi < 0. Maybe the istep is wrong. "
+              << "iline(i-1) = " << iline(it - 1) << ", iline(i) = " << iline(it) 
+              << ", line = " << iiline << ", istep = " << istep;
+          throw std::runtime_error(oss.str());
         }
       } else {
         std::ostringstream oss;
@@ -160,7 +164,8 @@ void SegyRW::scan() {
         std::ostringstream oss;
         oss << "Error when scan this file. The size of xline is error. nx = "
             << nx << ", max size = " << kMaxSizeOneDimemsion
-            << ". If nx < 0, maybe xstep is error.";
+            << ". If nx < 0, maybe xstep is error. xend = " << xend
+            << ", xstart = " << xs << ", xstep = " << xstep;
         throw std::runtime_error(oss.str());
       }
 
@@ -216,8 +221,11 @@ void SegyRW::scan() {
             }
             skipx /= xstep;
             if (skipx < 0) {
-              throw std::runtime_error("Error when scan this file. skipx < 0. "
-                                      "Maybe the xstep is wrong.");
+              std::ostringstream oss;
+              oss << "Error when scan this file. skipx < 0. Maybe the istep is wrong. "
+                  << "xline(i-1) = " << xline(xt - 1) << ", xline(i) = " << xline(xt) 
+                  << ", xxline = " << xxline << ", xstep = " << xstep;
+              throw std::runtime_error(oss.str());
             }
           } else {
             std::ostringstream oss;
@@ -256,9 +264,10 @@ void SegyRW::scan() {
   int nx = (gxend - gxstart) / xstep + 1;
   if (nx < 0 || nx > kMaxSizeOneDimemsion) {
     std::ostringstream oss;
-    oss << "Error when scan this file. The size of xline is error. nx = " << nx
-        << ", max size = " << kMaxSizeOneDimemsion
-        << ". If nx < 0, maybe xstep is error.";
+    oss << "Error when scan this file. The size of xline is error. nx = "
+        << nx << ", max size = " << kMaxSizeOneDimemsion
+        << ". If nx < 0, maybe xstep is error. gxend = " << gxend
+        << ", gxstart = " << gxstart << ", xstep = " << xstep;
     throw std::runtime_error(oss.str());
   }
   m_meta.nx = nx;
@@ -271,7 +280,8 @@ void SegyRW::scan() {
       std::ostringstream oss;
       oss << "Error when scan this file. The size of offset is error. no = "
           << no << ", max size = " << kMaxSizeOneDimemsion
-          << ". If no < 0, maybe ostep is error.";
+          << ". If no < 0, maybe ostep is error. goend = " << goend 
+          << ", gostart = " << gostart << ", ostep = " << ostep;
       throw std::runtime_error(oss.str());
     }
     m_meta.no = no;
