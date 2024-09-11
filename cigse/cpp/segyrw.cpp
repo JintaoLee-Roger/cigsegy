@@ -74,6 +74,9 @@ void SegyRW::scan(bool fast) {
   size_t it = 0;
   size_t jumpl = 1;
   size_t jumpx = 1;
+  if (!is4D) {
+    jumpx = m_meta.ntrace / ni;
+  }
   for (size_t ii = 0; ii < ni; ++ii) {
     CHECK_SIGNALS();
     LineInfo &linfo = m_iinfos[ii];
@@ -152,6 +155,9 @@ void SegyRW::scan(bool fast) {
     linfo.lstart = xs;
     linfo.lend = xend;
     linfo.count = it - itstart;
+    if (fast && !is4D && linfo.count != ((linfo.lend - linfo.lstart) / m_keys.xstep + 1)) {
+      linfo.count = kInvalid;
+    }
 
     // update global xline range
     gxstart = xstep > 0 ? MMIN(gxstart, xs) : MMAX(gxstart, xs);
@@ -247,6 +253,9 @@ void SegyRW::scan(bool fast) {
         xinfo.lstart = ostart;
         xinfo.lend = oend;
         xinfo.count = xt - xtstart;
+        if (fast && xinfo.count != ((xinfo.lend - xinfo.lstart) / m_keys.ostep + 1)) {
+          xinfo.count = kInvalid;
+        }
 
         // update global offset range
         gostart = ostep > 0 ? MMIN(gostart, ostart) : MMAX(gostart, ostart);
@@ -303,7 +312,7 @@ void SegyRW::scan(bool fast) {
       // we set count = kInvalid for not continous line // TODO: to speed this
       linfo.idx.resize(m_meta.nx, kInvalid);
       for (size_t xt = linfo.itstart; xt < linfo.itend + 1; xt++) {
-        linfo.idx[xl2ix(xline(xt))] = xt;
+        linfo.idx[itx2ix(xt)] = xt;
       }
       linfo.count = 0;
     } else {
@@ -319,7 +328,7 @@ void SegyRW::scan(bool fast) {
         // we set count = -1 for not continous xline
         xinfo.idx.resize(m_meta.no, kInvalid);
         for (size_t ot = xinfo.itstart; ot < xinfo.itend + 1; ot++) {
-          xinfo.idx[of2io(offset(ot))] = ot;
+          xinfo.idx[itx2io(ot)] = ot;
         }
         xinfo.count = 0;
       }
@@ -463,6 +472,22 @@ void SegyRW::read_tslice(float *dst, size_t t, size_t stepi, size_t stepx) {
         dstl += 1;
       }
     }
+
+  else if (linfo.count == kInvalid) {
+    std::fill(dstl, dstl + sizeXT, m_meta.fillNoValue);
+    // find start & end
+    size_t its, ite;
+    find_nearest_idx(linfo, 0, m_meta.nx, its, ite);
+    for (size_t i=its; i<ite; i++) {
+      size_t ix = linfo.isline ? itx2ix(i) : itx2io(i);
+      if (ix % stepx == 0){
+        *(dstl + ix/stepx) = m_readfuncone(trDataStart(i, t));
+      }
+    }
+    if (ite > its) {
+      dstl += sizeXT;
+    }
+  }
 
     //
     else {
@@ -617,6 +642,22 @@ void SegyRW::_read_inner(float *dst, LineInfo &linfo, size_t ks, size_t ke,
     return;
   }
 
+  else if (linfo.count == kInvalid) {
+    std::fill(dst, dst + sizeKT, m_meta.fillNoValue);
+    // find start & end
+    size_t its, ite;
+    find_nearest_idx(linfo, ks, ke, its, ite);
+    if (linfo.isline){
+      for (size_t i=its; i<ite; i++) {
+        m_readfunc(dst+itx2ix(i)*nt, trDataStart(i, ts), nt);
+      }
+    } else {
+      for (size_t i=its; i<ite; i++) {
+        m_readfunc(dst+itx2io(i)*nt, trDataStart(i, ts), nt);
+      }
+    }
+  }
+
   else {
     // float *odst = dst;
 
@@ -704,6 +745,21 @@ void SegyRW::_write_inner(const float *src, LineInfo &linfo, size_t ks,
     return;
   }
 
+  else if (linfo.count == kInvalid) {
+    // find start & end
+    size_t its, ite;
+    find_nearest_idx(linfo, ks, ke, its, ite);
+    if (linfo.isline){
+      for (size_t it=its; it<ite; it++) {
+        m_wfunc(twDataStart(it, ts), src+itx2ix(it)*nt, nt);
+      }
+    } else {
+      for (size_t it=its; it<ite; it++) {
+        m_wfunc(twDataStart(it, ts), src+itx2io(it)*nt, nt);
+      }
+    }
+  }
+
   else {
     std::array<size_t, 4> idx;
     find_idx(idx, linfo, ks, ke);
@@ -781,6 +837,38 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
         }
         dst += nt * m_meta.esize;
       }
+    }
+    return dst - odst;
+  }
+
+  else if (linfo.count == kInvalid) {
+    // find start & end
+    size_t its, ite;
+    find_nearest_idx(linfo, ks, ke, its, ite);
+    for (size_t it=its; it<ite; it++) {
+      // copy trace header
+      memcpy(dst, trheader(it), kTraceHeaderSize);
+      if (tchanged) {
+        if (ts > 0) { // : ts need *1000 ?
+          segy::set_keyi2(dst, kTStartTimeField, ts * m_meta.dt / 1000);
+        }
+        segy::set_keyi2(dst, kTSampleCountField, nt);
+      }
+      dst += kTraceHeaderSize;
+
+      // copy trace
+      if (fromsrc) {
+        // copy from src, i.e., cut
+        memcpy(dst, trDataStart(it, ts), nt * m_meta.esize);
+      } else {
+        // copy from data, i.e., create_by_sharing_header
+        if (linfo.isline) {
+          m_wfunc(twDataStart(it, ts), src+itx2ix(it)*nt, nt);
+        } else {
+          m_wfunc(twDataStart(it, ts), src+itx2io(it)*nt, nt);
+        }
+      }
+      dst += nt * m_meta.esize;
     }
     return dst - odst;
   }
@@ -1003,7 +1091,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
     for (size_t ii = is; ii < ie; ii++) {
       CHECK_SIGNALS();
       LineInfo &linfo = m_iinfos[ii];
-      if (linfo.count == 0) {
+      if (linfo.count == 0 && linfo.idx.size() == 0) {
         continue;
       }
       if (m_ndim == 3) {

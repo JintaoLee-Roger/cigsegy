@@ -112,9 +112,16 @@ private:
   inline size_t of2io(size_t of) {
     return (of - m_meta.start_offset) / m_keys.ostep;
   }
+  inline size_t itx2ix(size_t it) {
+    return xl2ix(xline(it));
+  }
+  inline size_t itx2io(size_t it) {
+    return of2io(offset(it));
+  }
   bool NoOverlap(LineInfo &linfo, size_t s, size_t e);
   void find_idx(std::array<size_t, 4> &idx, LineInfo &linfo, size_t xs,
                 size_t xe);
+  void find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe, size_t &its, size_t &ite);
 
   void _read_inner(float *dst, LineInfo &linfo, size_t ks, size_t ke, size_t ts,
                    size_t te);
@@ -215,6 +222,45 @@ inline void SegyRW::find_idx(std::array<size_t, 4> &idx, LineInfo &linfo,
   }
   idx[2] = linfo.itstart + (xs - start);
   idx[3] = idx[2] + (xe - xs);
+}
+
+inline void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe, size_t &its, size_t &ite) {
+  size_t start = linfo.isline ? xl2ix(linfo.lstart) : of2io(linfo.lstart);
+  size_t end = linfo.isline ? xl2ix(linfo.lend) + 1 : of2io(linfo.lend) + 1;
+  if (xs < start) {
+    xs = start;
+  }
+  if (xe > end) {
+    xe = end;
+  }
+
+  auto iindex = [&](auto it) {
+    if (linfo.isline) {
+        return itx2ix(it);
+    } else {
+        return itx2io(it);
+    }
+  };
+
+  // find start idx
+  its = linfo.itstart + (xs - start);
+  its = its > linfo.itend ? linfo.itend : its;
+  while(iindex(its) > xs && its >= linfo.itstart) {
+    its--;
+  }
+  if (iindex(its) < xs) {
+    its++;
+  }
+
+  // find end idx
+  ite = its + (xe-xs);
+  ite = ite > linfo.itend ? linfo.itend : ite;
+  while(iindex(ite) > xe && ite >= linfo.itstart) {
+    ite--;
+  }
+  if (iindex(ite) < xe) {
+    ite++;
+  }
 }
 
 void create_segy(const std::string &segyname, const float *src,
