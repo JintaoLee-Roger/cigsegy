@@ -48,7 +48,7 @@ class ScanMixin:
         elif isinstance(keylocs, dict):
             keylocs = utils.guess(self._segy, **keylocs)
         else:
-            keylocs = utils.guess(self._segy, keylocs)
+            keylocs = utils.guess(self._segy, *keylocs)
         self._segy.setLocations(*keylocs[:3])
         self._segy.setSteps(*keylocs[3:6])
         self._segy.setXYLocations(*keylocs[6:8])

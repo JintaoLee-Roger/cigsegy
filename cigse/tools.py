@@ -94,7 +94,7 @@ def get_metaInfo(
     [iline, xline, offset, istep, xstep, ostep, xloc, yloc, _is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
     if is4d is None:
         is4d = _is4d
-    print(iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d)
+    # print(iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d)
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
     segy.setXYLocations(xloc, yloc)

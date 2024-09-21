@@ -171,7 +171,7 @@ def parser_textual(meta, custom=None):
         f"C26 Number of samples per trace : bytes 21",
         f"C27 Data sample format code     : bytes 25",
         f"C28 ",
-        f"C29",
+        f"C29 ",
         f"C30 Trace header locations:",
         f"C31 Inline number               : bytes 189",
         f"C32 Crossline number            : bytes 193",
@@ -381,21 +381,21 @@ class SegyCreate:
     # fmt: on
 
     def _set_keyi2(self, header: np.ndarray, loc: int, value: int):
-        loc = loc + 1
+        loc = loc - 1
         header[loc:loc + 2] = np.array([value], dtype='>i2').view(np.uint8)
         return header
 
     def _set_keyi4(self, header: np.ndarray, loc: int, value: int):
-        loc = loc + 1
+        loc = loc - 1
         header[loc:loc + 4] = np.array([value], dtype='>i4').view(np.uint8)
         return header
 
     def _get_keyi2(self, header: np.array, loc: int):
-        loc = loc + 1
+        loc = loc - 1
         return np.frombuffer(header[loc:loc + 2], dtype='>i2')[0]
 
     def _get_keyi4(self, header: np.array, loc: int):
-        loc = loc + 1
+        loc = loc - 1
         return np.frombuffer(header[loc:loc + 4], dtype='>i4')[0]
 
     def _init_bheader(self):
