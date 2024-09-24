@@ -670,10 +670,6 @@ class CheckMixin:
         assert isinstance(index, (int, np.integer)), "index must be int"
         assert index >= 0 and index < self.shape[dim], f"In dimension {dim}, index {index} out of range"
 
-    def _check_wmode(self):
-        if self._mode == 'r':
-            raise RuntimeError("The SEG-Y file is not writable, as you set the `mode` to 'r'. If you want to enable write mode, set to `rw`")
-
     def _check_wmode_lastdim(self, idx):
         if idx[-1] is None:
             raise TypeError("Indexing with a list or ndarray for the last dimension is not supported when writing.")
@@ -851,22 +847,18 @@ class AccessMixin:
 
     def set_bkeyi2(self, loc, value):
         """set binary header value at loc, view it as int16_t"""
-        self._check_wmode()
         return self._segy.set_bkeyi2(loc, value)
 
     def set_bkeyi4(self, loc, value):
         """set binary header value at loc, view it as int32_t"""
-        self._check_wmode()
         return self._segy.set_bkeyi4(loc, value)
 
     def set_keyi2(self, idx, loc, value):
         """set idx-th trace header value at loc, view it as int16_t"""
-        self._check_wmode()
         return self._segy.set_keyi2(idx, loc, value)
 
     def set_keyi4(self, idx, loc, value):
         """set idx-th trace header value at loc, view it as int16_t"""
-        self._check_wmode()
         return self._segy.set_keyi4(idx, loc, value)
 
     def textual_header(self, code='u', printtext=True):
@@ -896,7 +888,6 @@ class InnerMixin:
             return self._read2d(idx)
 
     def __setitem__(self, slices, data: np.ndarray) -> None:
-        self._check_wmode()
         if data.dtype != np.float32:
             raise TypeError("The data type of the input data must be np.float32") # yapf: disable
         idx = self._process_keys(slices)
@@ -958,7 +949,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         self._ndim = ndim
         self._fname = filename
 
-        self._segy = _CXX_SEGY.Pysegy(str(filename))
+        self._segy = _CXX_SEGY.Pysegy(str(filename), mode=='rw')
         self._mode = mode
         if self._mode == 'rw':
             warnings.warn(

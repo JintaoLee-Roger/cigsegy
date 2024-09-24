@@ -110,7 +110,7 @@ def guess(segy_name: str,
     offset = 37 if offset is None else offset
     # ostep, is4d = eval_offset(segy, offset)
     is4d = False
-    ostep = 0
+    ostep = 1
 
     iline = eval_iline(segy) if iline is None else iline
 
@@ -172,7 +172,7 @@ def guess(segy_name: str,
         # values, counts = np.unique(idx, return_counts=True)
         dif = dif[dif != 0]
         if len(dif) == 0:
-            return 0
+            return 1
         xstepi = dif.min() if dif[0] > 0 else dif.max()
         return xstepi
 

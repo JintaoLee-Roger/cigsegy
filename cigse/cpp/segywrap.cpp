@@ -106,7 +106,8 @@ public:
 
   npfloat itrace(size_t n) {
     if (n >= m_meta.ntrace) {
-      throw std::out_of_range("Index out of bound. Index: " + std::to_string(n));
+      throw std::out_of_range("Index out of bound. Index: " +
+                              std::to_string(n));
     }
 
     py::array_t<float> out(m_meta.nt);
@@ -449,7 +450,8 @@ npfloat ibms_to_ieees(const npfloat &ibm_arr, bool is_big_endian) {
 
 PYBIND11_MODULE(_CXX_SEGY, m) {
   py::class_<Pysegy>(m, "Pysegy")
-      .def(py::init<const std::string &>())
+      .def(py::init<const std::string &, bool>(), py::arg("segyname"),
+           py::arg("write") = false)
       .def("close", &Pysegy::close_file)
 
       // location
@@ -500,7 +502,7 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
 
       // read
       .def("set_segy_type", &Pysegy::set_segy_type, py::arg("ndim"))
-      .def("scan", &Pysegy::scan, py::arg("fast") = false)
+      .def("scan", &Pysegy::scan)
       .def("read4d", &Pysegy::read4d, py::arg("ib"), py::arg("ie"),
            py::arg("xb"), py::arg("xe"), py::arg("ob"), py::arg("oe"),
            py::arg("tb"), py::arg("te"))

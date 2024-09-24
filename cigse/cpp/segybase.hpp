@@ -10,7 +10,6 @@
 
 #include "mio.hpp"
 #include "utils.hpp"
-#include <iostream>
 
 #include <vector>
 
@@ -65,6 +64,9 @@ public:
   void close_file() {
     if (m_sink.is_mapped()) {
       m_sink.unmap();
+    }
+    if (m_src.is_mapped()) {
+      m_src.unmap();
     }
   }
 
@@ -148,11 +150,13 @@ public:
 protected:
   const char *m_data_ptr;
   mio::mmap_sink m_sink;
+  mio::mmap_source m_src;
   KeyLocs m_keys;
   MetaInfo m_meta;
   ReadFunc m_readfunc;
   ReadFuncOne m_readfuncone;
   WriteFunc m_wfunc;
+  bool m_w = true;
 
   inline const char *brheader() const {
     return m_data_ptr + kTextualHeaderSize;
@@ -319,30 +323,42 @@ inline void SegyBase::collect(float *data, const int32_t *index, size_t n,
 /**************** For write mode  *********************/
 /******************************************************/
 
+inline void check_write(bool w){
+  if (!w) {
+    throw std::runtime_error("You set write=false, so you can't access write functions.");
+  }
+}
+
 inline void SegyBase::set_bkeyi2(size_t loc, int16_t val) {
+  check_write(m_w);
   *reinterpret_cast<int16_t *>(bwheader() + loc - 1) =
       swap_endian<int16_t>(val);
 }
 inline void SegyBase::set_bkeyi4(size_t loc, int32_t val) {
+  check_write(m_w);
   *reinterpret_cast<int32_t *>(bwheader() + loc - 1) =
       swap_endian<int32_t>(val);
 }
 
 inline void SegyBase::set_keyi2(size_t n, size_t loc, int16_t val) {
+  check_write(m_w);
   *reinterpret_cast<int16_t *>(twheader(n) + loc - 1) =
       swap_endian<int16_t>(val);
 }
 inline void SegyBase::set_keyi4(size_t n, size_t loc, int32_t val) {
+  check_write(m_w);
   *reinterpret_cast<int32_t *>(twheader(n) + loc - 1) =
       swap_endian<int32_t>(val);
 }
 
 inline void SegyBase::write_itrace(const float *data, size_t n) {
+  check_write(m_w);
   m_wfunc(twDataStart(n), data, m_meta.nt);
 }
 
 inline void SegyBase::write_traces(const float *data, size_t beg, size_t end,
                                    size_t tbeg, size_t tend) {
+  check_write(m_w);
   size_t n = end - beg;
   for (size_t i = beg; i < end; i++) {
     CHECK_SIGNALS();
@@ -352,6 +368,7 @@ inline void SegyBase::write_traces(const float *data, size_t beg, size_t end,
 
 inline void SegyBase::write_traces(const float *data, const int32_t *index,
                                    size_t n, size_t tbeg, size_t tend) {
+  check_write(m_w);
   size_t len = tend - tbeg;
   for (size_t i = 0; i < n; i++) {
     CHECK_SIGNALS();

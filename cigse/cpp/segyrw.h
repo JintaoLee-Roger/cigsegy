@@ -19,7 +19,6 @@ So, if you want to use this class in other place, you should check the boundary.
 #include "segybase.hpp"
 #include "utils.hpp"
 
-#include <fstream>
 #include <stdexcept>
 #include <vector>
 
@@ -29,6 +28,13 @@ So, if you want to use this class in other place, you should check the boundary.
 namespace segy {
 
 struct LineInfo {
+
+  /*
+  (count == 0 && idx.size() == 0) ==> this line is missing
+  (count == 0 && idx.size() > 0) ==> this line is not continuous and we fill idx
+  for fast reading (count == Invalid) ==> this line is continuous, but we don't
+  set idx (count > 0) ==> this line is continuous and we set count
+  */
 
   bool isline;
   size_t line;    // iline/xline number for this line
@@ -52,18 +58,31 @@ struct LineInfo {
 
 class SegyRW : public SegyBase {
 public:
-  SegyRW(const std::string &segyname) : SegyBase() {
+  SegyRW(const std::string &segyname, bool write = false) : SegyBase() {
+    this->m_w = write;
     std::error_code error;
-    this->m_sink.map(segyname, error);
-    if (error) {
-      throw std::runtime_error("Cannot mmap the file as RW mode: " + segyname);
+
+    if (write) {
+      this->m_sink.map(segyname, error);
+      if (error) {
+        throw std::runtime_error("Cannot mmap the file as RW mode: " +
+                                 segyname + ", message: " + error.message());
+      }
+      m_data_ptr = this->m_sink.data();
+    } else {
+      this->m_src.map(segyname, error);
+      if (error) {
+        throw std::runtime_error("Cannot mmap the file as R mode: " + segyname +
+                                 ", message: " + error.message());
+      }
+      m_data_ptr = this->m_src.data();
     }
-    m_data_ptr = this->m_sink.data();
+
     scanBinaryHeader();
   }
 
   void set_segy_type(size_t ndim);
-  void scan(bool fast = false);
+  void scan();
   std::vector<size_t> shape() const;
   inline size_t ndim() const { return m_ndim; }
 
@@ -112,16 +131,13 @@ private:
   inline size_t of2io(size_t of) {
     return (of - m_meta.start_offset) / m_keys.ostep;
   }
-  inline size_t itx2ix(size_t it) {
-    return xl2ix(xline(it));
-  }
-  inline size_t itx2io(size_t it) {
-    return of2io(offset(it));
-  }
+  inline size_t itx2ix(size_t it) { return xl2ix(xline(it)); }
+  inline size_t itx2io(size_t it) { return of2io(offset(it)); }
   bool NoOverlap(LineInfo &linfo, size_t s, size_t e);
   void find_idx(std::array<size_t, 4> &idx, LineInfo &linfo, size_t xs,
                 size_t xe);
-  void find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe, size_t &its, size_t &ite);
+  void find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe, size_t &its,
+                        size_t &ite);
 
   void _read_inner(float *dst, LineInfo &linfo, size_t ks, size_t ke, size_t ts,
                    size_t te);
@@ -224,7 +240,8 @@ inline void SegyRW::find_idx(std::array<size_t, 4> &idx, LineInfo &linfo,
   idx[3] = idx[2] + (xe - xs);
 }
 
-inline void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe, size_t &its, size_t &ite) {
+inline void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe,
+                                     size_t &its, size_t &ite) {
   size_t start = linfo.isline ? xl2ix(linfo.lstart) : of2io(linfo.lstart);
   size_t end = linfo.isline ? xl2ix(linfo.lend) + 1 : of2io(linfo.lend) + 1;
   if (xs < start) {
@@ -236,16 +253,16 @@ inline void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe, size
 
   auto iindex = [&](auto it) {
     if (linfo.isline) {
-        return itx2ix(it);
+      return itx2ix(it);
     } else {
-        return itx2io(it);
+      return itx2io(it);
     }
   };
 
   // find start idx
   its = linfo.itstart + (xs - start);
   its = its > linfo.itend ? linfo.itend : its;
-  while(iindex(its) > xs && its >= linfo.itstart) {
+  while (iindex(its) > xs && its >= linfo.itstart) {
     its--;
   }
   if (iindex(its) < xs) {
@@ -253,9 +270,9 @@ inline void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe, size
   }
 
   // find end idx
-  ite = its + (xe-xs);
+  ite = its + (xe - xs);
   ite = ite > linfo.itend ? linfo.itend : ite;
-  while(iindex(ite) > xe && ite >= linfo.itstart) {
+  while (iindex(ite) > xe && ite >= linfo.itstart) {
     ite--;
   }
   if (iindex(ite) < xe) {

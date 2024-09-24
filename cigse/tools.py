@@ -100,7 +100,7 @@ def get_metaInfo(
     segy.setXYLocations(xloc, yloc)
     ndim = 4 if is4d else 3
     segy.set_segy_type(ndim)
-    segy.scan(True)
+    segy.scan()
     keys = segy.get_keylocs()
     meta = segy.get_metainfo()
     meta = {**keys, **meta}
@@ -135,7 +135,7 @@ def get_lineInfo(
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
     segy.setXYLocations(xloc, yloc)
-    segy.scan(True)
+    segy.scan()
     lineinfo = segy.get_lineInfo()
     ndim = segy.ndim
 

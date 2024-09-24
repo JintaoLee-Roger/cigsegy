@@ -47,7 +47,7 @@ class Pysegy:
     ```
     """
 
-    def __init__(self, segy_name: str) -> None:
+    def __init__(self, segy_name: str, write: bool = False) -> None:
         ...
 
     @property
@@ -340,14 +340,9 @@ class Pysegy:
         4 for prestack 4D volume/gather
         """
 
-    def scan(self, fast=False) -> None:
+    def scan(self) -> None:
         """
         fast scan the file to obtain some meta infos
-
-        Parameters
-        -----------
-        fast : bool
-            whether fast to scan. We recommand use this to get metainfo
         """
 
     def read4d(
