@@ -21,6 +21,7 @@ So, if you want to use this class in other place, you should check the boundary.
 
 #include <stdexcept>
 #include <vector>
+#include <array>
 
 #define MMAX(a, b) ((a) > (b) ? (a) : (b))
 #define MMIN(a, b) ((a) < (b) ? (a) : (b))

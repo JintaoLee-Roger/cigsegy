@@ -10,11 +10,13 @@
 #include <algorithm>
 #include <cctype>
 #include <climits>
+#include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <map>
+#include <stdexcept>
 #include <string.h>
-#include <utility>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -417,8 +419,7 @@ inline void setRFuncOne(ReadFuncOne &m_readfunc, int dformat) {
     };
     break;
   default:
-    throw std::invalid_argument("Unsupported dformat value: " +
-                                std::to_string(dformat));
+    throw std::runtime_error("Unsupported dformat value: " + std::to_string(dformat));
   }
 }
 

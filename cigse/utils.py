@@ -42,7 +42,7 @@ def parse_theader(theader: np.ndarray):
     return out, hstring
 
 
-def eval_iline(segy: Pysegy) -> List:
+def eval_iline(segy: Pysegy) -> int:
     """
     To guess the inline location of the segy
 
@@ -87,6 +87,151 @@ def eval_iline(segy: Pysegy) -> List:
         return op
 
     raise RuntimeError("Cannot evaluate inline location")
+
+
+def is_valid_arr(arr, z_eval=False):
+    arr_tuples = [tuple(row) for row in arr]
+    if len(arr_tuples) != len(set(arr_tuples)):
+        return False
+
+    if z_eval:
+        arr = arr[:, :2]
+        z = arr[:, 2]
+    x = arr[:, 0]
+    y = arr[:, 1]
+
+    if z_eval:
+        ic = (z, y, x)
+        dc = (-z, -y, -x)
+    else:
+        ic = (y, x)
+        dc = (-y, -x)
+
+    idx_asc = np.lexsort(ic)
+    arr_asc = arr[idx_asc]
+
+    idx_desc = np.lexsort(dc)
+    arr_desc = arr[idx_desc]
+
+    if np.array_equal(arr, arr_asc):
+        return True
+    elif np.array_equal(arr, arr_desc):
+        return True
+    else:
+        return False
+
+
+def guess2(segy_name: str,
+           iline=None,
+           xline=None,
+           offset=None,
+           istep=None,
+           xstep=None,
+           ostep=None,
+           xloc=None,
+           yloc=None):
+    """
+    guess the locations and steps of inline and crossline
+    """
+    if isinstance(segy_name, Pysegy):
+        segy = segy_name
+    else:
+        segy = Pysegy(str(segy_name))
+
+    N = segy.ntrace
+
+    # 0. evaluate offset
+    offset = 37 if offset is None else offset
+    oostep, is4d = eval_offset(segy, offset)
+    if ostep is None:
+        oostep = ostep
+    elif abs(oostep) < abs(ostep):
+        warnings.warn(f"We evaluate istep == {istepx}, but you give istep == {istep}") # yapf: disable
+    elif oostep * ostep < 0:
+        warnings.warn(f"We evaluate istep == {istepx}, but you give istep == {istep}, order maybe wrong") # yapf: disable
+
+
+    # 1. evaluate iline
+    iline = eval_iline(segy) if iline is None else iline
+    ni = _get_keys4(segy, iline, N - 1) - _get_keys4(segy, iline, 0)
+
+    # 2. evaluate istep
+    jumpi = N // ni // 4 if ni != 0 else 0
+    if istep is None and ni == 0:
+        istep = 1
+    else:
+        start = N // 4
+        ils = [_get_keys4(segy, iline, start)]
+        idx = [start]
+        start += jumpi
+        while len(ils) < 6 and start < N:
+            il = _get_keys4(segy, iline, start)
+            start += jumpi
+            if il != idx[-1]:
+                idx.append(start)
+                ils.append(il)
+        ilset = set(ils)
+        ilset.update(_get_keys4(segy, iline, N // 4, N // 4 + 10).flatten())
+
+        dif = np.diff(np.array(sorted(ilset)))
+        istepx = dif.min() if dif[0] > 0 else dif.max()
+
+        if istep is None:
+            istep = istepx
+        elif abs(istepx) < abs(istep):
+            warnings.warn(f"We evaluate istep == {istepx}, but you give istep == {istep}") # yapf: disable
+        elif istepx * istep < 0:
+            warnings.warn(f"We evaluate istep == {istepx}, but you give istep == {istep}, order maybe wrong") # yapf: disable
+
+    ni = ni / istep + 1
+    if ni < 0 or not (isinstance(ni, int) or (isinstance(ni, float) and ni.is_integer())): # yapf: disable
+        raise RuntimeError(f"Cannot evaluate iline/istep, becuase ni = {ni}")
+
+    # 3. evaluate xline
+    di = None
+    if xline is None:
+        candidate = [193, 17, 21, 13]
+        start, end = N // 2, N // 2 + 50
+        keys = candidate + [iline, offset]
+        keys = keys if is4d else keys[:-1] # need offset?
+        d = _get_keys4(segy, keys, start, end)
+        for i, cxl in enumerate(candidate):
+            mnx = min(N - 1, N // ni * 6)
+            m1 = _get_keys4(segy, cxl, N - 1)
+            m2 = _get_keys4(segy, cxl, 0)
+            if abs(m1 - m2) > mnx:
+                continue
+
+            di = d[:, [4, i, 5]]
+            while np.all(di[:, 0] == di[0, 0]) and np.all(di[:, 1] == di[0, 1]) and end < N // 2 + 1100: # yapf: disable
+                start += 50
+                end += 50
+                d_new = _get_keys4(segy, [xline, candidate[i], offset], start, end) # yapf: disable
+                di = np.concatenate([di, d_new])
+            if end > 1000:
+                continue
+
+            if sum(di >= 0) != len(di):
+                continue
+            if not is_valid_arr(di):
+                continue
+            xline = cxl
+            break
+
+        if xline is None:
+            raise RuntimeError("Evaluate xline error")
+
+    # 4. evaluate xstep
+    if xstep is None:
+        if di is None:
+            di = _get_keys4(segy, [iline, xline, offset], start, end)
+
+
+    # 7. evaluate xloc, yloc
+    if xloc is None or yloc is None:
+        pass
+
+    return iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d
 
 
 def guess(segy_name: str,
@@ -216,8 +361,10 @@ def guess(segy_name: str,
             scalar = 1 if scalar == 0 else scalar
             scalar = -1 / scalar if scalar < 0 else scalar
             xys = xys * scalar
-            d1 = ((xys[-1, 0] - xys[0, 0])**2 + (xys[-1, 1] - xys[0, 1])**2)**0.5
-            d2 = ((xys[-1, 2] - xys[0, 2])**2 + (xys[-1, 3] - xys[0, 3])**2)**0.5
+            d1 = ((xys[-1, 0] - xys[0, 0])**2 +
+                  (xys[-1, 1] - xys[0, 1])**2)**0.5
+            d2 = ((xys[-1, 2] - xys[0, 2])**2 +
+                  (xys[-1, 3] - xys[0, 3])**2)**0.5
             if d1 < 3 and d2 > 3:
                 xloc, yloc = 73, 77
             else:
@@ -246,8 +393,9 @@ def eval_offset(segyname, offset: int = 37) -> int:
     dif = np.diff(ks)
     udif, count = np.unique(dif, return_counts=True)
     if (len(udif) > 10):
-        raise RuntimeError("offset is not constant, but is unsorted") # yapf: disable
-        # return 0, False
+        warnings.warn("offset is not constant, and is unsorted, cannot evaluate by `scan`. So we treat this file as a 3D.") # yapf: disable
+        # raise RuntimeError("offset is not constant, and is unsorted, cannot evaluate by `scan`") # yapf: disable
+        return 0, False
 
     ostep = udif[np.argmax(count)]
     if ostep == 0:

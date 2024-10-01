@@ -19,7 +19,7 @@ import numpy as np
 import cigse
 from pathlib import Path
 
-root = Path('.')
+root = Path('/disk/d1/share_vm/cigsegy_data')
 
 def test_rogan():
     d1 = cigse.fromfile(root / 'rogan_2039_psdm_full_padded.sgy')
