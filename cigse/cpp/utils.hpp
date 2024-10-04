@@ -14,7 +14,6 @@
 #include <cstring>
 #include <functional>
 #include <limits>
-#include <map>
 #include <stdexcept>
 #include <string.h>
 
@@ -48,36 +47,36 @@ using uchar = unsigned char;
 namespace segy {
 
 // const size
-const size_t kTextualHeaderSize = 3200;
-const size_t kBinaryHeaderSize = 400;
-const size_t kTraceHeaderStart = 3600;
-const size_t kTraceHeaderSize = 240;
-const size_t kTextualColumns = 80;
-const size_t kTextualRows = 40;
+constexpr size_t kTextualHeaderSize = 3200;
+constexpr size_t kBinaryHeaderSize = 400;
+constexpr size_t kTraceHeaderStart = 3600;
+constexpr size_t kTraceHeaderSize = 240;
+constexpr size_t kTextualColumns = 80;
+constexpr size_t kTextualRows = 40;
 
-const size_t kMaxSizeOneDimemsion = 100000;
+constexpr size_t kMaxSizeOneDimemsion = 100000;
 
 // const binary header field
-const size_t kBSampleIntervalField = 17;
-const size_t kBSampleCountField = 21;
-const size_t kBSampleFormatField = 25;
-const size_t kBTraceSortingCodeField = 29;
+constexpr size_t kBSampleIntervalField = 17;
+constexpr size_t kBSampleCountField = 21;
+constexpr size_t kBSampleFormatField = 25;
+constexpr size_t kBTraceSortingCodeField = 29;
 
 // const trace header field
-const size_t kTStartTimeField = 105; // in ms
-const size_t kTDelayTimeField = 109; // in ms
-const size_t kTScalarField = 71;
-const size_t kTSampleCountField = 115;
-const size_t kTSampleIntervalField = 117;
+constexpr size_t kTStartTimeField = 105; // in ms
+constexpr size_t kTDelayTimeField = 109; // in ms
+constexpr size_t kTScalarField = 71;
+constexpr size_t kTSampleCountField = 115;
+constexpr size_t kTSampleIntervalField = 117;
 
-const size_t kDefaultInlineField = 189;
-const size_t kDefaultCrosslineField = 193;
-const size_t kDefaultXField = 73;
-const size_t kDefaultYField = 77;
-const size_t kInvalid = std::numeric_limits<size_t>::max();
+constexpr size_t kDefaultInlineField = 189;
+constexpr size_t kDefaultCrosslineField = 193;
+constexpr size_t kDefaultXField = 73;
+constexpr size_t kDefaultYField = 77;
+constexpr size_t kInvalid = std::numeric_limits<size_t>::max();
 
 // A key map that convert EBCDIC to ASCII format
-const std::map<uchar, char> kEBCDICtoASCIImap = {
+const std::unordered_map<uchar, char> kEBCDICtoASCIImap = {
     {64, ' '},   {75, '.'},  {76, '<'},   {77, '('},  {78, '+'},  {79, '|'},
     {80, '&'},   {90, '!'},  {91, '$'},   {92, '*'},  {93, ')'},  {94, ';'},
     {96, '-'},   {97, '/'},  {106, '|'},  {107, ','}, {108, '%'}, {109, '_'},
@@ -95,7 +94,7 @@ const std::map<uchar, char> kEBCDICtoASCIImap = {
     {241, '1'},  {242, '2'}, {243, '3'},  {244, '4'}, {245, '5'}, {246, '6'},
     {247, '7'},  {248, '8'}, {249, '9'}};
 
-const std::map<char, uchar> kASCIItoEBCDICmap = {
+const std::unordered_map<char, uchar> kASCIItoEBCDICmap = {
     {' ', 64},   {'.', 75},  {'<', 76},   {'(', 77},  {'+', 78},  {'|', 79},
     {'&', 80},   {'!', 90},  {'$', 91},   {'*', 92},  {')', 93},  {';', 94},
     {'-', 96},   {'/', 97},  {'|', 106},  {',', 107}, {'%', 108}, {'_', 109},
@@ -114,7 +113,7 @@ const std::map<char, uchar> kASCIItoEBCDICmap = {
     {'7', 247},  {'8', 248}, {'9', 249}};
 
 // NOTE: only support 1, 2, 4 bytes
-const std::map<size_t, size_t> kElementSize = {
+const std::unordered_map<size_t, size_t> kElementSize = {
     {1, 4}, {2, 4}, {3, 2}, {5, 4}, {8, 1}, {10, 4}, {11, 2}, {16, 1}};
 
 inline void swap_endian_inplace(void *dst, const void *src, size_t n) {

@@ -86,6 +86,7 @@ public:
   void scan();
   std::vector<size_t> shape() const;
   inline size_t ndim() const { return m_ndim; }
+  inline bool is_scanned() const { return isScan; }
 
   // R mode
   void read4d(float *dst, size_t ib, size_t ie, size_t xb, size_t xe, size_t ob,

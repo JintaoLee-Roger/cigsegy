@@ -315,12 +315,13 @@ public:
     }
     py::array_t<int> out;
     if (ndim() == 3) {
+      // iline, xline_start, xline_end, trace_start, trace_end
       out = py::array_t<int>({(int)m_meta.ni, 5});
       int *ptr = out.mutable_data();
       std::fill(ptr, ptr + out.size(), -1);
       for (auto linfo : m_iinfos) {
         ptr[0] = linfo.line;
-        if (linfo.count > 0 || linfo.idx.size() > 0) {
+        if (!(linfo.count == 0 && linfo.idx.size() == 0)) {
           ptr[1] = linfo.lstart;
           ptr[2] = linfo.lend;
           ptr[3] = linfo.itstart;
@@ -329,6 +330,7 @@ public:
         ptr += 5;
       }
     } else {
+      // iline, xline, offset_start, offset_end, trace_start, trace_end
       out = py::array_t<int>({(int)m_meta.ni, (int)m_meta.nx, 6});
       int *ptr = out.mutable_data();
       std::fill(ptr, ptr + out.size(), -1);
@@ -348,7 +350,7 @@ public:
         for (auto xinfo : linfo.xinfos) {
           ptr[0] = linfo.line;
           ptr[1] = xinfo.line;
-          if (xinfo.count > 0 || xinfo.idx.size() > 0) {
+          if (!(xinfo.count == 0 && xinfo.idx.size() == 0)) {
             ptr[2] = xinfo.lstart;
             ptr[3] = xinfo.lend;
             ptr[4] = xinfo.itstart;
@@ -564,6 +566,7 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       .def_property_readonly("nt", &Pysegy::nt)
       .def_property_readonly("ndim", &Pysegy::ndim)
       .def_property_readonly("shape", &Pysegy::shape)
+      .def_property_readonly("is_scanned", &Pysegy::is_scanned)
 
       ;
 

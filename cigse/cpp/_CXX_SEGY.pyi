@@ -74,6 +74,12 @@ class Pysegy:
         ndim
         """
 
+    @property
+    def is_scanned():
+        """
+        is_scanned
+        """
+
     def close() -> None:
         """
         close file
