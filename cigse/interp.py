@@ -11,9 +11,26 @@ resampling of data to different resolutions, and the fusion of multiple datasets
 """
 
 import numpy as np
-from numba import njit
-from scipy.spatial import cKDTree
 from .transform import apply_transform
+from cigse import ExceptionWrapper
+
+try:
+    from numba import njit
+except ImportError:
+
+    def njit(func):
+
+        def wrapper(*args, **kwargs):
+            print("Warning: Numba is not installed. This function may run slowly without Numba's optimization. To significantly improve performance, please install Numba by running `pip install numba`.") # yapf: disable
+            return func(*args, **kwargs)
+
+        return wrapper
+
+
+try:
+    from scipy.spatial import cKDTree
+except BaseException as E:
+    cKDTree = ExceptionWrapper(E, "run `pip install scipy` to install the the dependency, becuase we need use cKDTree") # yapf: disable
 
 
 def merge_data(d1, d2, start2, useA=True):
@@ -25,8 +42,8 @@ def merge_data(d1, d2, start2, useA=True):
     assert d1.ndim == 3 and d2.ndim == 3
     assert d1.shape[2] == d2.shape[2]
 
-    mask1 = (~np.all(d1 == 0, axis=2)).astype(int)
-    mask2 = (~np.all(d2 == 0, axis=2)).astype(int) * 2
+    mask1 = ~np.all(d1 == 0, axis=2)
+    mask2 = ~np.all(d2 == 0, axis=2)
     n11, n21, n3 = d1.shape
     n12, n22, _ = d2.shape
     x0, y0 = start2
@@ -52,23 +69,35 @@ def merge_data(d1, d2, start2, useA=True):
     else:
         merged_mask = mmask2
 
-    i_indices = np.arange(n12)
-    j_indices = np.arange(n22)
-    i_grid, j_grid = np.meshgrid(i_indices, j_indices, indexing='ij')
-    ii = i_grid + x2s
-    jj = j_grid + y2s
-
-    valid_i = i_grid[merged_mask]
-    valid_j = j_grid[merged_mask]
-    valid_ii = ii[merged_mask]
-    valid_jj = jj[merged_mask]
-
-    assert np.all(valid_ii >= 0) and np.all(valid_ii < nx_total)
-    assert np.all(valid_jj >= 0) and np.all(valid_jj < ny_total)
-
     out = np.zeros((nx_total, ny_total, n3), dtype=d1.dtype)
     out[x1s:x1s + n11, y1s:y1s + n21] = d1
-    out[valid_ii, valid_jj] = d2[valid_i, valid_j]
+
+    # @njit
+    # def _merge(out, d2, merged_mask, n12, n22, x2s, y2s):
+    #     for i in range(n12):
+    #         for j in range(n22):
+    #             ii = i + x2s
+    #             jj = j + y2s
+    #             if merged_mask[ii, jj]:
+    #                 out[ii, jj] = d2[i, j]
+    #     return out
+    # out = _merge(out, d2, merged_mask, n12, n22, x2s, y2s)
+
+    I_grid, J_grid = np.meshgrid(np.arange(n12), np.arange(n22), indexing='ij')
+    II = I_grid + x2s
+    JJ = J_grid + y2s
+
+    valid_mask = (II >= 0) & (II < out.shape[0]) & (JJ >= 0) & (JJ
+                                                                < out.shape[1])
+
+    combined_mask = merged_mask[II, JJ] & valid_mask
+
+    I_selected = I_grid[combined_mask]
+    J_selected = J_grid[combined_mask]
+    II_selected = II[combined_mask]
+    JJ_selected = JJ[combined_mask]
+
+    out[II_selected, JJ_selected, :] = d2[I_selected, J_selected, :]
 
     return out
 
@@ -167,7 +196,7 @@ def align_coordinates(
     nx = end1 - start1 + 1
     ny = end2 - start2 + 1
 
-    output = np.zeros((nx, ny, n3))
+    output = np.zeros((nx, ny, n3), dtype=tgt.dtype)
 
     ix = (to_interp[:, 0] - start1).astype(int)
     iy = (to_interp[:, 1] - start2).astype(int)

@@ -121,6 +121,8 @@ def get_lineInfo(
     istep: int = None,
     xstep: int = None,
     ostep: int = None,
+    xloc: int = None,
+    yloc: int = None,
     mode: str = 'raw',
 ):
     """
@@ -131,10 +133,12 @@ def get_lineInfo(
     else:
         segy = Pysegy(str(fname))
 
-    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, None, None) # yapf: disable
+    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
     segy.setXYLocations(xloc, yloc)
+    ndim = 4 if is4d else 3
+    segy.set_segy_type(ndim)
     segy.scan()
     lineinfo = segy.get_lineInfo()
     ndim = segy.ndim

@@ -30,7 +30,17 @@ inline static void set_keyi4(char *theader, size_t loc, int32_t val) {
 }
 
 void SegyRW::scan() {
-  m_meta.start_time = keyi2(0, kTStartTimeField);
+  int start_time = keyi2(0, kTStartTimeField);
+  if (start_time < 0) {
+    int start_time2 = keyi2(0, kTDelayTimeField);
+    if (start_time2 < 0) {
+      m_meta.start_time = 0;
+    } else {
+      m_meta.start_time = start_time2;
+    }
+  } else {
+    m_meta.start_time = start_time;
+  }
   m_meta.scalar = keyi2(0, kTScalarField);
 
   // steps
@@ -62,7 +72,7 @@ void SegyRW::scan() {
   // is a 4D pretack SEG-Y?
   bool is4D = true;
   if (m_ndim == 2) {
-    is4D = isPreStack();
+    is4D = isPreStack(); // NOTE: isPreStack() is very simple, maybe wrong
   } else if (m_ndim == 3) {
     is4D = false;
   }

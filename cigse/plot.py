@@ -24,12 +24,6 @@ except BaseException as E:
     plt = ExceptionWrapper(E, "run `pip install matplotlib` to install the dependency") # yapf: disable
 
 
-try:
-    import cigvis
-except BaseException as E:
-    cigvis = ExceptionWrapper(E, "run `pip install cigvis` to install the dependency") # yapf: disable
-
-
 def plot_region(fname: str,
                 mode: str = 'line',
                 save: str = None,
@@ -57,6 +51,11 @@ def plot_region(fname: str,
 
     plt.fill(x, y, color=(0.9, 0.9, 0.9))
     plt.plot(x, y)
+
+    k1, k2 = [x[0], y[0]], [x[-2], y[-2]]
+    s = (x.max() - x.min()) / 50
+    plt.arrow(k1[0], k1[1], k2[0]-k1[0], k2[1]-k1[1], head_width=s, head_length=s, ec='red', fc='red', zorder=4)
+
     plt.gca().invert_yaxis()
     # plt.gca().xaxis.set_ticks_position('top')
 
@@ -190,7 +189,6 @@ def plot_trace_ixo(fname: str,
     if save:
         plt.savefig(save, dpi=200, bbox_inches='tight', pad_inches=0.0)
     plt.show()
-
 
 
 def extract_arbitrary_line_by_view(data: np.ndarray,

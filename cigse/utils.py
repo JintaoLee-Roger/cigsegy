@@ -358,6 +358,8 @@ def guess(segy_name: str,
             xloc, yloc = 73, 77
         else:
             scalar = segy.keyi2(0, 71)
+            if scalar < -1000 or scalar > 1000:
+                scalar = 1
             scalar = 1 if scalar == 0 else scalar
             scalar = -1 / scalar if scalar < 0 else scalar
             xys = xys * scalar
