@@ -18,10 +18,9 @@ So, if you want to use this class in other place, you should check the boundary.
 #include "mio.hpp"
 #include "segybase.hpp"
 #include "utils.hpp"
-
+#include <array>
 #include <stdexcept>
 #include <vector>
-#include <array>
 
 #define MMAX(a, b) ((a) > (b) ? (a) : (b))
 #define MMIN(a, b) ((a) < (b) ? (a) : (b))
@@ -264,21 +263,29 @@ inline void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe,
   // find start idx
   its = linfo.itstart + (xs - start);
   its = its > linfo.itend ? linfo.itend : its;
-  while (iindex(its) > xs && its >= linfo.itstart) {
-    its--;
-  }
-  if (iindex(its) < xs) {
-    its++;
+
+  if (iindex(its) > xs) {
+    while (iindex(its - 1) >= xs && (its - 1) >= linfo.itstart) {
+      its--;
+    } // its == linfo.itstart?
+  } else if (iindex(its + 1) <= xs) {
+    while (iindex(its + 1) <= xs && (its + 1) <= linfo.itend) {
+      its++;
+    }
   }
 
   // find end idx
   ite = its + (xe - xs);
   ite = ite > linfo.itend ? linfo.itend : ite;
-  while (iindex(ite) > xe && ite >= linfo.itstart) {
-    ite--;
-  }
-  if (iindex(ite) < xe) {
-    ite++;
+
+  if (iindex(ite) > xe) {
+    while (iindex(ite - 1) >= xe && (ite - 1) >= linfo.itstart) {
+      ite--;
+    }
+  } else if (iindex(ite + 1) <= xe) {
+    while (iindex(ite + 1) <= xe && (ite + 1) <= linfo.itend) {
+      ite++;
+    }
   }
 }
 

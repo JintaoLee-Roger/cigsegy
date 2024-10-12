@@ -646,11 +646,11 @@ void SegyRW::_read_inner(float *dst, LineInfo &linfo, size_t ks, size_t ke,
     find_nearest_idx(linfo, ks, ke, its, ite);
     if (linfo.isline) {
       for (size_t i = its; i < ite; i++) {
-        m_readfunc(dst + itx2ix(i) * nt, trDataStart(i, ts), nt);
+        m_readfunc(dst + (itx2ix(i) - ks) * nt, trDataStart(i, ts), nt);
       }
     } else {
       for (size_t i = its; i < ite; i++) {
-        m_readfunc(dst + itx2io(i) * nt, trDataStart(i, ts), nt);
+        m_readfunc(dst + (itx2io(i) - ks) * nt, trDataStart(i, ts), nt);
       }
     }
   }
@@ -748,11 +748,11 @@ void SegyRW::_write_inner(const float *src, LineInfo &linfo, size_t ks,
     find_nearest_idx(linfo, ks, ke, its, ite);
     if (linfo.isline) {
       for (size_t it = its; it < ite; it++) {
-        m_wfunc(twDataStart(it, ts), src + itx2ix(it) * nt, nt);
+        m_wfunc(twDataStart(it, ts), src + (itx2ix(it) - ks) * nt, nt);
       }
     } else {
       for (size_t it = its; it < ite; it++) {
-        m_wfunc(twDataStart(it, ts), src + itx2io(it) * nt, nt);
+        m_wfunc(twDataStart(it, ts), src + (itx2io(it) - ks) * nt, nt);
       }
     }
   }
@@ -862,9 +862,9 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
       } else {
         // copy from data, i.e., create_by_sharing_header
         if (linfo.isline) {
-          m_wfunc(twDataStart(it, ts), src + itx2ix(it) * nt, nt);
+          m_wfunc(twDataStart(it, ts), src + (itx2ix(it) - ks) * nt, nt);
         } else {
-          m_wfunc(twDataStart(it, ts), src + itx2io(it) * nt, nt);
+          m_wfunc(twDataStart(it, ts), src + (itx2io(it) - ks) * nt, nt);
         }
       }
       dst += nt * m_meta.esize;

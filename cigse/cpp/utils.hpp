@@ -15,7 +15,7 @@
 #include <functional>
 #include <limits>
 #include <stdexcept>
-#include <string.h>
+#include <string>
 #include <unordered_map>
 
 #ifdef _WIN32
