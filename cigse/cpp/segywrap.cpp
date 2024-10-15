@@ -6,6 +6,7 @@
 *********************************************************************/
 
 // #include "segyc.hpp"
+#include "pybind11/cast.h"
 #include "pybind11/detail/common.h"
 #include "segyrw.h"
 #include "utils.hpp"
@@ -319,7 +320,7 @@ public:
       out = py::array_t<int>({(int)m_meta.ni, 5});
       int *ptr = out.mutable_data();
       std::fill(ptr, ptr + out.size(), -1);
-      for (auto linfo : m_iinfos) {
+      for (auto& linfo : m_iinfos) {
         ptr[0] = linfo.line;
         if (!(linfo.count == 0 && linfo.idx.size() == 0)) {
           ptr[1] = linfo.lstart;
@@ -335,7 +336,7 @@ public:
       int *ptr = out.mutable_data();
       std::fill(ptr, ptr + out.size(), -1);
 
-      for (auto linfo : m_iinfos) {
+      for (auto& linfo : m_iinfos) {
         size_t xs = (linfo.lstart - m_meta.start_xline) / m_keys.xstep;
         size_t xe = (linfo.lend - m_meta.start_xline) / m_keys.xstep;
 
@@ -347,7 +348,7 @@ public:
           }
         }
 
-        for (auto xinfo : linfo.xinfos) {
+        for (auto& xinfo : linfo.xinfos) {
           ptr[0] = linfo.line;
           ptr[1] = xinfo.line;
           if (!(xinfo.count == 0 && xinfo.idx.size() == 0)) {
@@ -416,7 +417,7 @@ void create_segy(const std::string &segyname, const npfloat &src,
   create_segy(segyname, ptr, kptr, shape, textual, bptr, tptr, keysize);
 }
 
-npfloat ieees_to_ibms(const npfloat &ieee_arr, bool is_little_endian) {
+npfloat ieees_to_ibms(const npfloat &ieee_arr, bool is_litte_endian_input, bool is_big_endian_output) {
   std::vector<size_t> shape_vec(ieee_arr.shape(),
                                 ieee_arr.shape() + ieee_arr.ndim());
   size_t size = ieee_arr.size();
@@ -427,7 +428,7 @@ npfloat ieees_to_ibms(const npfloat &ieee_arr, bool is_little_endian) {
   float *ibm_ptr = ibm_arr.mutable_data();
 
   for (size_t i = 0; i < size; ++i) {
-    ibm_ptr[i] = segy::ieee_to_ibm(ieee_ptr[i], is_little_endian);
+    ibm_ptr[i] = segy::ieee_to_ibm(ieee_ptr[i], is_litte_endian_input, is_big_endian_output);
   }
 
   return ibm_arr;
@@ -577,12 +578,12 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
           &create_segy),
       py::arg("segyname"), py::arg("src"), py::arg("keys"), py::arg("textual"),
       py::arg("bheader"), py::arg("theader"));
-  m.def("ieee_to_ibm", py::overload_cast<float, bool>(&segy::ieee_to_ibm),
-        py::arg("value"), py::arg("is_little_endian"));
+  m.def("ieee_to_ibm", py::overload_cast<float, bool, bool>(&segy::ieee_to_ibm),
+        py::arg("value"), py::arg("is_litte_endian_input"), py::arg("is_big_endian_output")=true);
   m.def("ibm_to_ieee", py::overload_cast<float, bool>(&segy::ibm_to_ieee),
         py::arg("value"), py::arg("is_big_endian"));
   m.def("ieees_to_ibms", &ieees_to_ibms, py::arg("ieee_arr"),
-        py::arg("is_little_endian"));
+        py::arg("is_litte_endian_input"), py::arg("is_big_endian_output"));
   m.def("ibms_to_ieees", &ibms_to_ieees, py::arg("ibm_arr"),
         py::arg("is_big_endian"));
 }

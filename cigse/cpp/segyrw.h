@@ -241,53 +241,7 @@ inline void SegyRW::find_idx(std::array<size_t, 4> &idx, LineInfo &linfo,
   idx[3] = idx[2] + (xe - xs);
 }
 
-inline void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe,
-                                     size_t &its, size_t &ite) {
-  size_t start = linfo.isline ? xl2ix(linfo.lstart) : of2io(linfo.lstart);
-  size_t end = linfo.isline ? xl2ix(linfo.lend) + 1 : of2io(linfo.lend) + 1;
-  if (xs < start) {
-    xs = start;
-  }
-  if (xe > end) {
-    xe = end;
-  }
 
-  auto iindex = [&](auto it) {
-    if (linfo.isline) {
-      return itx2ix(it);
-    } else {
-      return itx2io(it);
-    }
-  };
-
-  // find start idx
-  its = linfo.itstart + (xs - start);
-  its = its > linfo.itend ? linfo.itend : its;
-
-  if (iindex(its) > xs) {
-    while (iindex(its - 1) >= xs && (its - 1) >= linfo.itstart) {
-      its--;
-    } // its == linfo.itstart?
-  } else if (iindex(its + 1) <= xs) {
-    while (iindex(its + 1) <= xs && (its + 1) <= linfo.itend) {
-      its++;
-    }
-  }
-
-  // find end idx
-  ite = its + (xe - xs);
-  ite = ite > linfo.itend ? linfo.itend : ite;
-
-  if (iindex(ite) > xe) {
-    while (iindex(ite - 1) >= xe && (ite - 1) >= linfo.itstart) {
-      ite--;
-    }
-  } else if (iindex(ite + 1) <= xe) {
-    while (iindex(ite + 1) <= xe && (ite + 1) <= linfo.itend) {
-      ite++;
-    }
-  }
-}
 
 void create_segy(const std::string &segyname, const float *src,
                  const int32_t *keys, const std::vector<size_t> &shape,

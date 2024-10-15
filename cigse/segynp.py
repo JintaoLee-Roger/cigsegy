@@ -57,6 +57,8 @@ class ScanMixin:
         self._segy.scan()
         self._keylocs = self._segy.get_keylocs()
         self._metainfo = self._segy.get_metainfo()
+        self._metainfo = {**self._keylocs, **self._metainfo}
+        utils.post_process_meta(self._segy, self._metainfo, False)
         self._ndim = self._segy.ndim
         self._shape3 = self._segy.shape
         # self._lineinfo = self._segy.get_lineInfo() # TODO:
@@ -693,6 +695,9 @@ class SegyCMixin:
             ranges: List,
             as2d: bool = False,
             textual: str = '') -> None:
+        """
+        cut the SEG-Y file into a new SEG-Y file
+        """
         if as2d:
             assert len(ranges) == 4, "The length of `ranges` must be 4, as you set the `as2d` to True"
         else:
@@ -932,7 +937,7 @@ class InnerMixin:
 
 
 class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
-             ScanMixin, CheckMixin, AccessMixin):
+             ScanMixin, CheckMixin, AccessMixin, SegyCMixin):
 
     def __init__(self,
                  filename: str,

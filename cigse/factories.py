@@ -117,7 +117,7 @@ def fromfile(
     """
     [iline, xline, offset, istep, xstep, ostep, xloc, yloc, _is4d] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
 
-    if is4d is not None:
+    if is4d is None:
         is4d = _is4d
 
     if isinstance(segy_name, _CXX_SEGY.Pysegy):
@@ -209,8 +209,10 @@ def tofile(
     istep: int = None,
     xstep: int = None,
     ostep: int = None,
+    *,
+    is4d: bool = None,
     as2d: bool = False,
-) -> None:
+) -> np.ndarray:
     """
     convert a segy file to a binary file
 
@@ -239,9 +241,13 @@ def tofile(
     if as2d:
         segy.tofile(out_name, as2d)
     else:
-        [iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
+        [iline, xline, offset, istep, xstep, ostep, xloc, yloc, _is4d] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
+        if is4d is None:
+            is4d = _is4d
         segy.setLocations(iline, xline, offset)
         segy.setSteps(istep, xstep, ostep)
+        ndim = 4 if is4d else 3
+        segy.set_segy_type(ndim)
         segy.scan()
         segy.tofile(out_name, as2d)
 
@@ -257,6 +263,7 @@ def create_by_sharing_header(
     *,
     start: list = None,
     keylocs: list = None,
+    is4d: bool = None,
     as2d: bool = False,
     textual: str = "",
 ) -> None:
@@ -286,6 +293,7 @@ def create_by_sharing_header(
         return
 
     assert keylocs is None or len(keylocs) == 4 or len(keylocs) == 6
+    _is4d = False
     if keylocs is None:
         iline, xline, offset, istep, xstep, ostep = [None] * 6
     elif len(keylocs) == 4:
@@ -293,9 +301,14 @@ def create_by_sharing_header(
         offset, ostep = None, None
     else:
         iline, xline, offset, istep, xstep, ostep = keylocs
-    [iline, xline, offset, istep, xstep, ostep, xloc, yloc] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
+    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, _is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
+
+    if is4d is None:
+        is4d = _is4d
     segy.setLocations(iline, xline, offset)
     segy.setSteps(istep, xstep, ostep)
+    ndim = 4 if is4d else 3
+    segy.set_segy_type(ndim)
     segy.scan()
     if isinstance(src, np.ndarray):
         shape = list(src.shape)
@@ -305,7 +318,10 @@ def create_by_sharing_header(
     if start is None:
         start = [0] * len(shape)
     assert len(start) == len(shape), "len(start) == len(shape)"
-    segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual)
+    if isinstance(src, np.ndarray):
+        segy.create_by_sharing_header(out_segy, src, start, as2d, textual)
+    else:
+        segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual)
     segy.close()
 
 
@@ -486,17 +502,17 @@ def ibm_to_ieee(value, is_big_endian: bool):
         raise ValueError(f"value = {value} is not a valid type, it should be one of float, int, np.ndarray") # yapf: disable
 
 
-def ieee_to_ibm(value, is_little_endian: bool):
+def ieee_to_ibm(value, is_little_endian_input: bool, is_big_endian_output: bool):
     """
     convert IEEE floating point to IBM floating point
     """
     if isinstance(value, (float, int)):
-        return _CXX_SEGY.ieee_to_ibm(value, is_little_endian)
+        return _CXX_SEGY.ieee_to_ibm(value, is_little_endian_input, is_big_endian_output)
     elif isinstance(value, np.ndarray):
         if value.dtype != np.float32:
             warnings.warn(f"value.dtype = {value.dtype} is not np.float32, it will be converted to np.float32.") # yapf: disable
             value = value.astype(np.float32)
-        return _CXX_SEGY.ieees_to_ibms(value, is_little_endian)
+        return _CXX_SEGY.ieees_to_ibms(value, is_little_endian_input, is_big_endian_output)
     else:
         raise ValueError(f"value = {value} is not a valid type, it should be one of float, int, np.ndarray") # yapf: disable
 

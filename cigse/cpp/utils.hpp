@@ -152,7 +152,7 @@ template <typename T> T swap_endian(T u) {
   return dest.u;
 }
 
-inline float ieee_to_ibm(float value, bool is_litte_endian_input) {
+inline float ieee_to_ibm(float value, bool is_litte_endian_input, bool is_big_endian_output=true) {
   if (!is_litte_endian_input) {
     value = swap_endian<float>(value);
   }
@@ -195,6 +195,9 @@ inline float ieee_to_ibm(float value, bool is_litte_endian_input) {
 
   float *float_addr = reinterpret_cast<float *>(&ibm_value);
 
+  if (is_big_endian_output) {
+    return swap_endian<float>(*float_addr);
+  }
   return *float_addr;
 }
 
@@ -305,7 +308,7 @@ inline void convert2npibm(float *dst, const char *src, size_t size) {
 
 template <typename T>
 void float2sgyT(char *dst, const float *src, size_t size) {
-  float *_dst = reinterpret_cast<float *>(dst);
+  T *_dst = reinterpret_cast<T *>(dst);
 
   for (size_t i = 0; i < size; ++i) {
     _dst[i] = swap_endian<T>(static_cast<T>(src[i]));
@@ -316,7 +319,7 @@ inline void float2sgyibm(char *dst, const float *src, size_t size) {
   float *_dst = reinterpret_cast<float *>(dst);
 
   for (size_t i = 0; i < size; ++i) {
-    _dst[i] = ieee_to_ibm(src[i], true);
+    _dst[i] = ieee_to_ibm(src[i], true, true);
   }
 }
 

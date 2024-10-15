@@ -565,7 +565,7 @@ def ibm_to_ieee(value: float, is_big_endian: bool) -> float:
     """
 
 
-def ieee_to_ibm(value: float, is_little_endian: bool) -> float:
+def ieee_to_ibm(value: float, is_litte_endian_input: bool, is_big_endian_output: bool=True) -> float:
     """
     convert IEEE floating point to IBM floating point
     """
@@ -577,7 +577,7 @@ def ibms_to_ieees(ibms: np.ndarray, is_big_endian: bool) -> np.ndarray:
     """
 
 
-def ieees_to_ibms(ieees: np.ndarray, is_little_endian: bool) -> np.ndarray:
+def ieees_to_ibms(ieees: np.ndarray, is_litte_endian_input: bool) -> np.ndarray:
     """
     convert IEEE floating array to IBM floating points
     """

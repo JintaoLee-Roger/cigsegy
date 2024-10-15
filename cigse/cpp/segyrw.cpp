@@ -16,6 +16,7 @@
 #include <cmath>
 // #include <chrono>
 
+// static int tkscount = 0;
 namespace segy {
 
 // modify header keys function, for cut, create_by_sharing_header
@@ -314,7 +315,7 @@ void SegyRW::scan() {
 
   // if line or xline is not continouse, we record their idx for fast indexing
   size_t rcount = 0; // We only read 10 lines? OPTIMIZE: How many lines?
-  for (auto linfo : m_iinfos) {
+  for (auto& linfo : m_iinfos) {
     CHECK_SIGNALS();
     if (rcount > 10) {
       break;
@@ -332,7 +333,7 @@ void SegyRW::scan() {
       linfo.count = 0;
       rcount++;
     } else {
-      for (auto xinfo : linfo.xinfos) {
+      for (auto& xinfo : linfo.xinfos) {
         if (!(xinfo.count == kInvalid)) {
           continue;
         }
@@ -455,7 +456,7 @@ void SegyRW::read_tslice(float *dst, size_t t, size_t stepi, size_t stepx) {
 
       for (size_t ix = 0; ix < m_meta.nx; ix += stepx) {
         size_t it = linfo.idx[ix];
-        if (it > kMaxSizeOneDimemsion) {
+        if (it == kInvalid) {
           *dstl = m_meta.fillNoValue;
         } else {
           *dstl = m_readfuncone(trDataStart(it, t));
@@ -628,7 +629,7 @@ void SegyRW::_read_inner(float *dst, LineInfo &linfo, size_t ks, size_t ke,
   else if (linfo.count == 0 && linfo.idx.size() > 0) {
     for (size_t ik = ks; ik < ke; ik++) {
       size_t it = linfo.idx[ik];
-      if (it > kMaxSizeOneDimemsion) {
+      if (it == kInvalid) {
         std::fill(dst, dst + nt, m_meta.fillNoValue);
       } else {
         m_readfunc(dst, trDataStart(it, ts), nt);
@@ -734,7 +735,7 @@ void SegyRW::_write_inner(const float *src, LineInfo &linfo, size_t ks,
   else if (linfo.count == 0 && linfo.idx.size() > 0) {
     for (size_t ik = ks; ik < ke; ik++) {
       size_t it = linfo.idx[ik];
-      if (it < kMaxSizeOneDimemsion) {
+      if (it != kInvalid) {
         m_wfunc(twDataStart(it, ts), src + (ik - ks) * nt, nt);
       }
     }
@@ -799,6 +800,59 @@ void SegyRW::_write4d_xo(const float *src, LineInfo &linfo, size_t xs,
   }
 }
 
+void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe,
+                                     size_t &its, size_t &ite) {
+  size_t start = linfo.isline ? xl2ix(linfo.lstart) : of2io(linfo.lstart);
+  size_t end = linfo.isline ? xl2ix(linfo.lend) + 1 : of2io(linfo.lend) + 1;
+  if (xs < start) {
+    xs = start;
+  }
+  if (xe > end) {
+    xe = end;
+  }
+
+  auto iindex = [&](auto it) {
+    if (linfo.isline) {
+      return itx2ix(it);
+    } else {
+      return itx2io(it);
+    }
+  };
+
+  // find start idx
+  its = linfo.itstart + (xs - start);
+  its = its > linfo.itend ? linfo.itend : its;
+
+
+  if (iindex(its) > xs) {
+    while (iindex(its - 1) >= xs && (its - 1) >= linfo.itstart) {
+      its--;
+    } // its == linfo.itstart?
+  } else if (its + 1 <= linfo.itend && iindex(its + 1) <= xs) {
+    while (iindex(its + 1) <= xs && (its + 1) <= linfo.itend) {
+      its++;
+    }
+  }
+
+  // find end idx
+  ite = its + (xe - xs);
+  ite = ite > linfo.itend ? linfo.itend : ite;
+
+  if (iindex(ite) > xe) {
+    while (iindex(ite - 1) >= xe && (ite - 1) >= linfo.itstart) {
+      ite--;
+    }
+  } else if (ite + 1 <= linfo.itend && iindex(ite + 1) <= xe) {
+    while (iindex(ite + 1) <= xe && (ite + 1) <= linfo.itend) {
+      ite++;
+    }
+  }
+  if (ite == linfo.itend && iindex(ite) < xe) {
+    ite++;
+  }
+}
+
+
 uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
                              size_t ks, size_t ke, size_t ts, size_t te,
                              bool fromsrc) {
@@ -815,7 +869,7 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
   else if (linfo.count == 0 && linfo.idx.size() > 0) {
     for (size_t ik = ks; ik < ke; ik++) {
       size_t it = linfo.idx[ik];
-      if (it < kMaxSizeOneDimemsion) {
+      if (it != kInvalid) {
         // copy trace header
         memcpy(dst, trheader(it), kTraceHeaderSize);
         if (tchanged) {
@@ -862,9 +916,9 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
       } else {
         // copy from data, i.e., create_by_sharing_header
         if (linfo.isline) {
-          m_wfunc(twDataStart(it, ts), src + (itx2ix(it) - ks) * nt, nt);
+          m_wfunc(dst, src + (itx2ix(it) - ks) * nt, nt);
         } else {
-          m_wfunc(twDataStart(it, ts), src + (itx2io(it) - ks) * nt, nt);
+          m_wfunc(dst, src + (itx2io(it) - ks) * nt, nt);
         }
       }
       dst += nt * m_meta.esize;
@@ -908,9 +962,9 @@ uint64_t SegyRW::_copy4d_xo(char *dst, const float *src, LineInfo &linfo,
                             size_t ts, size_t te, bool fromsrc) {
   size_t nt = te - ts;
   size_t no = oe - os;
-  size_t nx = xe - xs;
+  // size_t nx = xe - xs;
   uint64_t sizeOT = nt * no;
-  uint64_t sizeXOT = nx * sizeOT;
+  // uint64_t sizeXOT = nx * sizeOT;
 
   /* no data to copy, just fill */
   if (linfo.count == 0 || NoOverlap(linfo, xs, xe)) {
@@ -932,11 +986,14 @@ uint64_t SegyRW::_copy4d_xo(char *dst, const float *src, LineInfo &linfo,
   }
 
   char *odst = dst;
-  const float *srcf = src + skip * sizeXOT;
+  const float *srcf = nullptr;
+  if (!fromsrc) {
+    srcf = src + skip * sizeOT;
+  }
 
   // read, when is 4D, xlines are always continuous as we filled
   for (size_t ix = xs; ix < xe; ix++) {
-    jump = _copy_inner(dst, srcf + (ix - xs) * sizeXOT,
+    jump = _copy_inner(dst, srcf + (ix - xs) * sizeOT,
                        linfo.xinfos[ix - start], os, oe, ts, te, fromsrc);
     dst += jump;
   }
@@ -1099,9 +1156,15 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
       if (m_ndim == 3) {
         jump = _copy_inner(outptr, src, linfo, xs, xe, ts, te, fromsrc);
         outptr += jump;
+        if (!fromsrc) {
+          src += (xe - xs) * nt;
+        }
       } else {
         jump = _copy4d_xo(outptr, src, linfo, xs, xe, os, oe, ts, te, fromsrc);
         outptr += jump;
+        if (!fromsrc) {
+          src += (xe - xs) * (oe - os) * nt;
+        }
       }
     }
   }
