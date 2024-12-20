@@ -108,14 +108,14 @@ void SegyRW::scan() {
 
     // jump too small
     if (iline(it) == iiline) {
-      while (iline(it) == iiline && it < m_meta.ntrace) {
+      while (it < m_meta.ntrace && iline(it) == iiline) {
         jumpl++;
         it++;
       }
     }
     // jump too large
     else if (iline(it - 1) != iiline) {
-      while (iline(it - 1) != iiline && it >= itstart) {
+      while (it >= itstart && iline(it - 1) != iiline) {
         it--;
         jumpl--;
       }
@@ -211,14 +211,14 @@ void SegyRW::scan() {
 
         // jump too small
         if (xline(xt) == xxline) {
-          while (xline(xt) == xxline && xt < xtmax) {
+          while (xt < xtmax && xline(xt) == xxline) {
             jumpx++;
             xt++;
           }
         }
         // jump too large
         else if (xline(xt - 1) != xxline) {
-          while (xline(xt - 1) != xxline && xt >= itstart) {
+          while (xt >= itstart && xline(xt - 1) != xxline) {
             xt--;
             jumpx--;
           }

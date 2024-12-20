@@ -1,0 +1,1 @@
+clang++ -std=c++17 -o SEGYRead SEGYRead.cpp ../cigse/cpp/segyrw.cpp -I../cigse/cpp

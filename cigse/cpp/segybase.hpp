@@ -61,6 +61,9 @@ public:
 
   ~SegyBase() { this->close_file(); }
 
+  KeyLocs m_keys;
+  MetaInfo m_meta;
+
   void close_file() {
     if (m_sink.is_mapped()) {
       m_sink.unmap();
@@ -151,8 +154,6 @@ protected:
   const char *m_data_ptr;
   mio::mmap_sink m_sink;
   mio::mmap_source m_src;
-  KeyLocs m_keys;
-  MetaInfo m_meta;
   ReadFunc m_readfunc;
   ReadFuncOne m_readfuncone;
   WriteFunc m_wfunc;
