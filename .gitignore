@@ -27,6 +27,9 @@ segyfile
 __pycache__
 todo.txt
 compile_commands.json
+*.zip
+*.obj
+*.lib
 
 test.*
 thridpart/

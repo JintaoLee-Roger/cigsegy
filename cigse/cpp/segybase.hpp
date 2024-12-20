@@ -312,7 +312,7 @@ inline void SegyBase::collect(float *data, const int32_t *index, size_t n,
                                std::to_string(index[i]));
     }
     if (index[i] < 0) {
-      std::fill(data, data + nt, 0);
+      std::fill(data, data + nt, m_meta.fillNoValue);
     } else {
       m_readfunc(data, trDataStart(index[i], tbeg), nt);
     }

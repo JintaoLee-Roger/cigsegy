@@ -1050,7 +1050,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
     }
     tstart = ranges[0];
     tend = ranges[1];
-    if (check_size > 0 and
+    if (check_size > 0 &&
         check_size != (uint64_t)(tend - tstart) * (te - ts) * sizeof(float)) {
       throw std::runtime_error("file size don't match the ranges");
     }
@@ -1069,7 +1069,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
                                  "!= 6, ranges.size() = " +
                                  std::to_string(ranges.size()));
       }
-      if (check_size > 0 and check_size != (uint64_t)(ie - is) * (xe - xs) *
+      if (check_size > 0 && check_size != (uint64_t)(ie - is) * (xe - xs) *
                                                (te - ts) * sizeof(float)) {
         throw std::runtime_error("file size don't match the ranges");
       }
@@ -1083,7 +1083,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
       }
       os = ranges[4];
       oe = ranges[5];
-      if (check_size > 0 and check_size != (uint64_t)(ie - is) * (xe - xs) *
+      if (check_size > 0 && check_size != (uint64_t)(ie - is) * (xe - xs) *
                                                (oe - os) * (te - ts) *
                                                sizeof(float)) {
         throw std::runtime_error("file size don't match the ranges");

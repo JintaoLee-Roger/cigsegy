@@ -58,96 +58,88 @@ int main(int argc, char *argv[]) {
 
     std::string segy_name = args["i"].as<std::string>();
     std::cout << "Read segy file from: " << segy_name << std::endl;
+    try {
+        segy::SegyRW segyio(segy_name);
 
-    segy::SegyRW segyio(segy_name);
-
-    if (args.count("ignore-header")) {
-        if (!args.count("d")) {
-            throw std::runtime_error("When using '--ignore-header', must specify shape '-d'");
+        if (args.count("p")) {
+            std::cout << "Textual header:\n" << segyio.textual_header() << "\n";
         }
-    }
 
-    if (args.count("p")) {
+        if (args.count("z")) {
+            segyio.setInlineLocation(args["z"].as<int>());
+        }
+
+        if (args.count("c")) {
+            segyio.setCrosslineLocation(args["c"].as<int>());
+        }
+
+        if (args.count("istep")) {
+            segyio.setInlineStep(args["istep"].as<int>());
+        }
+
+        if (args.count("xstep")) {
+            segyio.setCrosslineStep(args["xstep"].as<int>());
+        }
+
+        if (args.count("xloc")) {
+            segyio.setXLocation(args["xloc"].as<int>());
+        }
+
+        if (args.count("yloc")) {
+            segyio.setYLocation(args["yloc"].as<int>());
+        }
+
+        if (args.count("f")) {
+            float fills = 0.0f;
+            std::string fill_str = args["f"].as<std::string>();
+            if (fill_str == "nan" || fill_str == "NAN") {
+                fills = NAN;
+            } else {
+                try {
+                    fills = std::stof(fill_str);
+                } catch (const std::invalid_argument&) {
+                    throw std::runtime_error("Invalid fill value provided");
+                }
+            }
+            segyio.setFill(fills);
+        }
+
+        bool is2d = false;
         if (args.count("ignore-header")) {
-            throw std::runtime_error("You have ignored header (--ignore-header).");
-        }
-        std::cout << "Textual header:\n" << segyio.textual_header() << "\n";
-    }
-
-    if (args.count("z")) {
-        segyio.setInlineLocation(args["z"].as<int>());
-    }
-
-    if (args.count("c")) {
-        segyio.setCrosslineLocation(args["c"].as<int>());
-    }
-
-    if (args.count("istep")) {
-        segyio.setInlineStep(args["istep"].as<int>());
-    }
-
-    if (args.count("xstep")) {
-        segyio.setCrosslineStep(args["xstep"].as<int>());
-    }
-
-    if (args.count("xloc")) {
-        segyio.setXLocation(args["xloc"].as<int>());
-    }
-
-    if (args.count("yloc")) {
-        segyio.setYLocation(args["yloc"].as<int>()); // 确保 segy::SegyRW 类有 setYLocation 方法
-    }
-
-    if (args.count("f")) {
-        float fills = 0.0f;
-        std::string fill_str = args["f"].as<std::string>();
-        if (fill_str == "nan" || fill_str == "NAN") {
-            fills = NAN;
+            segyio.set_segy_type(2);
+            is2d = true;
         } else {
-            try {
-                fills = std::stof(fill_str);
-            } catch (const std::invalid_argument&) {
-                throw std::runtime_error("Invalid fill value provided");
+            segyio.set_segy_type(3);
+        }
+
+        segyio.scan();
+
+        if (args.count("m")) {
+            auto keys = segyio.m_keys;
+            auto meta = segyio.m_meta;
+            std::cout << "Meta information:\n";
+            std::cout << "N traces: " << meta.ntrace << "\n";
+            if (args.count("ignore-header")) {
+                std::cout << "Shape (n-trace, n-time) = (" << meta.ntrace << ", " << meta.nt << ")\n";
+                std::cout << "dt: " << meta.dt << ", dformat: " << meta.dformat << "\n";
+            } else {
+                std::cout << "Shape (n-inline, n-xline, n-time) = (" << meta.ni << ", " << meta.nx << ", " << meta.nt << ")\n";
+                std::cout << "Geometry (inline, xline, time) / (start, interval, length)\n";
+                std::cout << meta.start_iline << ", " << keys.istep << ", " << meta.ni << "\n";
+                std::cout << meta.start_xline << ", " << keys.xstep << ", " << meta.nx << "\n";
+                std::cout << meta.start_time << ", " << meta.dt / 1000 << ", " << meta.nt << "\n";
             }
         }
-        segyio.setFill(fills);
-    }
 
-    bool is2d = false;
-    if (args.count("ignore-header")) {
-        segyio.set_segy_type(2);
-        is2d = true;
-    } else {
-        segyio.set_segy_type(3);
-    }
-
-    segyio.scan();
-
-    if (args.count("m")) {
-        if (args.count("ignore-header")) {
-            throw std::runtime_error("You have ignored header (--ignore-header).");
+        if (args.count("o")) {
+            std::string out_name = args["o"].as<std::string>();
+            std::cout << "Write binary file to: " << out_name << "\n";
+            segyio.tofile(out_name, is2d);
+            segyio.close_file();
         }
-        auto keys = segyio.m_keys;
-        auto meta = segyio.m_meta;
-        std::cout << "Meta information:\n";
-        std::cout << "N traces: " << meta.ntrace << "\n";
-        if (args.count("ignore-header")) {
-            std::cout << "Shape (n-trace, n-time) = (" << meta.ntrace << ", " << meta.nt << ")\n";
-            std::cout << "dt: " << meta.dt << ", dformat: " << meta.dformat << "\n";
-        } else {
-            std::cout << "Shape (n-inline, n-xline, n-time) = (" << meta.ni << ", " << meta.nx << ", " << meta.nt << ")\n";
-            std::cout << "Geometry (inline, xline, time) / (start, interval, length)\n";
-            std::cout << meta.start_iline << ", " << keys.istep << ", " << meta.ni << "\n";
-            std::cout << meta.start_xline << ", " << keys.xstep << ", " << meta.nx << "\n";
-            std::cout << meta.start_time << ", " << meta.dt << ", " << meta.nt << "\n";
-        }
-    }
-
-    if (args.count("o")) {
-        std::string out_name = args["o"].as<std::string>();
-        std::cout << "Write binary file to: " << out_name << "\n";
-        segyio.tofile(out_name, is2d);
-        segyio.close_file();
+    } catch (const std::exception &e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
     }
 
     return 0;

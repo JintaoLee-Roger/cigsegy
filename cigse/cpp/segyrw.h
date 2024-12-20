@@ -174,7 +174,7 @@ inline void SegyRW::set_segy_type(size_t ndim) {
 
 inline std::vector<size_t> SegyRW::shape() const {
   if (m_ndim == 2) {
-    return {m_meta.ntrace, m_meta.nt};
+    return {static_cast<size_t>(m_meta.ntrace), m_meta.nt};
   } else if (m_ndim == 3) {
     return {m_meta.ni, m_meta.nx, m_meta.nt};
   } else {
