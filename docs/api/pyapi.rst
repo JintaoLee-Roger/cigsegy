@@ -8,6 +8,13 @@ Core functions
     :members:
 
 
+.. automodule:: cigsegy.factories
+    :members:
+
+
+.. autoclass:: cigsegy.SegyNP
+    :members:
+
 
 Tools
 =====

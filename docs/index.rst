@@ -37,7 +37,6 @@
    :maxdepth: 2
 
    api/pyapi
-   api/cppapi
 
 .. toctree::
    :caption: Extra Information

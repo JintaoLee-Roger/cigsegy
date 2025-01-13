@@ -11,7 +11,7 @@ Core Features
 
 - Fast (Implemented in c++)
 - python wraping and **numpy** array supports
-- dealing with normal and **irregular** SEG-Y volume [1]_.
+- dealing with normal and **irregular** SEG-Y volume.
 - creating a SEG-Y file using the **existed header** of a SEG-Y
 
 

@@ -317,15 +317,13 @@ def load_by_geom(
     Using the given geom, extract data without scanning. This is useful for unsorted SEG-Y file.
     
     `geominfo` must contain the key locations, shape, and ranges. For example:
-    ```python
+    
     geominfo = {
         'location': [189, 193],
         'shape': [650, 781, 951],
         'iline': dict(min_iline=2201, max_iline=2850, istep=1),
         'xline': dict(min_xline=5650, max_xline=7210, xstep=2),
-        'geom': geom, # geom is a (ni, nx) array for 3D or (ni, nx, no) for 4D
-    }
-    ```
+        'geom': geom, # geom is a (ni, nx) array for 3D or (ni, nx, no) for 4D}
     """
     is4d = False
     shape = geominfo['shape']
