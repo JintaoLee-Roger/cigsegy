@@ -412,7 +412,7 @@ void SegyRW::read4d(float *dst, size_t is, size_t ie, size_t xs, size_t xe,
   uint64_t sizeOT = no * nt;
   uint64_t sizeXOT = nx * sizeOT;
 
-  int step = cal_progress_steps(ie - is, show_progress_, 50);
+  int step = cal_progress_steps(ie - is, show_progress_, 50, 50);
   for (size_t ii = is; ii < ie; ii++) {
     g_check_signals_callback();
     if (step && (ii - is) % step == 0) {
@@ -438,7 +438,7 @@ void SegyRW::read3d(float *dst, size_t is, size_t ie, size_t xs, size_t xe,
   size_t nt = te - ts;
   uint64_t sizeXT = nx * nt;
 
-  int step = cal_progress_steps(ie - is, show_progress_, 50);
+  int step = cal_progress_steps(ie - is, show_progress_, 50, 50);
   for (size_t ii = is; ii < ie; ii++) {
     g_check_signals_callback();
     if (step && (ii - is) % step == 0) {
@@ -572,7 +572,7 @@ void SegyRW::write3d(const float *data, size_t is, size_t ie, size_t xs,
   size_t nt = te - ts;
   uint64_t sizeXT = nx * nt;
 
-  int step = cal_progress_steps(ie - is, show_progress_, 50);
+  int step = cal_progress_steps(ie - is, show_progress_, 50, 50);
   for (size_t ii = is; ii < ie; ii++) {
     g_check_signals_callback();
     if (step && (ii - is) % step == 0) {
@@ -601,7 +601,7 @@ void SegyRW::write4d(const float *data, size_t is, size_t ie, size_t xs,
   uint64_t sizeOT = no * nt;
   uint64_t sizeXOT = nx * sizeOT;
 
-  int step = cal_progress_steps(ie - is, show_progress_, 50);
+  int step = cal_progress_steps(ie - is, show_progress_, 50, 50);
   for (size_t ii = is; ii < ie; ii++) {
     g_check_signals_callback();
     if (step && (ii - is) % step == 0) {
@@ -1172,7 +1172,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
 
   // copy trace
   if (is2d || m_ndim == 2) {
-    int step = cal_progress_steps(tend - tstart, show_progress_, 10000);
+    int step = cal_progress_steps(tend - tstart, show_progress_, 10000, 50);
     for (size_t it = tstart; it < tend; it++) {
       g_check_signals_callback();
       if (step && (it - tstart) % step == 0) {
@@ -1194,7 +1194,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
     }
   } else {
     uint64_t jump = 0;
-    int step = cal_progress_steps(ie - is, show_progress_, 10000);
+    int step = cal_progress_steps(ie - is, show_progress_, 10000, 50);
     for (size_t ii = is; ii < ie; ii++) {
       g_check_signals_callback();
       if (step && (ii - is) % step == 0) {
@@ -1359,7 +1359,7 @@ void create_segy(const std::string &segyname, const float *src,
   memcpy(dst, bheader, kBinaryHeaderSize);
   dst += kBinaryHeaderSize;
 
-  int step = cal_progress_steps(ntrace, true, 10000);
+  int step = cal_progress_steps(ntrace, true, 10000, 50);
   for (size_t i = 0; i < ntrace; i++) {
     g_check_signals_callback();
     if (step && i % step == 0) {

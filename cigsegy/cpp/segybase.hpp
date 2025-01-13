@@ -273,7 +273,7 @@ inline void SegyBase::get_trace_keys(int32_t *dst,
                                      const std::vector<size_t> &length,
                                      size_t beg, size_t end) {
 
-  int step = cal_progress_steps(end - beg, show_progress_, 10000);
+  int step = cal_progress_steps(end - beg, show_progress_, 10000, 50);
   for (size_t i = beg; i < end; i++) {
     g_check_signals_callback();
     if (step && (i-beg) % step == 0) {
@@ -304,7 +304,7 @@ inline void SegyBase::itrace(float *data, size_t n) {
 inline void SegyBase::collect(float *data, size_t beg, size_t end, size_t tbeg,
                               size_t tend) {
   size_t nt = tend - tbeg;
-  int step = cal_progress_steps(end - beg, show_progress_, 10000);
+  int step = cal_progress_steps(end - beg, show_progress_, 10000, 50);
   for (size_t i = beg; i < end; i++) {
     g_check_signals_callback();
     if (step && (i-beg) % step == 0) {
@@ -321,7 +321,7 @@ inline void SegyBase::collect(float *data, size_t beg, size_t end, size_t tbeg,
 inline void SegyBase::collect(float *data, const int32_t *index, size_t n,
                               size_t tbeg, size_t tend) {
   size_t nt = tend - tbeg;
-  int step = cal_progress_steps(n, show_progress_, 10000);
+  int step = cal_progress_steps(n, show_progress_, 10000, 50);
   for (size_t i = 0; i < n; i++) {
     g_check_signals_callback();
     if (step && i % step == 0) {
@@ -385,7 +385,7 @@ inline void SegyBase::write_traces(const float *data, size_t beg, size_t end,
                                    size_t tbeg, size_t tend) {
   check_write(m_w);
   size_t n = end - beg;
-  int step = cal_progress_steps(n, show_progress_, 10000);
+  int step = cal_progress_steps(n, show_progress_, 10000, 50);
   for (size_t i = beg; i < end; i++) {
     g_check_signals_callback();
     if (step && (i-beg) % step == 0) {
@@ -402,7 +402,7 @@ inline void SegyBase::write_traces(const float *data, const int32_t *index,
                                    size_t n, size_t tbeg, size_t tend) {
   check_write(m_w);
   size_t len = tend - tbeg;
-  int step = cal_progress_steps(n, show_progress_, 10000);
+  int step = cal_progress_steps(n, show_progress_, 10000, 50);
   for (size_t i = 0; i < n; i++) {
     g_check_signals_callback();
     if (step && i % step == 0) {

@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from cigsegy.cpp._CXX_SEGY import Pysegy
 from cigsegy import utils
+import warnings
 
 
 def read_header(fname: str, type, n=0, printstr=True):
@@ -29,11 +30,17 @@ def read_header(fname: str, type, n=0, printstr=True):
     -------
     Dict or None
     """
-    segy = Pysegy(fname)
     if type == 'bh':
-        arr = segy.get_binary_header()
+        try:
+            segy = Pysegy(fname)
+            arr = segy.get_binary_header()
+        except:
+            warnings.warn("The SEG-Y file is broken, try to read binary header by numpy")
+            arr = np.fromfile(fname, dtype=np.uint8, count=400, offset=3200)
+
         out, hstring = utils.parse_bheader(arr)
     elif type == 'th':
+        segy = Pysegy(fname)
         arr = segy.get_trace_header(n)
         out, hstring = utils.parse_theader(arr)
     else:

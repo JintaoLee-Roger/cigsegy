@@ -18,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 #include <iostream>
+#include <sstream>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -596,30 +597,35 @@ inline void truncate_file(const std::string &file_name,
 inline void default_progress_callback(int current, int total) {
     const int barWidth = 50;
 
+    std::ostringstream oss; // 使用字符串流存储输出
+
     if (current == 0) {
-        std::cout << "Progress: [>" << std::string(barWidth, ' ') << "] 0% (0/" << total << ")" << std::flush;
+        oss << "Progress: [>" << std::string(barWidth, ' ') << "] 0% (0/" << total << ")";
     } else if (current > 0 && current <= total) {
         float progress = static_cast<float>(current) / total;
         int pos = static_cast<int>(barWidth * progress);
 
-        std::cout << "\rProgress: [";
+        oss << "\rProgress: [";
         for (int i = 0; i < barWidth; ++i) {
-            if (i < pos) std::cout << "=";
-            else if (i == pos) std::cout << ">";
-            else std::cout << " ";
+            if (i < pos) oss << "=";
+            else if (i == pos) oss << ">";
+            else oss << " ";
         }
-        std::cout << "] " << static_cast<int>(progress * 100) << "% (" << current << "/" << total << ")" << std::flush;
+        oss << "] " << static_cast<int>(progress * 100) << "% (" << current << "/" << total << ")";
     } else if (current == -1) {
-        std::cout << "\rProgress: [" << std::string(barWidth, '=') << ">] 100% (" << total << "/" << total << ")" << std::endl;
+        oss << "\rProgress: [" << std::string(barWidth, '=') << ">] 100% (" << total << "/" << total << ")";
     }
+
+    // 一次性输出
+    std::cout << oss.str() << std::flush;
 }
 
-inline int cal_progress_steps(int total, bool show_progress, int min_steps = 100) {
-    if (!show_progress || !g_show_progress || total < min_steps) {
+inline int cal_progress_steps(int total, bool show_progress, int min_iters = 100, int max_iters = 50) {
+    if (!show_progress || !g_show_progress || total < min_iters) {
         return 0;
     }
 
-    return total / min_steps;
+    return total / max_iters;
 
 }
 

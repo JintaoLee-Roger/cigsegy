@@ -60,7 +60,7 @@ def progress_callback(current, total):
     if current > 0:
         pbar.update(current - pbar.n)
     elif current == -1:
-        pbar.update(1)
+        pbar.update(total - pbar.n)
         pbar.close()
         pbar = None
 
