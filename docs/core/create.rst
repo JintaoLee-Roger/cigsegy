@@ -26,16 +26,16 @@ SEG-Y file ``out.segy`` whose headers are same as ``orig.segy``.
 
     # assume the iline/xline/istep/xstep of **orig.segy** are 9/21/1/1
     >>> cigsegy.create_by_sharing_header('out.segy', 'orig.segy', afterprocess, \
-        iline=9, xline=21, istep=1, xstep=1)
+        keylocs=[9, 21, 1, 1])
 
     # using binary file instead of numpy array
     # assume shape = (589, 762, 1001) = (n-inline, n-crossline, n-time)
     >>> cigsegy.create_by_sharing_header('out.segy', 'orig.segy', 'afterprocess.dat', \
-        (589, 762, 1001), iline=9, xline=21, istep=1, xstep=1)
+        (589, 762, 1001), keylocs=[9, 21, 1, 1])
 
 
 If ``afterprocess`` is a sub-volume, i.e., only process a part of ``orig.segy``, you 
-can set ``offset=(ilineof, xlineof, timeof)`` to create a new SEG-Y file.
+can set ``start=(iline_start, xline_start, time_start)`` to create a new SEG-Y file.
 
 For example:
 
@@ -56,28 +56,22 @@ For example:
     # create 'out.segy' using afterprocess (data) and a part
     # of header in 'orig.segy'
     >>> cigsegy.create_by_sharing_header('out.segy', 'orig.segy', afterprocess, \
-        iline=9, xline=21, istep=1, xstep=1, offset=(100, 400, 300))
+        keylocs=[9, 21, 1, 1], start=(100, 400, 300))
 
 
 .. Note::
 
-    For all ``create``-like functions, you can speacify the ``custom_info`` to 
-    custom the first 12 lines of textual header, e.g.,
+    For all ``create``-like functions, you can speacify the ``textual`` to 
+    custom textual header, e.g.,
 
     .. code-block:: python
         
         # you can special the first 12 lines of textual header
-        >>> textual12 = ['This is a test example', 'Only used for testing', 
-            'offset is (100, 400, 300)', 'see cigsegy.readthedocs.io for more information']
+        >>> textual12 = "xxxxx"
         >>> cigsegy.create_by_sharing_header('out.segy', 'orig.segy', afterprocess, \
-            iline=9, xline=21, istep=1, xstep=1, offset=(100, 400, 300), custom_info=my_info)
+            keylocs=[9, 21, 1, 1], start=(100, 400, 300), textual=my_info)
         >>> cigsegy.textual_header('out.segy')
-        # C01 This is a test example
-        # C02 Only used for testing
-        # C03 offset is (100, 400, 300)
-        # C04 see cigsegy.readthedocs.io for more information
-        # C05
-        # ...
+        # xxx
 
 
 

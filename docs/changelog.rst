@@ -3,8 +3,15 @@ Changelog
 #########
 
 
-<<<<<<< HEAD
-=======
+
+v1.2.0
+--------
+**A breaking change.**
+
+- Removed some dependencies, such as ``fmt``, ``progressbar``, making it easy to install.
+- Refactored c++ code, making it more efficient and maintainable.
+- A improved ``SegyNP`` class, which is more efficient and easier to use.
+
 
 v1.1.9
 --------
@@ -14,7 +21,6 @@ v1.1.9
 
 
 
->>>>>>> dev
 v1.1.8
 ---------
 - fixed a bug when create file on windows

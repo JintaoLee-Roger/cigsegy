@@ -124,7 +124,7 @@ There is often such a workflow:
 
     # assume the iline/xline/istep/xstep of **orig.segy** are 9/21/1/1
     >>> cigsegy.create_by_sharing_header('out.segy', 'orig.segy', afterprocess, \
-        iline=9, xline=21, istep=1, xstep=1)
+        keylocs=[9, 21])
 
 6. Create a SEG-Y using a numpy array and some parameters
 
@@ -139,7 +139,7 @@ There is often such a workflow:
 .. code-block:: python
 
     >>> from cigsegy import SegyNP
-    >>> d = SegyNP('rogan.sgy', iline=9, xline=21)
+    >>> d = SegyNP('rogan.sgy', keylocs=[9, 21])
     >>> d.shape # (ni, nx, nt), use as a numpy array, 3D geometry
     >>> sx = d[100] # the 100-th inline profile
     >>> sx = d[100:200] # return a 3D array with shape (100, nx, nt)
@@ -148,7 +148,7 @@ There is often such a workflow:
     >>> sx.min(), sx.max() 
     # get the min and max value, but they are evaluated from a part of data, 
     # so they may not be the real min and max value
-    >>> sx.trace_cout # get the number of traces for the file
+    >>> sx.ntrace # get the number of traces for the file
 
 
 
@@ -161,7 +161,7 @@ cigsegy is provided under a MIT license that can be found in the `LICENSE <https
 TODO
 ====
 
-- Add convenient function to support **unsorted** prestack gathers.
+- Add convenient functions to support **unsorted** prestack gathers.
 
 
 Citations

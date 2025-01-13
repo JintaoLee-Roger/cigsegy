@@ -234,8 +234,8 @@ int main(int argc, char *argv[]) {
         ("p,print_textual_header", "print 3200 bytes textual header")
         ("m,meta_info", "print meta info")
         ("ignore-header", "reading segy by ignoring header and specify shape")
-        ("b,bheader", "boolean header flag", cxxopts::value<bool>())
-        ("t,theader", "integer header value", cxxopts::value<int>());
+        ("b,bheader", "show the 400 bytes binary header", cxxopts::value<bool>())
+        ("t,theader", "show the header of the i-th trace", cxxopts::value<int>());
 
     options.parse_positional({"input"});
     options.add_example(std::string(argv[0]) + " -p f3.segy             : show textual header");
@@ -248,7 +248,10 @@ int main(int argc, char *argv[]) {
     options.add_example(std::string(argv[0]) + " -o f3.dat --ignore-header f3.segy : ignore header and specify shape");
     // create
     options.add_example(std::string(argv[0]) + " -i f3.segy -n new.dat -o new.segy : create new segy file from new binary");
-
+    // show binary header
+    options.add_example(std::string(argv[0]) + " -i f3.segy -b : show binary header");
+    // show trace header
+    options.add_example(std::string(argv[0]) + " -i f3.segy -t 100 : show the header of the 100-th trace");
 
     auto args = options.parse(argc, argv);
 

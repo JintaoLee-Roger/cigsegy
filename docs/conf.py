@@ -82,77 +82,11 @@ def prepare(app):
     with open(DIR / "readme.rst", "w") as f:
         f.write(contents)
 
-    sourcedir = DIR.parent / 'python'
-    targetdir = DIR / 'cigsegy'
-    if not os.path.exists(targetdir):
-        os.mkdir(targetdir)
-
-    # copy 'python' dir as 'cigsegy'
-    with open(sourcedir / '__init__.py') as f:
-        contents = f.read()
-        contents = contents.replace('from .cigsegy', 'from .cigsegyc')
-
-    with open(targetdir / '__init__.py', 'w') as f:
-        f.write(contents)
-
-    with open(sourcedir / 'tools.py') as f:
-        contents = f.read()
-        contents = contents.replace('from .cigsegy', 'from .cigsegyc')
-        contents = contents.replace('create_by_sharing_header,',
-                                    'create_by_sharing_header)')
-        contents = contents.replace(
-            '_load_prestack3D, kBinaryHeaderHelp, kTraceHeaderHelp)', '')
-        contents = contents.replace('from . import utils', '')
-
-    with open(targetdir / 'tools.py', 'w') as f:
-        f.write(contents)
-
-    with open(sourcedir / 'utils.py') as f:
-        contents = f.read()
-        contents = contents.replace('from .cigsegy', 'from .cigsegyc')
-        contents = contents.replace(', kTraceHeaderHelp', '')
-
-    with open(targetdir / 'utils.py', 'w') as f:
-        f.write(contents)
-
-    with open(sourcedir / 'cigsegy.pyi') as f:
-        contents = f.read()
-        contents = contents.replace('import cigsegy', '')
-
-    with open(targetdir / 'cigsegyc.py', 'w') as f:
-        f.write(contents)
-
-    with open(sourcedir / 'plot.py') as f:
-        contents = f.read()
-        contents = contents.replace('from .cigsegy', 'from .cigsegyc')
-
-    with open(targetdir / 'plot.py', 'w') as f:
-        f.write(contents)
-
-    with open(sourcedir / 'transform.py') as f:
-        contents = f.read()
-
-    with open(targetdir / 'transform.py', 'w') as f:
-        f.write(contents)
-
-    with open(sourcedir / 'interp.py') as f:
-        contents = f.read()
-
-    with open(targetdir / 'interp.py', 'w') as f:
-        f.write(contents)
-
-    with open(sourcedir / 'segynp.py') as f:
-        contents = f.read()
-        contents = contents.replace('from .cigsegy', 'from .cigsegyc')
-
-    with open(targetdir / 'segynp.py', 'w') as f:
-        f.write(contents)
-
 
 def clean_up(app, exception):  # noqa: ARG001
     os.remove(DIR / 'readme.rst')
     os.remove(DIR / 'Doxyfile')
-    shutil.rmtree(DIR / 'cigsegy')
+    # shutil.rmtree(DIR / 'cigsegy')
 
 
 def setup(app):

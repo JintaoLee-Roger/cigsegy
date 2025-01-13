@@ -13,7 +13,7 @@ If the SEG-Y file is a 3D post-stack seismic file:
 .. code-block:: python
 
     >>> from cigsegy import SegyNP
-    >>> d = SegyNP('3Dpoststack.sgy', iline=189, xline=193)
+    >>> d = SegyNP('3Dpoststack.sgy', keylocs=[189, 193])
     >>> d.shape # (ni, nx, nt), use as a numpy array, 3D geometry
     >>> sx = d[100] # the 100-th inline profile
     >>> sx = d[100:200] # return a 3D array with shape (100, nx, nt)
@@ -22,8 +22,8 @@ If the SEG-Y file is a 3D post-stack seismic file:
     >>> sx.min(), sx.max() 
     # get the min and max value, but they are evaluated from a part of data, 
     # so they may not be the real min and max value
-    >>> sx.trace_cout # get the number of traces for the file
-    >>> sx.close() # close the file
+    >>> sx.ntrace # get the number of traces for the file
+    >>> ... # other numpy array operations
 
 
 2D array
@@ -35,11 +35,12 @@ If you don't want to create a 3D geometry, just treat the SEG-Y file as a collec
 .. code-block:: python
 
     >>> from cigsegy import SegyNP
-    >>> d = SegyNP('2Dseismic.sgy', as_2d=True)
+    >>> d = SegyNP('2Dseismic.sgy', ndim=2)
     >>> d.shape # (trace_count, nt), use as a numpy array, collection of 1D traces
     >>> sx = d[100] # the 100-th trace
     >>> sx = d[100:200] # return a 2D array with shape (100, nt)
     >>> sx.min(), sx.max() 
     # get the min and max value, but they are evaluated from a part of data, 
     # so they may not be the real min and max value
-    >>> sx.trace_cout # the number of traces for the file
+    >>> sx.ntrace # the number of traces for the file
+    >>> ... # other numpy array operations

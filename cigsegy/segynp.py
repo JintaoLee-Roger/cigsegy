@@ -964,7 +964,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
 
     def __init__(self,
                  filename: str,
-                 keyloc: dict = None,
+                 keylocs: dict = None,
                  mode: str = 'r',
                  *,
                  ndim: int = None,
@@ -1013,10 +1013,10 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
 
         if ndim is None or ndim != 2:
             if self._unsorted:
-                self._scan_unsorted(keyloc, keys, ndim)
+                self._scan_unsorted(keylocs, keys, ndim)
             else:
                 try:
-                    self._scan(keyloc)
+                    self._scan(keylocs)
                 except Exception as e:
                     raise RuntimeError(f"{str(e)}\n This SEG-Y file may be unsorted, you can pass `as_unsorted` to view it as unsorted file, but it may be slow") from e # yapf: disable
             if ndim is not None and self.ndim != ndim:

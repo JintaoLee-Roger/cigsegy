@@ -23,23 +23,17 @@ If you want to install cigsegy locally, you can use the following commands:
 .. code-block:: bash
 
     pip install -U pip
-    pip install . --config-settings editable_mode=strict
+    pip install -e . --config-settings editable_mode=strict
 
 
-If you need the two executables files:
+If you need the executable files, please see ``tools/run.sh``:
 
 .. code-block:: bash
 
-    mkdir build
-    cd build
-    cmake .. -DCMAKE_INSTALL_PREFIX=your-install-dir
-    make
-    make install
+    # Install on Linux/MacOS
+    clang++ -std=c++17 -o CIGSEGY CIGSEGY.cpp ../cigsegy/cpp/segyrw.cpp -I../cigsegy/cpp
 
-    # if install fmt manually and pybind11 via pypi, using this
-    cmake .. -DCMAKE_INSTALL_PREFIX=your-install-dir \
-    -Dpybind11_ROOT=/xxx/lib/python3.8/site-packages/pybind11/ \
-    -Dfmt_ROOT=/xxx/cigsegy/thridPart/fmt/build/fmt/
-
-    # selecting other python version, add -DPYTHON_EXECUTABL
-    cmake .. -DCMAKE_INSTALL_PREFIX=your-install-dir -DPYTHON_EXECUTABLE=/xxx/bin/python -DPYTHON_LIBRARIES=/xxx/lib/
+    # Install on Windows
+    # please use "x64" Native Tools Command Prompt for VS 2019
+    # if use "x86" toolchain, you may fail to deal with SEG-Y files larger than 2GB.
+    cl /EHsc /std:c++17 /utf-8 /O2 /I"tools" /I"cigsegy\cpp" tools\CIGSEGY.cpp cigsegy\cpp\segyrw.cpp /Fe:CIGSEGY.exe
