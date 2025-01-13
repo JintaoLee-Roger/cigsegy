@@ -24,6 +24,7 @@ int main(int argc, char *argv[]) {
     options.add_options()
         ("i,input", "input segy file: (Required)", cxxopts::value<std::string>())
         ("o,out", "out binary file name", cxxopts::value<std::string>())
+        ("n,new_binary", "new binary file to create new segy file", cxxopts::value<std::string>())
         ("f,fills", "the number to fill the miss trace, can be any float or nan, or NAN", cxxopts::value<std::string>())
         ("z,inline-loc", "inline field in trace header, default is 189", cxxopts::value<int>())
         ("c,crossline-loc", "crossline field in trace header, default is 193", cxxopts::value<int>())
@@ -44,6 +45,9 @@ int main(int argc, char *argv[]) {
     options.add_example(std::string(argv[0]) + " -o f3.dat -z 5 --istep 2 f3.segy : convert by specify inline field and step");
     options.add_example(std::string(argv[0]) + " -o f3.dat -f nan f3.segy : convert and fill with nan");
     options.add_example(std::string(argv[0]) + " -o f3.dat --ignore-header f3.segy : ignore header and specify shape");
+    // create
+    options.add_example(std::string(argv[0]) + " -i f3.segy -n new.dat -o new.segy : create new segy file from new binary");
+
 
     auto args = options.parse(argc, argv);
 
@@ -132,10 +136,20 @@ int main(int argc, char *argv[]) {
         }
 
         if (args.count("o")) {
-            std::string out_name = args["o"].as<std::string>();
-            std::cout << "Write binary file to: " << out_name << "\n";
-            segyio.tofile(out_name, is2d);
-            segyio.close_file();
+            if (args.count("n")) {
+                std::string new_name = args["n"].as<std::string>();
+                std::string out_name = args["o"].as<std::string>();
+                std::cout << "Create segy file by sharing header, write segy to: " << out_name << "\n";
+                std::vector<size_t> shape = segyio.shape();
+                std::vector<size_t> start = {0, 0, 0};
+                segyio.create_by_sharing_header(out_name, new_name, shape, start);
+                segyio.close_file();
+            } else {
+                std::string out_name = args["o"].as<std::string>();
+                std::cout << "Write binary file to: " << out_name << "\n";
+                segyio.tofile(out_name, is2d);
+                segyio.close_file();
+            }
         }
     } catch (const std::exception &e) {
         std::cerr << "Error: " << e.what() << std::endl;

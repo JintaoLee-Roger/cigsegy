@@ -30,6 +30,7 @@ compile_commands.json
 *.zip
 *.obj
 *.lib
+*_
 
 test.*
 thridpart/

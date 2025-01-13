@@ -19,6 +19,11 @@
 // static int tkscount = 0;
 namespace segy {
 
+bool g_show_progress = true;
+
+std::function<void()> g_check_signals_callback = []() {};
+std::function<void(int, int)> g_progress_callback = default_progress_callback;
+
 // modify header keys function, for cut, create_by_sharing_header
 inline static void set_bkeyi2(char *bheader, size_t loc, int16_t val) {
   *reinterpret_cast<int16_t *>(bheader + loc - 1) = swap_endian<int16_t>(val);
@@ -86,8 +91,12 @@ void SegyRW::scan() {
   size_t it = 0;
   size_t jumpl = m_meta.ntrace / ni;
   size_t jumpx = 1;
+  // int step = cal_progress_steps(ni, show_progress_, 50);
   for (size_t ii = 0; ii < ni; ++ii) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    // if (step && ii % step == 0) {
+    //   g_progress_callback(ii, ni);
+    // }
     LineInfo &linfo = m_iinfos[ii];
     // when missing line
     if (skipi > 0) {
@@ -280,6 +289,9 @@ void SegyRW::scan() {
       }
     }
   }
+  // if (step) {
+  //   g_progress_callback(-1, ni);
+  // }
 
   // Post process, assign m_meta
   m_meta.start_iline = is;
@@ -316,7 +328,7 @@ void SegyRW::scan() {
   // if line or xline is not continouse, we record their idx for fast indexing
   size_t rcount = 0; // We only read 10 lines? OPTIMIZE: How many lines?
   for (auto& linfo : m_iinfos) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
     if (rcount > 10) {
       break;
     }
@@ -400,12 +412,19 @@ void SegyRW::read4d(float *dst, size_t is, size_t ie, size_t xs, size_t xe,
   uint64_t sizeOT = no * nt;
   uint64_t sizeXOT = nx * sizeOT;
 
+  int step = cal_progress_steps(ie - is, show_progress_, 50);
   for (size_t ii = is; ii < ie; ii++) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    if (step && (ii - is) % step == 0) {
+      g_progress_callback(ii - is, ie - is);
+    }
 
     LineInfo &linfo = m_iinfos[ii];
     float *dstiline = dst + (ii - is) * sizeXOT;
     _read4d_xo(dstiline, linfo, xs, xe, os, oe, ts, te);
+  }
+  if (step) {
+    g_progress_callback(-1, ie - is);
   }
 }
 
@@ -419,12 +438,19 @@ void SegyRW::read3d(float *dst, size_t is, size_t ie, size_t xs, size_t xe,
   size_t nt = te - ts;
   uint64_t sizeXT = nx * nt;
 
+  int step = cal_progress_steps(ie - is, show_progress_, 50);
   for (size_t ii = is; ii < ie; ii++) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    if (step && (ii - is) % step == 0) {
+      g_progress_callback(ii - is, ie - is);
+    }
 
     LineInfo &linfo = m_iinfos[ii];
     float *dstiline = dst + (ii - is) * sizeXT;
     _read_inner(dstiline, linfo, xs, xe, ts, te);
+  }
+  if (step) {
+    g_progress_callback(-1, ie - is);
   }
 }
 
@@ -441,7 +467,7 @@ void SegyRW::read_tslice(float *dst, size_t t, size_t stepi, size_t stepx) {
   uint64_t sizeXT = (m_meta.nx + stepx - 1) / stepx;
 
   for (size_t ii = 0; ii < m_meta.ni; ii += stepi) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
 
     LineInfo &linfo = m_iinfos[ii];
     float *dstl = dst + ii / stepi * sizeXT;
@@ -546,12 +572,19 @@ void SegyRW::write3d(const float *data, size_t is, size_t ie, size_t xs,
   size_t nt = te - ts;
   uint64_t sizeXT = nx * nt;
 
+  int step = cal_progress_steps(ie - is, show_progress_, 50);
   for (size_t ii = is; ii < ie; ii++) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    if (step && (ii - is) % step == 0) {
+      g_progress_callback(ii - is, ie - is);
+    }
 
     LineInfo &linfo = m_iinfos[ii];
     const float *srcline = data + (ii - is) * sizeXT;
     _write_inner(srcline, linfo, xs, xe, ts, te);
+  }
+  if (step) {
+    g_progress_callback(-1, ie - is);
   }
 }
 
@@ -568,12 +601,19 @@ void SegyRW::write4d(const float *data, size_t is, size_t ie, size_t xs,
   uint64_t sizeOT = no * nt;
   uint64_t sizeXOT = nx * sizeOT;
 
+  int step = cal_progress_steps(ie - is, show_progress_, 50);
   for (size_t ii = is; ii < ie; ii++) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    if (step && (ii - is) % step == 0) {
+      g_progress_callback(ii - is, ie - is);
+    }
 
     LineInfo &linfo = m_iinfos[ii];
     const float *srcline = data + (ii - is) * sizeXOT;
     _write4d_xo(srcline, linfo, xs, xe, os, oe, ts, te);
+  }
+  if (step) {
+    g_progress_callback(-1, ie - is);
   }
 }
 
@@ -1132,8 +1172,12 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
 
   // copy trace
   if (is2d || m_ndim == 2) {
+    int step = cal_progress_steps(tend - tstart, show_progress_, 10000);
     for (size_t it = tstart; it < tend; it++) {
-      CHECK_SIGNALS();
+      g_check_signals_callback();
+      if (step && (it - tstart) % step == 0) {
+        g_progress_callback(it - tstart, tend - tstart);
+      }
       memcpy(outptr, trheader(it), kTraceHeaderSize);
       if (tchanged) {
         if (ts > 0) {
@@ -1145,10 +1189,17 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
       memcpy(outptr, trDataStart(it, ts), nt * m_meta.esize);
       outptr += nt * m_meta.esize;
     }
+    if (step) {
+      g_progress_callback(-1, tend - tstart);
+    }
   } else {
     uint64_t jump = 0;
+    int step = cal_progress_steps(ie - is, show_progress_, 10000);
     for (size_t ii = is; ii < ie; ii++) {
-      CHECK_SIGNALS();
+      g_check_signals_callback();
+      if (step && (ii - is) % step == 0) {
+        g_progress_callback(ii - is, ie - is);
+      }
       LineInfo &linfo = m_iinfos[ii];
       if (linfo.count == 0 && linfo.idx.size() == 0) {
         continue;
@@ -1166,6 +1217,9 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
           src += (xe - xs) * (oe - os) * nt;
         }
       }
+    }
+    if (step) {
+      g_progress_callback(-1, ie - is);
     }
   }
 
@@ -1305,13 +1359,20 @@ void create_segy(const std::string &segyname, const float *src,
   memcpy(dst, bheader, kBinaryHeaderSize);
   dst += kBinaryHeaderSize;
 
+  int step = cal_progress_steps(ntrace, true, 10000);
   for (size_t i = 0; i < ntrace; i++) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    if (step && i % step == 0) {
+      g_progress_callback(i, ntrace);
+    }
     memcpy(dst, theader, kTraceHeaderSize);
     modify_keys(dst, keys + i * (uint64_t)keysize, keysize);
     dst += kTraceHeaderSize;
     wfunc(dst, src + i * nt, nt);
     dst += nt * esize;
+  }
+  if (step) {
+    g_progress_callback(-1, ntrace);
   }
 
   assert(dst - rw_mmap.data() == needsize);

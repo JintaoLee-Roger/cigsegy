@@ -5,8 +5,8 @@
 
 from typing import Dict, List, Tuple
 import numpy as np
-from cigse.cpp._CXX_SEGY import Pysegy
-from cigse import utils
+from cigsegy.cpp._CXX_SEGY import Pysegy
+from cigsegy import utils
 
 
 def read_header(fname: str, type, n=0, printstr=True):
@@ -361,6 +361,28 @@ def load_by_geom(
         d = segy.collect(index, tb, te).reshape(*shape, -1)
 
     return d
+
+
+################# atomic operation ####################
+
+def set_keyi2(header: np.ndarray, loc: int, value: int, endian: str = '>'):
+    loc = loc - 1
+    header[loc:loc + 2] = np.array([value], dtype=f'{endian}i2').view(np.uint8)
+    return header
+
+def set_keyi4(header: np.ndarray, loc: int, value: int, endian: str = '>'):
+    loc = loc - 1
+    header[loc:loc + 4] = np.array([value], dtype=f'{endian}i4').view(np.uint8)
+    return header
+
+def get_keyi2(header: np.array, loc: int, endian: str = '>'):
+    loc = loc - 1
+    return np.frombuffer(header[loc:loc + 2], dtype=f'{endian}i2')[0]
+
+def get_keyi4(header: np.array, loc: int, endian: str = '>'):
+    loc = loc - 1
+    return np.frombuffer(header[loc:loc + 4], dtype=f'{endian}i4')[0]
+
 
 
 ############### Deprecated functions ####################

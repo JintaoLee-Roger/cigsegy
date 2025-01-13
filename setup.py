@@ -22,9 +22,11 @@ except ImportError:
 
 cwd = Path(__file__).resolve().parent
 
-package_name = "cigse"
+package_name = "cigsegy"
 
-version = '1.2.0'
+version_file = cwd / 'VERSION.txt'
+with open(version_file) as vf:
+    version = vf.read().strip()
 
 if not version:
     raise RuntimeError("Failed to parse version from VERSION")
@@ -38,10 +40,10 @@ extra_compile_args += ["-DUSE_PYBIND11"]
 
 ext_modules = [
     Pybind11Extension(
-        "cigse.cpp._CXX_SEGY",
+        "cigsegy.cpp._CXX_SEGY",
         [
-            "cigse/cpp/segywrap.cpp",
-            "cigse/cpp/segyrw.cpp",
+            "cigsegy/cpp/segywrap.cpp",
+            "cigsegy/cpp/segyrw.cpp",
         ],
         extra_compile_args=extra_compile_args,
     ),
@@ -55,7 +57,7 @@ setup(
     author='Jintao Li',
     url='https://github.com/JintaoLee-Roger/cigsegy',
     license='MIT',
-    install_requires=['numpy'],
+    install_requires=['numpy', 'tqdm'],
     python_requires=">=3.6",
     setup_requires=['pybind11'],
     ext_modules=ext_modules,

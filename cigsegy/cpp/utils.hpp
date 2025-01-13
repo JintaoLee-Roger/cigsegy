@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <iostream>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -27,25 +28,13 @@
 #include <unistd.h>
 #endif
 
-#ifdef USE_PYBIND11
-#include <pybind11/pybind11.h>
-
-inline void checkSignals() {
-  if (PyErr_CheckSignals() != 0) {
-    throw pybind11::error_already_set();
-  }
-}
-#define CHECK_SIGNALS() checkSignals()
-
-#else
-#define CHECK_SIGNALS()                                                        \
-  do {                                                                         \
-  } while (0)
-#endif
-
 using uchar = unsigned char;
 
 namespace segy {
+
+extern bool g_show_progress;
+extern std::function<void(int current, int total)> g_progress_callback;
+extern std::function<void()> g_check_signals_callback;
 
 // const size
 constexpr size_t kTextualHeaderSize = 3200;
@@ -602,6 +591,36 @@ inline void truncate_file(const std::string &file_name,
 
   close(fd);
 #endif
+}
+
+inline void default_progress_callback(int current, int total) {
+    const int barWidth = 50;
+
+    if (current == 0) {
+        std::cout << "Progress: [>" << std::string(barWidth, ' ') << "] 0% (0/" << total << ")" << std::flush;
+    } else if (current > 0 && current <= total) {
+        float progress = static_cast<float>(current) / total;
+        int pos = static_cast<int>(barWidth * progress);
+
+        std::cout << "\rProgress: [";
+        for (int i = 0; i < barWidth; ++i) {
+            if (i < pos) std::cout << "=";
+            else if (i == pos) std::cout << ">";
+            else std::cout << " ";
+        }
+        std::cout << "] " << static_cast<int>(progress * 100) << "% (" << current << "/" << total << ")" << std::flush;
+    } else if (current == -1) {
+        std::cout << "\rProgress: [" << std::string(barWidth, '=') << ">] 100% (" << total << "/" << total << ")" << std::endl;
+    }
+}
+
+inline int cal_progress_steps(int total, bool show_progress, int min_steps = 100) {
+    if (!show_progress || !g_show_progress || total < min_steps) {
+        return 0;
+    }
+
+    return total / min_steps;
+
 }
 
 } // namespace segy

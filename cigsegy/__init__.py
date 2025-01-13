@@ -49,10 +49,29 @@ class ExceptionWrapper:
         raise super().__getattribute__("exception")
 
 
+from tqdm import tqdm
+
+pbar = None
+
+def progress_callback(current, total):
+    global pbar
+    if pbar is None:
+        pbar = tqdm(total=total)
+    if current > 0:
+        pbar.update(current - pbar.n)
+    elif current == -1:
+        pbar.update(1)
+        pbar.close()
+        pbar = None
+
+from .cpp import _CXX_SEGY
+_CXX_SEGY.set_progress_callback(progress_callback)
+# _CXX_SEGY.set_global_show_progress(False)
+from .cpp._CXX_SEGY import Pysegy
+
 from .deprecated import *
 from .factories import *
 from .segynp import SegyNP
-from .cpp._CXX_SEGY import Pysegy
 from . import plot
 from . import tools
 from . import utils

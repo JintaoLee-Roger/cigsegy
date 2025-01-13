@@ -5,11 +5,12 @@
 
 from typing import List, Tuple
 import numpy as np
-from cigse.cpp import _CXX_SEGY
-from cigse.transform import get_transform_metrix, apply_transform
-from cigse.interp import arbitray_line
-from cigse import utils, plot, tools, createtool
+from cigsegy.cpp import _CXX_SEGY
+from cigsegy.transform import get_transform_metrix, apply_transform
+from cigsegy.interp import arbitray_line
+from cigsegy import utils, plot, tools, createtool
 import warnings
+
 
 
 class ScanMixin:
@@ -257,11 +258,25 @@ class PlotMixin:
             k3 = self._keylocs['offset']
         plot.plot_trace_ixo(self._segy, k1, k2, k3, beg, end)
 
-    def plot3d(self):
+    def plot3d(self, use_viser=False):
         """
         plot 3d
         """
-        raise NotImplementedError("not implement yet")
+        assert self.ndim == 3, "The data is not 3D"
+        if not use_viser:
+            try:
+                import cigvis
+            except ImportError:
+                raise ImportError("To use this function, you need to install cigvis")
+            nodes = cigvis.create_slices(self)
+            cigvis.plot3D(nodes)
+        else:
+            try:
+                from cigvis import viserplot
+            except ImportError:
+                raise ImportError("To use this function, you need to install cigvis['viser']")
+            nodes = viserplot.create_slices(self)
+            viserplot.plot3D(nodes)
 
 
 class InterpMixin:
@@ -368,10 +383,13 @@ class RWMixin:
 
     def to_numpy(self):
         """like pandas"""
+        self._segy.show_progress(True)
         if self.unsorted and self.ndim > 2:
-            return self[...]
+            d = self[...]
         else:
-            return self._segy.read()
+            d = self._segy.read()
+        self._segy.show_progress(False)
+        return d
 
     def tofile(self, fpath: str, load: bool = True):
         """
@@ -384,10 +402,12 @@ class RWMixin:
         load : bool
             if load is true, will load the file into memery first, then write to a file
         """
+        self._segy.show_progress(True)
         if load:
             self.to_numpy().tofile(fpath)
         else:
             self._segy.tofile(fpath, self.ndim == 2)
+        self._segy.show_progress(False)
 
     # fmt: off
     def _read4d(self, idx) -> np.ndarray:
@@ -731,10 +751,13 @@ class SegyCMixin:
         if len(textual) > 0 and len(textual) != 3200:
             textual = createtool.generate_textual(textual)
 
+        self._segy.show_progress(True)
         if isinstance(src, np.ndarray):
             self._segy.create_by_sharing_header(outname, src, start, as2d, textual)
         else:
             self._segy.create_by_sharing_header(outname, src, shape, start, as2d, textual)
+        self._segy.show_progress(False)
+        
 
 
 class AccessMixin:
@@ -955,6 +978,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         self._fname = filename
 
         self._segy = _CXX_SEGY.Pysegy(str(filename), mode=='rw')
+        self._segy.show_progress(False)
         self._mode = mode
         if self._mode == 'rw':
             warnings.warn(

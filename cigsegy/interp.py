@@ -12,7 +12,7 @@ resampling of data to different resolutions, and the fusion of multiple datasets
 
 import numpy as np
 from .transform import apply_transform
-from cigse import ExceptionWrapper
+from cigsegy import ExceptionWrapper
 
 try:
     from numba import njit

@@ -7,8 +7,8 @@ from datetime import datetime
 
 import numpy as np
 from .constinfo import kDataSampleFormatHelp
-from cigse.cpp._CXX_SEGY import create_segy
-from cigse import utils
+from cigsegy.cpp._CXX_SEGY import create_segy
+from cigsegy import utils
 
 
 def assemble_metainfo(shape, dformat=5, start=None, interval=None):

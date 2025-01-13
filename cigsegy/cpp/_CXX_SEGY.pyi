@@ -85,6 +85,11 @@ class Pysegy:
         close file
         """
 
+    def show_progress(self, show: bool) -> None:
+        """
+        show progress
+        """
+
     def setLocations(self, iline: int, xline: int, offset: int = 37) -> None:
         """ 
         set the inline, crossline and offset field of trace headers
@@ -565,7 +570,9 @@ def ibm_to_ieee(value: float, is_big_endian: bool) -> float:
     """
 
 
-def ieee_to_ibm(value: float, is_litte_endian_input: bool, is_big_endian_output: bool=True) -> float:
+def ieee_to_ibm(value: float,
+                is_litte_endian_input: bool,
+                is_big_endian_output: bool = True) -> float:
     """
     convert IEEE floating point to IBM floating point
     """
@@ -577,7 +584,25 @@ def ibms_to_ieees(ibms: np.ndarray, is_big_endian: bool) -> np.ndarray:
     """
 
 
-def ieees_to_ibms(ieees: np.ndarray, is_litte_endian_input: bool) -> np.ndarray:
+def ieees_to_ibms(ieees: np.ndarray,
+                  is_litte_endian_input: bool) -> np.ndarray:
     """
     convert IEEE floating array to IBM floating points
+    """
+
+
+def set_progress_callback(func: callable[[int, int], None]) -> None:
+    """
+    set the progress callback function
+
+    Parameters
+    ----------
+    func : callable
+        A callback function that takes two integer arguments: current and total.
+    """
+
+
+def set_global_show_progress(show: bool) -> None:
+    """
+    set the global progress bar visiable or not
     """

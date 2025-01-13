@@ -14,9 +14,9 @@ such as survey coordinates and trace header keys.
 
 import numpy as np
 from typing import Tuple
-from cigse.cpp._CXX_SEGY import Pysegy
-from cigse import ExceptionWrapper, tools
-from cigse.interp import arbitray_line
+from cigsegy.cpp._CXX_SEGY import Pysegy
+from cigsegy import ExceptionWrapper, tools
+from cigsegy.interp import arbitray_line
 
 try:
     import matplotlib.pyplot as plt

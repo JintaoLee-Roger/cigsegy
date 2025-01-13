@@ -21,6 +21,13 @@ using npuchar = py::array_t<uchar, py::array::c_style | py::array::forcecast>;
 
 namespace segy {
 
+void checkSignals() {
+    if (PyErr_CheckSignals() != 0) {
+        throw py::error_already_set();
+    }
+}
+
+
 class Pysegy : public SegyRW {
 public:
   using SegyRW::SegyRW;
@@ -452,10 +459,26 @@ npfloat ibms_to_ieees(const npfloat &ibm_arr, bool is_big_endian) {
 }
 
 PYBIND11_MODULE(_CXX_SEGY, m) {
+
+  g_check_signals_callback = checkSignals;
+
+
+  // set global variable
+  m.def("set_progress_callback", [](py::function func) {
+      g_progress_callback = [func](int current, int total) {
+          py::gil_scoped_acquire acquire;
+          func(current, total);
+      };
+  });
+  m.def("set_global_show_progress", [](bool show) {
+      g_show_progress = show;
+  });
+
   py::class_<Pysegy>(m, "Pysegy")
       .def(py::init<const std::string &, bool>(), py::arg("segyname"),
            py::arg("write") = false)
       .def("close", &Pysegy::close_file)
+      .def("show_progress", &Pysegy::show_progress, py::arg("show"))
 
       // location
       .def("setLocations", &Pysegy::setLocations, py::arg("iline"),

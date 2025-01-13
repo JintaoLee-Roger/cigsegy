@@ -93,6 +93,8 @@ public:
 
   std::string textual_header(char coding = 'u');
 
+  void show_progress(bool show) { show_progress_ = show; }
+
   // binary header
   int16_t bkeyi2(size_t loc);
   int32_t bkeyi4(size_t loc);
@@ -158,6 +160,7 @@ protected:
   ReadFuncOne m_readfuncone;
   WriteFunc m_wfunc;
   bool m_w = true;
+  bool show_progress_ = true;
 
   inline const char *brheader() const {
     return m_data_ptr + kTextualHeaderSize;
@@ -270,8 +273,12 @@ inline void SegyBase::get_trace_keys(int32_t *dst,
                                      const std::vector<size_t> &length,
                                      size_t beg, size_t end) {
 
+  int step = cal_progress_steps(end - beg, show_progress_, 10000);
   for (size_t i = beg; i < end; i++) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    if (step && (i-beg) % step == 0) {
+      g_progress_callback(i-beg, end-beg);
+    }
     for (size_t j = 0; j < keys.size(); j++) {
       if (length[j] == 4) {
         *dst = keyi4(i, keys[j]);
@@ -285,6 +292,9 @@ inline void SegyBase::get_trace_keys(int32_t *dst,
       dst++;
     }
   }
+  if (step) {
+    g_progress_callback(-1, end-beg);
+  }
 }
 
 inline void SegyBase::itrace(float *data, size_t n) {
@@ -294,18 +304,29 @@ inline void SegyBase::itrace(float *data, size_t n) {
 inline void SegyBase::collect(float *data, size_t beg, size_t end, size_t tbeg,
                               size_t tend) {
   size_t nt = tend - tbeg;
+  int step = cal_progress_steps(end - beg, show_progress_, 10000);
   for (size_t i = beg; i < end; i++) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    if (step && (i-beg) % step == 0) {
+      g_progress_callback(i-beg, end-beg);
+    }
     m_readfunc(data, trDataStart(i, tbeg), nt);
     data += nt;
+  }
+  if (step) {
+    g_progress_callback(-1, end-beg);
   }
 }
 
 inline void SegyBase::collect(float *data, const int32_t *index, size_t n,
                               size_t tbeg, size_t tend) {
   size_t nt = tend - tbeg;
+  int step = cal_progress_steps(n, show_progress_, 10000);
   for (size_t i = 0; i < n; i++) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    if (step && i % step == 0) {
+      g_progress_callback(i, n);
+    }
     // TODO: remove this?
     if (index[i] >= static_cast<int32_t>(m_meta.ntrace)) {
       throw std::runtime_error("Index out of bound. Index: " +
@@ -317,6 +338,9 @@ inline void SegyBase::collect(float *data, const int32_t *index, size_t n,
       m_readfunc(data, trDataStart(index[i], tbeg), nt);
     }
     data += nt;
+  }
+  if (step) {
+    g_progress_callback(-1, n);
   }
 }
 
@@ -361,9 +385,16 @@ inline void SegyBase::write_traces(const float *data, size_t beg, size_t end,
                                    size_t tbeg, size_t tend) {
   check_write(m_w);
   size_t n = end - beg;
+  int step = cal_progress_steps(n, show_progress_, 10000);
   for (size_t i = beg; i < end; i++) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    if (step && (i-beg) % step == 0) {
+      g_progress_callback(i-beg, n);
+    }
     m_wfunc(twDataStart(i, tbeg), data + (uint64_t)(i - beg) * n, n);
+  }
+  if (step) {
+    g_progress_callback(-1, n);
   }
 }
 
@@ -371,8 +402,12 @@ inline void SegyBase::write_traces(const float *data, const int32_t *index,
                                    size_t n, size_t tbeg, size_t tend) {
   check_write(m_w);
   size_t len = tend - tbeg;
+  int step = cal_progress_steps(n, show_progress_, 10000);
   for (size_t i = 0; i < n; i++) {
-    CHECK_SIGNALS();
+    g_check_signals_callback();
+    if (step && i % step == 0) {
+      g_progress_callback(i, n);
+    }
     if (index[i] >= static_cast<int32_t>(m_meta.ntrace)) {
       throw std::runtime_error("Index out of bound." +
                                std::to_string(index[i]));
@@ -381,6 +416,9 @@ inline void SegyBase::write_traces(const float *data, const int32_t *index,
       continue;
     }
     m_wfunc(twDataStart(index[i], tbeg), data + i * (uint64_t)len, len);
+  }
+  if (step) {
+    g_progress_callback(-1, n);
   }
 }
 

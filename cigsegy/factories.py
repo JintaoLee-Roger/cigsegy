@@ -12,10 +12,10 @@ like header reading, file scanning, data retrieval, and file creation using a co
 
 import warnings
 import numpy as np
-from cigse.cpp import _CXX_SEGY
-from cigse.constinfo import kBinaryHeaderHelp, kTraceHeaderHelp
-from cigse.tools import get_metaInfo
-from cigse import utils, createtool
+from cigsegy.cpp import _CXX_SEGY
+from cigsegy.constinfo import kBinaryHeaderHelp, kTraceHeaderHelp
+from cigsegy.tools import get_metaInfo
+from cigsegy import utils, createtool
 
 
 def textual_header(segy_name: str, coding: str = None) -> None:

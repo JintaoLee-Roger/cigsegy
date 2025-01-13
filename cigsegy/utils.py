@@ -8,7 +8,7 @@ from typing import List
 import warnings
 import numpy as np
 # from cigsegy import get_trace_keys
-from cigse.cpp._CXX_SEGY import Pysegy
+from cigsegy.cpp._CXX_SEGY import Pysegy
 from .constinfo import *
 
 
