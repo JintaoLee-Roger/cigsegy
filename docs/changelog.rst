@@ -3,6 +3,11 @@ Changelog
 #########
 
 
+v1.2.1
+--------
+
+- Added a parameters ``indices`` to ``get_trace_keys`` and ``collect`` functions to support the user-defined trace indices.
+
 
 v1.2.0
 --------

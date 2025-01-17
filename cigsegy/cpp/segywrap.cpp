@@ -5,9 +5,6 @@
 ** All rights reserved.
 *********************************************************************/
 
-// #include "segyc.hpp"
-#include "pybind11/cast.h"
-#include "pybind11/detail/common.h"
 #include "segyrw.h"
 #include "utils.hpp"
 #include <pybind11/numpy.h>
@@ -22,11 +19,10 @@ using npuchar = py::array_t<uchar, py::array::c_style | py::array::forcecast>;
 namespace segy {
 
 void checkSignals() {
-    if (PyErr_CheckSignals() != 0) {
-        throw py::error_already_set();
-    }
+  if (PyErr_CheckSignals() != 0) {
+    throw py::error_already_set();
+  }
 }
-
 
 class Pysegy : public SegyRW {
 public:
@@ -135,16 +131,16 @@ public:
     return data;
   }
 
-  npfloat collect(const npint32 &index, size_t tbeg, size_t tend) {
-    if (index.ndim() != 1 && index.size() == 0) {
-      throw std::runtime_error("Input index must be a 1D data.");
+  npfloat collect(const npint32 &indices, size_t tbeg, size_t tend) {
+    if (indices.ndim() != 1 && indices.size() == 0) {
+      throw std::runtime_error("Input indices must be a 1D data.");
     }
     if (tbeg > tend || tend > m_meta.nt) {
       throw std::out_of_range("`tbeg` or `tend` index out of bound.");
     }
 
-    size_t N = index.shape()[0];
-    const int32_t *idx = index.data();
+    size_t N = indices.shape()[0];
+    const int32_t *idx = indices.data();
 
     auto data = py::array_t<float>({N, tend - tbeg});
     float *ptr = data.mutable_data();
@@ -190,6 +186,29 @@ public:
     return out;
   }
 
+  npint32 get_trace_keys(const py::list &keys, const py::list &length,
+                         const npint32 &indices) {
+    if (keys.size() != length.size()) {
+      throw std::runtime_error("`keys` and `length` must have the same size.");
+    }
+
+    if (indices.ndim() != 1) {
+      throw std::runtime_error("Input indices must be a 1D data.");
+    }
+
+    auto keysvec = keys.cast<std::vector<size_t>>();
+    auto lengthvec = length.cast<std::vector<size_t>>();
+    size_t n1 = indices.size();
+    size_t n2 = keysvec.size();
+
+    py::array_t<int> out({n1, n2});
+    int *ptr = out.mutable_data();
+
+    SegyRW::get_trace_keys(ptr, keysvec, lengthvec, indices.data(), n1);
+
+    return out;
+  }
+
   //  for write
   void write_itrace(const npfloat &data, size_t n) {
     if (n >= m_meta.ntrace) {
@@ -216,21 +235,21 @@ public:
     SegyRW::write_traces(ptr, beg, end, tbeg, tend);
   }
 
-  void write_traces(const npfloat &data, const npint32 &index, size_t tbeg,
+  void write_traces(const npfloat &data, const npint32 &indices, size_t tbeg,
                     size_t tend) {
-    if (index.ndim() != 1) {
-      throw std::runtime_error("Input index must be a 1D data.");
+    if (indices.ndim() != 1) {
+      throw std::runtime_error("Input indices must be a 1D data.");
     }
     if (tbeg > tend || tend > m_meta.nt) {
       throw std::out_of_range("`tbeg` or `tend` index out of bound.");
     }
-    if (data.size() != index.size() * (tend - tbeg)) {
+    if (data.size() != indices.size() * (tend - tbeg)) {
       throw std::runtime_error("Input data size not match.");
     }
 
     const float *ptr = data.data();
-    const int32_t *idx = index.data();
-    SegyRW::write_traces(ptr, idx, index.shape()[0], tbeg, tend);
+    const int32_t *idx = indices.data();
+    SegyRW::write_traces(ptr, idx, indices.shape()[0], tbeg, tend);
   }
 
   void write(const npfloat &data) {
@@ -327,7 +346,7 @@ public:
       out = py::array_t<int>({(int)m_meta.ni, 5});
       int *ptr = out.mutable_data();
       std::fill(ptr, ptr + out.size(), -1);
-      for (auto& linfo : m_iinfos) {
+      for (auto &linfo : m_iinfos) {
         ptr[0] = linfo.line;
         if (!(linfo.count == 0 && linfo.idx.size() == 0)) {
           ptr[1] = linfo.lstart;
@@ -343,7 +362,7 @@ public:
       int *ptr = out.mutable_data();
       std::fill(ptr, ptr + out.size(), -1);
 
-      for (auto& linfo : m_iinfos) {
+      for (auto &linfo : m_iinfos) {
         size_t xs = (linfo.lstart - m_meta.start_xline) / m_keys.xstep;
         size_t xe = (linfo.lend - m_meta.start_xline) / m_keys.xstep;
 
@@ -355,7 +374,7 @@ public:
           }
         }
 
-        for (auto& xinfo : linfo.xinfos) {
+        for (auto &xinfo : linfo.xinfos) {
           ptr[0] = linfo.line;
           ptr[1] = xinfo.line;
           if (!(xinfo.count == 0 && xinfo.idx.size() == 0)) {
@@ -424,7 +443,8 @@ void create_segy(const std::string &segyname, const npfloat &src,
   create_segy(segyname, ptr, kptr, shape, textual, bptr, tptr, keysize);
 }
 
-npfloat ieees_to_ibms(const npfloat &ieee_arr, bool is_litte_endian_input, bool is_big_endian_output) {
+npfloat ieees_to_ibms(const npfloat &ieee_arr, bool is_litte_endian_input,
+                      bool is_big_endian_output) {
   std::vector<size_t> shape_vec(ieee_arr.shape(),
                                 ieee_arr.shape() + ieee_arr.ndim());
   size_t size = ieee_arr.size();
@@ -435,7 +455,8 @@ npfloat ieees_to_ibms(const npfloat &ieee_arr, bool is_litte_endian_input, bool 
   float *ibm_ptr = ibm_arr.mutable_data();
 
   for (size_t i = 0; i < size; ++i) {
-    ibm_ptr[i] = segy::ieee_to_ibm(ieee_ptr[i], is_litte_endian_input, is_big_endian_output);
+    ibm_ptr[i] = segy::ieee_to_ibm(ieee_ptr[i], is_litte_endian_input,
+                                   is_big_endian_output);
   }
 
   return ibm_arr;
@@ -462,17 +483,14 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
 
   g_check_signals_callback = checkSignals;
 
-
   // set global variable
   m.def("set_progress_callback", [](py::function func) {
-      g_progress_callback = [func](int current, int total) {
-          py::gil_scoped_acquire acquire;
-          func(current, total);
-      };
+    g_progress_callback = [func](int current, int total) {
+      py::gil_scoped_acquire acquire;
+      func(current, total);
+    };
   });
-  m.def("set_global_show_progress", [](bool show) {
-      g_show_progress = show;
-  });
+  m.def("set_global_show_progress", [](bool show) { g_show_progress = show; });
 
   py::class_<Pysegy>(m, "Pysegy")
       .def(py::init<const std::string &, bool>(), py::arg("segyname"),
@@ -511,12 +529,19 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       .def("coordy", &Pysegy::coordy, py::arg("n"))
       .def("get_binary_header", &Pysegy::get_binary_header)
       .def("get_trace_header", &Pysegy::get_trace_header, py::arg("n"))
-      .def("get_trace_keys", &Pysegy::get_trace_keys, py::arg("leys"),
-           py::arg("length"), py::arg("beg"), py::arg("end"))
+      .def(
+          "get_trace_keys",
+          py::overload_cast<const py::list &, const py::list &, size_t, size_t>(
+              &Pysegy::get_trace_keys),
+          py::arg("keys"), py::arg("length"), py::arg("beg"), py::arg("end"))
+      .def("get_trace_keys",
+           py::overload_cast<const py::list &, const py::list &,
+                             const npint32 &>(&Pysegy::get_trace_keys),
+           py::arg("keys"), py::arg("length"), py::arg("indices"))
       .def("itrace", &Pysegy::itrace, py::arg("n"))
       .def("collect",
            py::overload_cast<const npint32 &, size_t, size_t>(&Pysegy::collect),
-           py::arg("index"), py::arg("tbeg"), py::arg("tend"))
+           py::arg("indices"), py::arg("tbeg"), py::arg("tend"))
       .def("collect",
            py::overload_cast<size_t, size_t, size_t, size_t>(&Pysegy::collect),
            py::arg("beg"), py::arg("end"), py::arg("tbeg"), py::arg("tend"))
@@ -577,7 +602,7 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       .def("write_traces",
            py::overload_cast<const npfloat &, const npint32 &, size_t, size_t>(
                &Pysegy::write_traces),
-           py::arg("data"), py::arg("index"), py::arg("tbeg"), py::arg("tend"))
+           py::arg("data"), py::arg("indices"), py::arg("tbeg"), py::arg("tend"))
       .def("write", &Pysegy::write, py::arg("data"))
       .def("write3d", &Pysegy::write3d, py::arg("data"), py::arg("ib"),
            py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("tb"),
@@ -602,7 +627,8 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       py::arg("segyname"), py::arg("src"), py::arg("keys"), py::arg("textual"),
       py::arg("bheader"), py::arg("theader"));
   m.def("ieee_to_ibm", py::overload_cast<float, bool, bool>(&segy::ieee_to_ibm),
-        py::arg("value"), py::arg("is_litte_endian_input"), py::arg("is_big_endian_output")=true);
+        py::arg("value"), py::arg("is_litte_endian_input"),
+        py::arg("is_big_endian_output") = true);
   m.def("ibm_to_ieee", py::overload_cast<float, bool>(&segy::ibm_to_ieee),
         py::arg("value"), py::arg("is_big_endian"));
   m.def("ieees_to_ibms", &ieees_to_ibms, py::arg("ieee_arr"),

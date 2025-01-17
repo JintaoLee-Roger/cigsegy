@@ -114,10 +114,13 @@ public:
   void get_trace_keys(int32_t *dst, const std::vector<size_t> &keys,
                       const std::vector<size_t> &length, size_t beg,
                       size_t end);
+  void get_trace_keys(int32_t *dst, const std::vector<size_t> &keys,
+                      const std::vector<size_t> &length, const int32_t *indices,
+                      size_t n);
 
   void itrace(float *data, size_t n);
   void collect(float *data, size_t beg, size_t end, size_t tbeg, size_t tend);
-  void collect(float *data, const int32_t *index, size_t n, size_t tbeg,
+  void collect(float *data, const int32_t *indices, size_t n, size_t tbeg,
                size_t tend);
 
   // W mode
@@ -149,7 +152,7 @@ public:
   void write_itrace(const float *data, size_t n);
   void write_traces(const float *data, size_t beg, size_t end, size_t tbeg,
                     size_t tend);
-  void write_traces(const float *data, const int32_t *index, size_t n,
+  void write_traces(const float *data, const int32_t *indices, size_t n,
                     size_t tbeg, size_t tend);
 
 protected:
@@ -276,14 +279,14 @@ inline void SegyBase::get_trace_keys(int32_t *dst,
   int step = cal_progress_steps(end - beg, show_progress_, 10000, 50);
   for (size_t i = beg; i < end; i++) {
     g_check_signals_callback();
-    if (step && (i-beg) % step == 0) {
-      g_progress_callback(i-beg, end-beg);
+    if (step && (i - beg) % step == 0) {
+      g_progress_callback(i - beg, end - beg);
     }
     for (size_t j = 0; j < keys.size(); j++) {
       if (length[j] == 4) {
         *dst = keyi4(i, keys[j]);
       } else if (length[j] == 2) {
-        *dst = (int)keyi2(i, keys[j]);
+        *dst = (int32_t)keyi2(i, keys[j]);
       } else {
         throw std::runtime_error(
             "only spport int32 and int16 type, but got length: " +
@@ -293,7 +296,40 @@ inline void SegyBase::get_trace_keys(int32_t *dst,
     }
   }
   if (step) {
-    g_progress_callback(-1, end-beg);
+    g_progress_callback(-1, end - beg);
+  }
+}
+
+inline void SegyBase::get_trace_keys(int32_t *dst,
+                                     const std::vector<size_t> &keys,
+                                     const std::vector<size_t> &length,
+                                     const int32_t *indices, size_t n) {
+  int step = cal_progress_steps(n, show_progress_, 10000, 50);
+  for (size_t i = 0; i < n; i++) {
+    g_check_signals_callback();
+    if (step && i % step == 0) {
+      g_progress_callback(i, n);
+    }
+    if (indices[i] >= static_cast<int32_t>(m_meta.ntrace) || indices[i] < 0) {
+      throw std::runtime_error("Index out of bound: " +
+                               std::to_string(indices[i]));
+    }
+
+    for (size_t j = 0; j < keys.size(); j++) {
+      if (length[j] == 4) {
+        *dst = keyi4(indices[i], keys[j]);
+      } else if (length[j] == 2) {
+        *dst = (int32_t)keyi2(indices[i], keys[j]);
+      } else {
+        throw std::runtime_error(
+            "only spport int32 and int16 type, but got length: " +
+            std::to_string(length[j]));
+      }
+      dst++;
+    }
+  }
+  if (step) {
+    g_progress_callback(-1, n);
   }
 }
 
@@ -307,18 +343,18 @@ inline void SegyBase::collect(float *data, size_t beg, size_t end, size_t tbeg,
   int step = cal_progress_steps(end - beg, show_progress_, 10000, 50);
   for (size_t i = beg; i < end; i++) {
     g_check_signals_callback();
-    if (step && (i-beg) % step == 0) {
-      g_progress_callback(i-beg, end-beg);
+    if (step && (i - beg) % step == 0) {
+      g_progress_callback(i - beg, end - beg);
     }
     m_readfunc(data, trDataStart(i, tbeg), nt);
     data += nt;
   }
   if (step) {
-    g_progress_callback(-1, end-beg);
+    g_progress_callback(-1, end - beg);
   }
 }
 
-inline void SegyBase::collect(float *data, const int32_t *index, size_t n,
+inline void SegyBase::collect(float *data, const int32_t *indices, size_t n,
                               size_t tbeg, size_t tend) {
   size_t nt = tend - tbeg;
   int step = cal_progress_steps(n, show_progress_, 10000, 50);
@@ -328,14 +364,14 @@ inline void SegyBase::collect(float *data, const int32_t *index, size_t n,
       g_progress_callback(i, n);
     }
     // TODO: remove this?
-    if (index[i] >= static_cast<int32_t>(m_meta.ntrace)) {
+    if (indices[i] >= static_cast<int32_t>(m_meta.ntrace)) {
       throw std::runtime_error("Index out of bound. Index: " +
-                               std::to_string(index[i]));
+                               std::to_string(indices[i]));
     }
-    if (index[i] < 0) {
+    if (indices[i] < 0) {
       std::fill(data, data + nt, m_meta.fillNoValue);
     } else {
-      m_readfunc(data, trDataStart(index[i], tbeg), nt);
+      m_readfunc(data, trDataStart(indices[i], tbeg), nt);
     }
     data += nt;
   }
@@ -348,9 +384,10 @@ inline void SegyBase::collect(float *data, const int32_t *index, size_t n,
 /**************** For write mode  *********************/
 /******************************************************/
 
-inline void check_write(bool w){
+inline void check_write(bool w) {
   if (!w) {
-    throw std::runtime_error("You set write=false, so you can't access write functions.");
+    throw std::runtime_error(
+        "You set write=false, so you can't access write functions.");
   }
 }
 
@@ -388,8 +425,8 @@ inline void SegyBase::write_traces(const float *data, size_t beg, size_t end,
   int step = cal_progress_steps(n, show_progress_, 10000, 50);
   for (size_t i = beg; i < end; i++) {
     g_check_signals_callback();
-    if (step && (i-beg) % step == 0) {
-      g_progress_callback(i-beg, n);
+    if (step && (i - beg) % step == 0) {
+      g_progress_callback(i - beg, n);
     }
     m_wfunc(twDataStart(i, tbeg), data + (uint64_t)(i - beg) * n, n);
   }
@@ -398,7 +435,7 @@ inline void SegyBase::write_traces(const float *data, size_t beg, size_t end,
   }
 }
 
-inline void SegyBase::write_traces(const float *data, const int32_t *index,
+inline void SegyBase::write_traces(const float *data, const int32_t *indices,
                                    size_t n, size_t tbeg, size_t tend) {
   check_write(m_w);
   size_t len = tend - tbeg;
@@ -408,14 +445,14 @@ inline void SegyBase::write_traces(const float *data, const int32_t *index,
     if (step && i % step == 0) {
       g_progress_callback(i, n);
     }
-    if (index[i] >= static_cast<int32_t>(m_meta.ntrace)) {
-      throw std::runtime_error("Index out of bound." +
-                               std::to_string(index[i]));
+    if (indices[i] >= static_cast<int32_t>(m_meta.ntrace)) {
+      throw std::runtime_error("Index out of bound: " +
+                               std::to_string(indices[i]));
     }
-    if (index[i] < 0) {
+    if (indices[i] < 0) {
       continue;
     }
-    m_wfunc(twDataStart(index[i], tbeg), data + i * (uint64_t)len, len);
+    m_wfunc(twDataStart(indices[i], tbeg), data + i * (uint64_t)len, len);
   }
   if (step) {
     g_progress_callback(-1, n);

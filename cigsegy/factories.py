@@ -143,6 +143,7 @@ def collect(
     end: int = 0,
     tbeg: int = -1,
     tend: int = 0,
+    indices: np.ndarray = None,
 ) -> np.ndarray:
     """
     collect traces as a 2D data from the `segy_in` file in
@@ -160,6 +161,12 @@ def collect(
         the end index of traces (not include), < 0 means collect 
             traces from beg to the last trace, == 0 means read 
             the beg-th trace (one trace).
+    tbeg : int
+        the start time index
+    tend : int
+        the end time index (not include)
+    indices : np.ndarray
+        the indices of traces, if `indices` is not None, `beg`, `end` will be ignored.
 
     Returns
     -------
@@ -171,13 +178,21 @@ def collect(
     else:
         segy = _CXX_SEGY.Pysegy(str(segy_in))
 
-    if beg < 0:
-        beg = 0
-        end = segy.ntrace
-    if end == 0:
-        end = beg + 1
-    if end < 0:
-        end = segy.ntrace
+    if indices is not None:
+        if beg != -1 or end != 0:
+            print("indices is not None, beg and end will be ignored.")
+        indices = np.array(indices)
+        assert np.issubdtype(indices.dtype, np.integer), "indices must be an integer type"
+        indices = indices.astype(np.int32)
+        assert indices.ndim == 1, "indices must be a 1D array"
+    else:
+        if beg < 0:
+            beg = 0
+            end = segy.ntrace
+        if end == 0:
+            end = beg + 1
+        if end < 0:
+            end = segy.ntrace
 
     if beg > end or end > segy.ntrace:
         raise ValueError(f"beg = {beg}, end = {end} is out of range.")
@@ -192,7 +207,10 @@ def collect(
     if tbeg > tend or tend > segy.nt:
         raise ValueError(f"tbeg = {tbeg}, tend = {tend} is out of range.")
 
-    data = segy.collect(beg, end, tbeg, tend).squeeze()
+    if indices is None:
+        data = segy.collect(beg, end, tbeg, tend).squeeze()
+    else:
+        data = segy.collect(indices, tbeg, tend).squeeze()
 
     if not isinstance(segy_in, _CXX_SEGY.Pysegy):
         segy.close()
@@ -329,7 +347,8 @@ def get_trace_keys(segyname,
                    keyloc,
                    beg: int = -1,
                    end: int = 0,
-                   force: int = None) -> np.ndarray:
+                   force: int = None,
+                   indices: np.ndarray = None) -> np.ndarray:
     """
     get values at key location of trace headers
 
@@ -349,6 +368,8 @@ def get_trace_keys(segyname,
         not in the location of the standard SEG-Y Trace header's keys.
         When force is not None, can only input one key location, i.e., keyloc 
         must be a int or one element List
+    indices : np.ndarray
+        the indices of traces, if `indices` is not None, `beg`, `end` will be ignored.
 
     Returns
     -------
@@ -359,13 +380,22 @@ def get_trace_keys(segyname,
         segy = segyname
     else:
         segy = _CXX_SEGY.Pysegy(str(segyname))
-    if beg < 0:
-        beg = 0
-        end = segy.ntrace
-    if end == 0:
-        end = beg + 1
-    if end < 0:
-        end = segy.ntrace
+
+    if indices is not None:
+        if beg != -1 or end != 0:
+            print("indices is not None, beg and end will be ignored.")
+        indices = np.array(indices)
+        assert np.issubdtype(indices.dtype, np.integer), "indices must be an integer type"
+        indices = indices.astype(np.int32)
+        assert indices.ndim == 1, "indices must be a 1D array"
+    else:
+        if beg < 0:
+            beg = 0
+            end = segy.ntrace
+        if end == 0:
+            end = beg + 1
+        if end < 0:
+            end = segy.ntrace
 
     if isinstance(keyloc, int):
         keyloc = [keyloc]
@@ -374,7 +404,10 @@ def get_trace_keys(segyname,
         if isinstance(force, int):
             force = [force] * len(keyloc)
         assert len(keyloc) == len(force), "force must have the same length as keyloc" # yapf: disable
-        d = segy.get_trace_keys(keyloc, force, beg, end).squeeze()
+        if indices is None:
+            d = segy.get_trace_keys(keyloc, force, beg, end).squeeze()
+        else:
+            d = segy.get_trace_keys(keyloc, force, indices).squeeze()
     else:
         try:
             length = [kTraceHeaderHelp[k][1] for k in keyloc]
@@ -383,7 +416,10 @@ def get_trace_keys(segyname,
                 f"keyloc = {keyloc} is not a valid trace header key location. "
                 "If you want to force to read a key, please input force, e.g., `get_trace_keys('t.sgy', 221, 10, force=4)`, `force` is the length of the key."
             )
-        d = segy.get_trace_keys(keyloc, length, beg, end).squeeze()
+        if indices is None:
+            d = segy.get_trace_keys(keyloc, length, beg, end).squeeze()
+        else:
+            d = segy.get_trace_keys(keyloc, length, indices).squeeze()
 
     if d.size == 1 and d.ndim == 0:
         d = int(d)

@@ -231,6 +231,7 @@ class Pysegy:
         Note: the trace header is raw data, i.e., big endian
         """
 
+    @overload
     def get_trace_keys(
         self,
         keys: List,
@@ -256,6 +257,31 @@ class Pysegy:
         -------
         numpy.ndarray[numpy.int32]
             shape is (end-beg, len(keys))
+        """
+
+    @overload
+    def get_trace_keys(
+        self,
+        keys: List,
+        length: List,
+        indices: np.ndarray,
+    ) -> np.ndarray:
+        """
+        get the trace keys from indices array
+
+        Parameters
+        ------------
+        keys : List
+            location
+        length : List
+            keys' length
+        indices : numpy.ndarray
+            1D array, np.int32,
+
+        Returns
+        -------
+        numpy.ndarray[numpy.int32]
+            shape is (indices.shape[0], len(keys))
         """
 
     def itrace(self, n: int) -> np.ndarray:
@@ -287,15 +313,15 @@ class Pysegy:
         """
 
     @overload
-    def collect(self, index: np.ndarray, tbeg: int, tend: int) -> np.ndarray:
+    def collect(self, indices: np.ndarray, tbeg: int, tend: int) -> np.ndarray:
         """
-        Collect the data from the index array. This funcion is useful 
+        Collect the data from the indices array. This funcion is useful 
         when collect unsorted traces. if a index is negative, the trace 
         will be filled by fills (0 is default).
 
         Parameters
         -----------
-        index : numpy.ndarray
+        indices : numpy.ndarray
             1D array, np.int32, 
         tbeg : int
             the start time index
@@ -309,8 +335,8 @@ class Pysegy:
 
         Examples
         ---------
-        >>> index = np.array([10, -1, 200, 300])
-        >>> data = Pysegy('out.segy').collect(index, 0, 1000)
+        >>> indices = np.array([10, -1, 200, 300])
+        >>> data = Pysegy('out.segy').collect(indices, 0, 1000)
         >>> data.shape # (4, 1000)
         >>> np.allclose(data[1], 0) # True
         """
@@ -492,7 +518,7 @@ class Pysegy:
     def write_traces(
         self,
         data: np.ndarray,
-        index: np.ndarray,
+        indices: np.ndarray,
         tbeg: int,
         tend: int,
     ) -> None:

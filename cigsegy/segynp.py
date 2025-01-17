@@ -116,21 +116,21 @@ class ScanMixin:
 class GeometryMixin:
     _segy: _CXX_SEGY.Pysegy
 
-    def map_to_index(self, index):
+    def map_to_indices(self, indices):
         if self._geometry is None:
             raise RuntimeError("geometry is not created, Call `update_geometry` first") # yapf: disable
         if self.ndim == 2:
             raise RuntimeError("ndim is 2, unsupport this function") # yapf: disable
 
-        index = np.array(index)
-        assert index.ndim == 2
+        indices = np.array(indices)
+        assert indices.ndim == 2
         if self.ndim == 3:
-            assert index.shape[1] == 2
-            index = self._geometry[index[:, 0], index[:, 1]]
+            assert indices.shape[1] == 2
+            indices = self._geometry[indices[:, 0], indices[:, 1]]
         elif self.ndim == 4:
-            assert index.shape[1] == 3
-            index = self._geometry[index[:, 0], index[:, 1], index[:, 2]]
-        return index
+            assert indices.shape[1] == 3
+            indices = self._geometry[indices[:, 0], indices[:, 1], indices[:, 2]]
+        return indices
 
     def update_geometry(self, geom=None):
         if geom is not None:
@@ -293,7 +293,7 @@ class InterpMixin:
             shape is (N, 2), it also can be a list
         ptype : str
             one of ['auto', 'zero', 'line', 'xy'], default is 'auto'.
-            'zero' means points are taken from a geometry with zero-origin (i.e., numpy array indexes), 
+            'zero' means points are taken from a geometry with zero-origin (i.e., numpy array indices), 
             'line' means points are taken from the inline/xline geometry, 
             'xy' means points are taken from the X-Y geometry.
         return_path : bool
@@ -422,7 +422,7 @@ class RWMixin:
             if not self.is_create_geometry:
                 raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
             grid, shape = self._create_meshgrid(idx[:-2])
-            tidx = self.map_to_index(grid)
+            tidx = self.map_to_indices(grid)
             if idx[-1] is None:
                 d = self._segy.collect(tidx, 0, self.nt).reshape(*shape, -1)
                 d = d[..., idx[-2]]
@@ -445,7 +445,7 @@ class RWMixin:
             if not self.is_create_geometry:
                 raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
             grid, shape = self._create_meshgrid(idx[:-2])
-            tidx = self.map_to_index(grid)
+            tidx = self.map_to_indices(grid)
             if idx[-1] is None:
                 d = self._segy.collect(tidx, 0, self.nt).reshape(*shape, -1)
                 d = d[..., idx[-2]]
@@ -491,7 +491,7 @@ class RWMixin:
             if not self.is_create_geometry:
                 raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
             grid, shape = self._create_meshgrid(idx[:-2])
-            tidx = self.map_to_index(grid)
+            tidx = self.map_to_indices(grid)
             self._segy.write_traces(data, tidx, idx[-2], idx[-1])
 
 
@@ -509,7 +509,7 @@ class RWMixin:
             if not self.is_create_geometry:
                 raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
             grid, shape = self._create_meshgrid(idx[:-2])
-            tidx = self.map_to_index(grid)
+            tidx = self.map_to_indices(grid)
             self._segy.write_traces(data, tidx, idx[-2], idx[-1])
 
 

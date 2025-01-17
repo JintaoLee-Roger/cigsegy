@@ -181,7 +181,7 @@ def get_lineInfo(
     return out
 
 
-def trace_count(fname: str) -> int:
+def ntrace(fname: str) -> int:
     """
     Count the total numbers of a segy file
 
@@ -388,6 +388,22 @@ def get_keyi4(header: np.array, loc: int, endian: str = '>'):
     loc = loc - 1
     return np.frombuffer(header[loc:loc + 4], dtype=f'{endian}i4')[0]
 
+def trace_count(fname: str) -> int:
+    """
+    Count the total numbers of a segy file
+
+    Parameters
+    ----------
+    segy: str
+        input segy file
+
+    Returns
+    -------
+    int
+        The total numbers of a segy file
+    """
+    warnings.warn("`trace_count` is deprecated and will be removed. Please use `ntrace` instead.")
+    return ntrace(fname)
 
 
 ############### Deprecated functions ####################

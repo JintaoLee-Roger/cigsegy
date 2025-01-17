@@ -16,7 +16,6 @@
 #include <cmath>
 // #include <chrono>
 
-// static int tkscount = 0;
 namespace segy {
 
 bool g_show_progress = true;
