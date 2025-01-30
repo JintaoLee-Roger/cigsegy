@@ -35,18 +35,6 @@ inline static void set_keyi4(char *theader, size_t loc, int32_t val) {
 }
 
 void SegyRW::scan() {
-  int start_time = keyi2(0, kTStartTimeField);
-  if (start_time < 0) {
-    int start_time2 = keyi2(0, kTDelayTimeField);
-    if (start_time2 < 0) {
-      m_meta.start_time = 0;
-    } else {
-      m_meta.start_time = start_time2;
-    }
-  } else {
-    m_meta.start_time = start_time;
-  }
-  m_meta.scalar = keyi2(0, kTScalarField);
 
   // steps
   int istep = m_keys.istep;
@@ -1051,9 +1039,53 @@ void SegyRW::scanBinaryHeader() {
   }
   m_meta.dformat = dformat;
 
-  m_meta.nt = bkeyi2(kBSampleCountField);
+  int nt = bkeyi2(kBSampleCountField);
+  int nt2 = keyi2(0, kTSampleCountField);
+
+  bool use_bheader = true;
+  m_meta.nt = nt;
+  // check sample count in binary header and trace header 
+  if (m_meta.nt > 0 && nt2 > 0 && m_meta.nt != nt2) {
+    size_t data_size = m_w ? m_sink.size() : m_src.size();
+    size_t remaining_size = data_size - kTraceHeaderStart;
+
+    size_t tracesize_bheader = kTraceHeaderSize + m_meta.nt * m_meta.esize;
+    bool is_bheader_divisible = (remaining_size % tracesize_bheader == 0);
+
+    size_t tracesize_theader = kTraceHeaderSize + nt2 * m_meta.esize;
+    bool is_theader_divisible = (remaining_size % tracesize_theader == 0);
+
+    if (is_bheader_divisible && is_theader_divisible) {
+        std::cout << "Both binary header and trace header sample counts (nt) are compatible. Using sample count (nt) from binary header." << std::endl;
+        use_bheader = true;
+    } else if (is_theader_divisible) {
+        m_meta.nt = nt2;
+        use_bheader = false;
+        std::cout << "The sample count (nt) in the binary header is not compatible with the data size. Using sample count (nt) from trace header." << std::endl;
+    } else if (!is_bheader_divisible && !is_theader_divisible) {
+        throw std::runtime_error("Error: Data size is not compatible with sample count (nt) in both binary and trace headers.");
+    }
+  } else if (m_meta.nt <= 0 && nt2 > 0) {
+    m_meta.nt = nt2;
+    use_bheader = false;
+  } else if (m_meta.nt <= 0 && nt2 <= 0) {
+    throw std::runtime_error("Invalid sample count (nt) in both binary and trace headers (both <= 0).");
+  }
+
   m_meta.tracesize = kTraceHeaderSize + m_meta.nt * m_meta.esize;
-  m_meta.dt = bkeyi2(kBSampleIntervalField);
+
+  // check sample interval in binary header and trace header
+  int dt = bkeyi2(kBSampleIntervalField);
+  int dt2 = keyi2(0, kTSampleIntervalField);
+  m_meta.dt = dt;
+  if (m_meta.dt > 0 && dt2 > 0 && m_meta.dt != dt2) {
+    m_meta.dt = use_bheader ? m_meta.dt : dt2;
+  } else if (m_meta.dt <= 0 && dt2 > 0) { 
+    m_meta.dt = dt2;
+  } else if (m_meta.dt <= 0 && dt2 <= 0) {
+    throw std::runtime_error("Invalid sample interval (dt) in both binary and trace headers (both <= 0).");
+  }
+
   if (m_w) {
     m_meta.ntrace = (m_sink.size() - kTraceHeaderStart) / m_meta.tracesize;
   } else {
@@ -1061,6 +1093,24 @@ void SegyRW::scanBinaryHeader() {
   }
 
   m_meta.trace_sorting_code = bkeyi2(kBTraceSortingCodeField);
+
+  m_meta.scalar = keyi2(0, kTScalarField);
+  if (m_meta.scalar == 0) {
+    m_meta.scalar = 1;
+  }
+
+  int start_time = keyi2(0, kTStartTimeField);
+  if (start_time < 0) {
+    int start_time2 = keyi2(0, kTDelayTimeField);
+    if (start_time2 < 0) {
+      m_meta.start_time = 0;
+    } else {
+      m_meta.start_time = start_time2;
+    }
+  } else {
+    m_meta.start_time = start_time;
+  }
+
   setRWFunc(m_meta.dformat);
 }
 

@@ -487,7 +487,7 @@ def _get_keys4(segy: Pysegy, keyloc, beg=-1, end=0):
     if end == 0:
         end = beg + 1
 
-    if isinstance(keyloc, int):
+    if isinstance(keyloc, (int, np.integer)):
         keyloc = [keyloc]
     d = segy.get_trace_keys(keyloc, [4] * len(keyloc), beg, end).squeeze()
     if d.size == 1 and d.ndim == 0:

@@ -40,8 +40,15 @@ def read_header(fname: str, type, n=0, printstr=True):
 
         out, hstring = utils.parse_bheader(arr)
     elif type == 'th':
-        segy = Pysegy(fname)
-        arr = segy.get_trace_header(n)
+        try:
+            segy = Pysegy(fname)
+            arr = segy.get_trace_header(n)
+        except:
+            if n == 0:
+                warnings.warn("The SEG-Y file is broken, try to read trace header by numpy")
+                arr = np.fromfile(fname, dtype=np.uint8, count=240, offset=3600)
+            else:
+                raise RuntimeError("The SEG-Y file is broken, only support read the first trace header (`n=0`)")
         out, hstring = utils.parse_theader(arr)
     else:
         raise ValueError("type must be one of ['bh', 'th']")

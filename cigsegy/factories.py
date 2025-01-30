@@ -397,11 +397,11 @@ def get_trace_keys(segyname,
         if end < 0:
             end = segy.ntrace
 
-    if isinstance(keyloc, int):
+    if isinstance(keyloc, (int, np.integer)):
         keyloc = [keyloc]
 
     if force is not None:
-        if isinstance(force, int):
+        if isinstance(force, (int, np.integer)):
             force = [force] * len(keyloc)
         assert len(keyloc) == len(force), "force must have the same length as keyloc" # yapf: disable
         if indices is None:
@@ -452,7 +452,7 @@ def modify_bin_key(segyname: str, loc: int, value, force: int = None) -> None:
         segy = _CXX_SEGY.Pysegy(str(segyname))
 
     if force is not None:
-        assert isinstance(force, int)
+        assert isinstance(force, (int, np.integer))
         l = force
     else:
         try:
@@ -501,7 +501,7 @@ def modify_trace_key(segyname: str,
         segy = _CXX_SEGY.Pysegy(str(segyname))
 
     if force is not None:
-        assert isinstance(force, int)
+        assert isinstance(force, (int, np.integer))
         l = force
     else:
         try:
