@@ -213,6 +213,33 @@ void parse_header(const unsigned char* header, const std::map<int, std::pair<std
 }
 
 
+std::vector<size_t> parse_vector(const std::string& input, int numValues, char delimiter = ',') {
+    std::vector<size_t> values;
+    std::stringstream ss(input);
+    std::string token;
+
+    while (std::getline(ss, token, delimiter)) {
+        try {
+            if (token.find('-') != std::string::npos) {
+                throw std::runtime_error("Error: Negative values are not allowed.");
+            }
+
+            size_t value = std::stoul(token); // to size_t
+            values.push_back(value);
+        } catch (const std::invalid_argument&) {
+            throw std::runtime_error("Error: Invalid integer in input string.");
+        } catch (const std::out_of_range&) {
+            throw std::runtime_error("Error: Integer out of range in input string.");
+        }
+    }
+
+    if (values.size() != numValues) {
+        throw std::runtime_error("Error: Expected " + std::to_string(numValues) + " integers, but got " + std::to_string(values.size()) + ".");
+    }
+
+    return values;
+}
+
 
 int main(int argc, char *argv[]) {
     cxxopts::Options options(
@@ -222,36 +249,68 @@ int main(int argc, char *argv[]) {
 
     options.add_options()
         ("i,input", "input segy file: (Required)", cxxopts::value<std::string>())
-        ("o,out", "out binary file name", cxxopts::value<std::string>())
+        ("o,out", "out file name", cxxopts::value<std::string>())
         ("n,new_binary", "new binary file to create new segy file", cxxopts::value<std::string>())
-        ("f,fills", "the number to fill the miss trace, can be any float or nan, or NAN", cxxopts::value<std::string>())
-        ("z,inline-loc", "inline field in trace header, default is 189", cxxopts::value<int>())
-        ("c,crossline-loc", "crossline field in trace header, default is 193", cxxopts::value<int>())
-        ("istep", "inline step", cxxopts::value<int>())
-        ("xstep", "crossline step", cxxopts::value<int>())
-        ("xloc", "X field in trace header, default is 73", cxxopts::value<int>())
-        ("yloc", "Y field in trace header, default is 77", cxxopts::value<int>())
+        ("f,fills", "(DEFAULT 0), the number to fill the miss trace, can be any float or nan, or NAN", cxxopts::value<std::string>())
+        ("z,inline-loc", "(DEFAULT 189), inline field in trace header", cxxopts::value<int>())
+        ("c,crossline-loc", "(DEFAULT 193), crossline field in trace header", cxxopts::value<int>())
+        ("istep", "(DEFAULT 1), inline step", cxxopts::value<int>())
+        ("xstep", "(DEFAULT 1), crossline step", cxxopts::value<int>())
+        ("xloc", "(DEFAULT 73), X field in trace header", cxxopts::value<int>())
+        ("yloc", "(DEFAULT 77), Y field in trace header", cxxopts::value<int>())
         ("p,print_textual_header", "print 3200 bytes textual header")
         ("m,meta_info", "print meta info")
         ("ignore-header", "reading segy by ignoring header and specify shape")
         ("b,bheader", "show the 400 bytes binary header", cxxopts::value<bool>())
-        ("t,theader", "show the header of the i-th trace", cxxopts::value<int>());
+        ("t,theader", "show the header of the i-th trace", cxxopts::value<int>())
+        ("shape", "specify the shape of the data, only used when `n` is valid, e.g., 200,300,400", cxxopts::value<std::string>())
+        ("start", "specify the start position of the data, only used when `n` is valid, e.g., 100,100,100", cxxopts::value<std::string>());
 
     options.parse_positional({"input"});
-    options.add_example(std::string(argv[0]) + " -p f3.segy             : show textual header");
-    options.add_example(std::string(argv[0]) + " -m f3.segy             : show meta information");
-    options.add_example(std::string(argv[0]) + " -o f3.dat f3.segy      : convert");
-    options.add_example(std::string(argv[0]) + " -i f3.segy -o f3.dat   : convert");
-    options.add_example(std::string(argv[0]) + " -o f3.dat -z 5 f3.segy : convert by specify inline field");
-    options.add_example(std::string(argv[0]) + " -o f3.dat -z 5 --istep 2 f3.segy : convert by specify inline field and step");
-    options.add_example(std::string(argv[0]) + " -o f3.dat -f nan f3.segy : convert and fill with nan");
-    options.add_example(std::string(argv[0]) + " -o f3.dat --ignore-header f3.segy : ignore header and specify shape");
-    // create
-    options.add_example(std::string(argv[0]) + " -i f3.segy -n new.dat -o new.segy : create new segy file from new binary");
-    // show binary header
-    options.add_example(std::string(argv[0]) + " -i f3.segy -b : show binary header");
-    // show trace header
-    options.add_example(std::string(argv[0]) + " -i f3.segy -t 100 : show the header of the 100-th trace");
+
+    std::string program_name = std::string(argv[0]);
+
+    std::string example_str = R"(
+Examples:
+            ** Show SEGY's Information **
+
+  )" + program_name + R"( -p f3.sgy         
+        : show the textual header
+  )" + program_name + R"( -b f3.sgy         
+        : show the 400-bytes binary header
+  )" + program_name + R"( -t 20 f3.sgy      
+        : show the 2400-bytes trace header of the i-th trace
+
+            ** Set key's location to Analyze SEGY **
+
+  )" + program_name + R"( -z 9 -c 21 -m f3.sgy 
+        : set iline and xline field, and show meta information (e.g., shape, ...) 
+  )" + program_name + R"( -z 9 -c 21 --istep 2 --xstep 1 -m f3.sgy  
+        : set iline, xline, istep and xstep, and show meta info
+
+            ** SEGY to Binary **
+
+  )" + program_name + R"( -z 189 -c 193 -o f3.dat f3.sgy   
+        : convert segy to binary file by specific iline and xline
+  )" + program_name + R"( -z 9 -c 21 --istep 2 --xstep 10 -o f3.dat f3.segy 
+        : convert segy to binary file
+  )" + program_name + R"( -z 9 -c 21 -f NAN -o f3.dat f3.sgy 
+        : convert segy to binary file and set the missing trace as NAN
+  )" + program_name + R"( --ignore-header -o f3.dat f3.sgy  
+        : SEGY to dat, just remove the header, it's useful for 2d data
+
+            ** Create New SEGY File from A Binary File using the Header of Existed SEGY File **
+
+  )" + program_name + R"( -z 189 -c 193 -n new.dat -o new.sgy f3.sgy 
+        : create `new.sgy`. Its data is from `new.dat`,  
+          and its header is from `f3.sgy`
+  )" + program_name + R"( -z 189 -c 193 -n new.dat -o new.sgy f3.sgy --shape 200,300,400 --start 100,100,100 
+        : `new.dat` is a sub volume of the space of `f3.sgy`, 
+          `shape` and `start` must be provided together
+
+    Note: In addition to show segy's information, it is always recommended to have `-z -c --istep --xstep` all set up)"
+  ;
+    options.add_end_discription(example_str);
 
     auto args = options.parse(argc, argv);
 
@@ -362,8 +421,27 @@ int main(int argc, char *argv[]) {
                 std::string new_name = args["n"].as<std::string>();
                 std::string out_name = args["o"].as<std::string>();
                 std::cout << "Create segy file by sharing header, write segy to: " << out_name << "\n";
-                std::vector<size_t> shape = segyio.shape();
+                std::vector<size_t> sshape = segyio.shape();
                 std::vector<size_t> start = {0, 0, 0};
+                std::vector<size_t> shape;
+
+                if (args.count("shape") && args.count("start")) {
+                    shape = parse_vector(args["shape"].as<std::string>(), 3);
+                    start = parse_vector(args["start"].as<std::string>(), 3);
+                    for (int i = 0; i < 3; i++) {
+                        if (shape[i] + start[i] > sshape[i]) {
+                            throw std::runtime_error("Error: shape + start must be less than or equal to the SEGY shape for dimension " + std::to_string(i) + ".");
+                        }
+                        if (shape[i] == 0) {
+                            throw std::runtime_error("Error: shape must be greater than 0 for dimension " + std::to_string(i) + ".");
+                        }
+                    }
+                } else if (args.count("shape") || args.count("start")) {
+                    throw std::runtime_error("Error: 'shape' and 'start' must be provided together.");
+                } else {
+                    shape = sshape;
+                }
+
                 segyio.create_by_sharing_header(out_name, new_name, shape, start);
                 segyio.close_file();
             } else {

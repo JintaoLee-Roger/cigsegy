@@ -1728,6 +1728,10 @@ namespace cxxopts
       m_example.emplace_back(std::move(example));
     }
 
+    void add_end_discription(std::string end_discription) {
+      m_end_discription = std::move(end_discription);
+    }
+
     std::string
     help(const std::vector<std::string>& groups = {}) const;
 
@@ -1768,6 +1772,7 @@ namespace cxxopts
     bool m_allow_unrecognised;
     size_t m_width;
     bool m_tab_expansion;
+    std::string m_end_discription = "";
 
     std::shared_ptr<OptionMap> m_options;
     std::vector<std::string> m_positional{};
@@ -2592,6 +2597,10 @@ Options::help(const std::vector<std::string>& help_groups) const
     for (auto &ex : m_example) {
       result += "  " + toLocalString(ex) + "\n";
     }
+  }
+
+  if (!m_end_discription.empty()) {
+    result += "\n" + toLocalString(m_end_discription) + "\n";
   }
 
   return toUTF8String(result);
