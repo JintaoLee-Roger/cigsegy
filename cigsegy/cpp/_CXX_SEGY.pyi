@@ -445,6 +445,9 @@ class Pysegy:
         start: List,
         is2d: bool = False,
         textual: str = "",
+        strict: bool = True,
+        start_time_from_zero: bool = False,
+        dt_new: int = 0,
     ) -> None:
         """
         """
@@ -458,6 +461,9 @@ class Pysegy:
         start: List,
         is2d: bool = False,
         textual: str = "",
+        strict: bool = True,
+        start_time_from_zero: bool = False,
+        dt_new: int = 0,
     ) -> None:
         """
         """

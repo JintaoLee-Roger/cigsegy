@@ -8,12 +8,13 @@
 #include "segyrw.h"
 #include "utils.hpp"
 #include <cassert>
+#include <cmath>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <cmath>
+
 // #include <chrono>
 
 namespace segy {
@@ -314,7 +315,7 @@ void SegyRW::scan() {
 
   // if line or xline is not continouse, we record their idx for fast indexing
   size_t rcount = 0; // We only read 10 lines? OPTIMIZE: How many lines?
-  for (auto& linfo : m_iinfos) {
+  for (auto &linfo : m_iinfos) {
     g_check_signals_callback();
     if (rcount > 10) {
       break;
@@ -332,7 +333,7 @@ void SegyRW::scan() {
       linfo.count = 0;
       rcount++;
     } else {
-      for (auto& xinfo : linfo.xinfos) {
+      for (auto &xinfo : linfo.xinfos) {
         if (!(xinfo.count == kInvalid)) {
           continue;
         }
@@ -828,7 +829,7 @@ void SegyRW::_write4d_xo(const float *src, LineInfo &linfo, size_t xs,
 }
 
 void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe,
-                                     size_t &its, size_t &ite) {
+                              size_t &its, size_t &ite) {
   size_t start = linfo.isline ? xl2ix(linfo.lstart) : of2io(linfo.lstart);
   size_t end = linfo.isline ? xl2ix(linfo.lend) + 1 : of2io(linfo.lend) + 1;
   if (xs < start) {
@@ -849,7 +850,6 @@ void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe,
   // find start idx
   its = linfo.itstart + (xs - start);
   its = its > linfo.itend ? linfo.itend : its;
-
 
   if (iindex(its) > xs) {
     while (iindex(its - 1) >= xs && (its - 1) >= linfo.itstart) {
@@ -879,13 +879,13 @@ void SegyRW::find_nearest_idx(LineInfo &linfo, size_t xs, size_t xe,
   }
 }
 
-
 uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
                              size_t ks, size_t ke, size_t ts, size_t te,
-                             bool fromsrc) {
+                             bool fromsrc, size_t dt, size_t start_time) {
   char *odst = dst;
   size_t nt = te - ts;
-  bool tchanged = nt == m_meta.nt ? false : true;
+  bool ntchanged = nt == m_meta.nt ? false : true;
+  bool stchanged = start_time == m_meta.start_time ? false : true;
 
   /* no data to copy, just fill */
   if ((linfo.count == 0 && linfo.idx.size() == 0) || NoOverlap(linfo, ks, ke)) {
@@ -899,11 +899,15 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
       if (it != kInvalid) {
         // copy trace header
         memcpy(dst, trheader(it), kTraceHeaderSize);
-        if (tchanged) {
-          if (ts > 0) { // : ts need *1000 ?
-            segy::set_keyi2(dst, kTStartTimeField, ts * m_meta.dt / 1000);
-          }
+        if (ntchanged) {
           segy::set_keyi2(dst, kTSampleCountField, nt);
+        }
+        if (stchanged) {
+          segy::set_keyi2(dst, kTStartTimeField, start_time);
+          segy::set_keyi2(dst, kTDelayTimeField, start_time);
+        }
+        if (dt > 0) {
+          segy::set_keyi2(dst, kTSampleIntervalField, dt);
         }
         dst += kTraceHeaderSize;
 
@@ -928,11 +932,15 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
     for (size_t it = its; it < ite; it++) {
       // copy trace header
       memcpy(dst, trheader(it), kTraceHeaderSize);
-      if (tchanged) {
-        if (ts > 0) { // : ts need *1000 ?
-          segy::set_keyi2(dst, kTStartTimeField, ts * m_meta.dt / 1000);
-        }
+      if (ntchanged) {
         segy::set_keyi2(dst, kTSampleCountField, nt);
+      }
+      if (stchanged) {
+        segy::set_keyi2(dst, kTStartTimeField, start_time);
+        segy::set_keyi2(dst, kTDelayTimeField, start_time);
+      }
+      if (dt > 0) {
+        segy::set_keyi2(dst, kTSampleIntervalField, dt);
       }
       dst += kTraceHeaderSize;
 
@@ -961,11 +969,15 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
     for (size_t tx = idx[2]; tx < idx[3]; tx++) {
       // copy trace header
       memcpy(dst, trheader(tx), kTraceHeaderSize);
-      if (tchanged) {
-        if (ts > 0) {
-          segy::set_keyi2(dst, kTStartTimeField, ts * m_meta.dt / 1000);
-        }
+      if (ntchanged) {
         segy::set_keyi2(dst, kTSampleCountField, nt);
+      }
+      if (stchanged) {
+        segy::set_keyi2(dst, kTStartTimeField, start_time);
+        segy::set_keyi2(dst, kTDelayTimeField, start_time);
+      }
+      if (dt > 0) {
+        segy::set_keyi2(dst, kTSampleIntervalField, dt);
       }
       dst += kTraceHeaderSize;
 
@@ -986,7 +998,8 @@ uint64_t SegyRW::_copy_inner(char *dst, const float *src, LineInfo &linfo,
 
 uint64_t SegyRW::_copy4d_xo(char *dst, const float *src, LineInfo &linfo,
                             size_t xs, size_t xe, size_t os, size_t oe,
-                            size_t ts, size_t te, bool fromsrc) {
+                            size_t ts, size_t te, bool fromsrc, size_t dt,
+                            size_t start_time) {
   size_t nt = te - ts;
   size_t no = oe - os;
   // size_t nx = xe - xs;
@@ -1020,8 +1033,8 @@ uint64_t SegyRW::_copy4d_xo(char *dst, const float *src, LineInfo &linfo,
 
   // read, when is 4D, xlines are always continuous as we filled
   for (size_t ix = xs; ix < xe; ix++) {
-    jump = _copy_inner(dst, srcf + (ix - xs) * sizeOT,
-                       linfo.xinfos[ix - start], os, oe, ts, te, fromsrc);
+    jump = _copy_inner(dst, srcf + (ix - xs) * sizeOT, linfo.xinfos[ix - start],
+                       os, oe, ts, te, fromsrc, dt, start_time);
     dst += jump;
   }
 
@@ -1044,7 +1057,7 @@ void SegyRW::scanBinaryHeader() {
 
   bool use_bheader = true;
   m_meta.nt = nt;
-  // check sample count in binary header and trace header 
+  // check sample count in binary header and trace header
   if (m_meta.nt > 0 && nt2 > 0 && m_meta.nt != nt2) {
     size_t data_size = m_w ? m_sink.size() : m_src.size();
     size_t remaining_size = data_size - kTraceHeaderStart;
@@ -1056,20 +1069,27 @@ void SegyRW::scanBinaryHeader() {
     bool is_theader_divisible = (remaining_size % tracesize_theader == 0);
 
     if (is_bheader_divisible && is_theader_divisible) {
-        std::cout << "Both binary header and trace header sample counts (nt) are compatible. Using sample count (nt) from binary header." << std::endl;
-        use_bheader = true;
+      std::cout << "Both binary header and trace header sample counts (nt) are "
+                   "compatible. Using sample count (nt) from binary header."
+                << std::endl;
+      use_bheader = true;
     } else if (is_theader_divisible) {
-        m_meta.nt = nt2;
-        use_bheader = false;
-        std::cout << "The sample count (nt) in the binary header is not compatible with the data size. Using sample count (nt) from trace header." << std::endl;
+      m_meta.nt = nt2;
+      use_bheader = false;
+      std::cout
+          << "The sample count (nt) in the binary header is not compatible "
+             "with the data size. Using sample count (nt) from trace header."
+          << std::endl;
     } else if (!is_bheader_divisible && !is_theader_divisible) {
-        throw std::runtime_error("Error: Data size is not compatible with sample count (nt) in both binary and trace headers.");
+      throw std::runtime_error("Error: Data size is not compatible with sample "
+                               "count (nt) in both binary and trace headers.");
     }
   } else if (m_meta.nt <= 0 && nt2 > 0) {
     m_meta.nt = nt2;
     use_bheader = false;
   } else if (m_meta.nt <= 0 && nt2 <= 0) {
-    throw std::runtime_error("Invalid sample count (nt) in both binary and trace headers (both <= 0).");
+    throw std::runtime_error("Invalid sample count (nt) in both binary and "
+                             "trace headers (both <= 0).");
   }
 
   m_meta.tracesize = kTraceHeaderSize + m_meta.nt * m_meta.esize;
@@ -1080,10 +1100,11 @@ void SegyRW::scanBinaryHeader() {
   m_meta.dt = dt;
   if (m_meta.dt > 0 && dt2 > 0 && m_meta.dt != dt2) {
     m_meta.dt = use_bheader ? m_meta.dt : dt2;
-  } else if (m_meta.dt <= 0 && dt2 > 0) { 
+  } else if (m_meta.dt <= 0 && dt2 > 0) {
     m_meta.dt = dt2;
   } else if (m_meta.dt <= 0 && dt2 <= 0) {
-    throw std::runtime_error("Invalid sample interval (dt) in both binary and trace headers (both <= 0).");
+    throw std::runtime_error("Invalid sample interval (dt) in both binary and "
+                             "trace headers (both <= 0).");
   }
 
   if (m_w) {
@@ -1117,7 +1138,8 @@ void SegyRW::scanBinaryHeader() {
 void SegyRW::_create_from_segy(const std::string &outname, const float *src,
                                const std::vector<size_t> &ranges, bool is2d,
                                const std::string &textual, bool fromsrc,
-                               uint64_t check_size) {
+                               uint64_t check_size, size_t dt,
+                               size_t start_time) {
   size_t rsize = ranges.size();
   if (rsize < 4) {
     throw std::runtime_error(
@@ -1125,7 +1147,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
         std::to_string(rsize));
   }
   size_t ts = ranges[rsize - 2], te = ranges[rsize - 1];
-  if (ts > te || te > m_meta.nt) {
+  if (fromsrc && (ts > te || te > m_meta.nt)) {
     throw std::runtime_error("ts and te index out of range");
   }
 
@@ -1159,7 +1181,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
                                  std::to_string(ranges.size()));
       }
       if (check_size > 0 && check_size != (uint64_t)(ie - is) * (xe - xs) *
-                                               (te - ts) * sizeof(float)) {
+                                              (te - ts) * sizeof(float)) {
         throw std::runtime_error("file size don't match the ranges");
       }
       tracesize = kTraceHeaderSize + (uint64_t)(te - ts) * m_meta.esize;
@@ -1173,8 +1195,8 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
       os = ranges[4];
       oe = ranges[5];
       if (check_size > 0 && check_size != (uint64_t)(ie - is) * (xe - xs) *
-                                               (oe - os) * (te - ts) *
-                                               sizeof(float)) {
+                                              (oe - os) * (te - ts) *
+                                              sizeof(float)) {
         throw std::runtime_error("file size don't match the ranges");
       }
       tracesize = kTraceHeaderSize + (uint64_t)(te - ts) * m_meta.esize;
@@ -1186,7 +1208,8 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
   // set dimension
   size_t nt = te - ts;
 
-  bool tchanged = nt == m_meta.nt ? false : true;
+  bool ntchanged = nt == m_meta.nt ? false : true;
+  bool stchanged = start_time == m_meta.start_time ? false : true;
 
   // We first create a large file (assume there is no missing)
   // to store all data, and then mmap it to
@@ -1214,8 +1237,11 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
 
   // copy binary header
   memcpy(outptr, brheader(), kBinaryHeaderSize);
-  if (tchanged) {
+  if (ntchanged) {
     segy::set_bkeyi2(outptr, kBSampleCountField, te - ts);
+  }
+  if (dt > 0) {
+    segy::set_bkeyi2(outptr, kBSampleIntervalField, dt);
   }
   outptr += kBinaryHeaderSize;
 
@@ -1228,11 +1254,15 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
         g_progress_callback(it - tstart, tend - tstart);
       }
       memcpy(outptr, trheader(it), kTraceHeaderSize);
-      if (tchanged) {
-        if (ts > 0) {
-          segy::set_keyi2(outptr, kTStartTimeField, ts);
-        }
+      if (ntchanged) {
         segy::set_keyi2(outptr, kTSampleCountField, nt);
+      }
+      if (stchanged) {
+        segy::set_keyi2(outptr, kTStartTimeField, start_time);
+        segy::set_keyi2(outptr, kTDelayTimeField, start_time);
+      }
+      if (dt > 0) {
+        segy::set_keyi2(outptr, kTSampleIntervalField, dt);
       }
       outptr += kTraceHeaderSize;
       memcpy(outptr, trDataStart(it, ts), nt * m_meta.esize);
@@ -1254,13 +1284,15 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
         continue;
       }
       if (m_ndim == 3) {
-        jump = _copy_inner(outptr, src, linfo, xs, xe, ts, te, fromsrc);
+        jump = _copy_inner(outptr, src, linfo, xs, xe, ts, te, fromsrc, dt,
+                           start_time);
         outptr += jump;
         if (!fromsrc) {
           src += (xe - xs) * nt;
         }
       } else {
-        jump = _copy4d_xo(outptr, src, linfo, xs, xe, os, oe, ts, te, fromsrc);
+        jump = _copy4d_xo(outptr, src, linfo, xs, xe, os, oe, ts, te, fromsrc,
+                          dt, start_time);
         outptr += jump;
         if (!fromsrc) {
           src += (xe - xs) * (oe - os) * nt;
@@ -1282,14 +1314,18 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
 void SegyRW::cut(const std::string &segy_name,
                  const std::vector<size_t> &ranges, bool is2d,
                  const std::string &textual) {
-  _create_from_segy(segy_name, nullptr, ranges, is2d, textual, true);
+  _create_from_segy(segy_name, nullptr, ranges, is2d, textual, true, 0, 0,
+                    m_meta.start_time);
 }
 
 void SegyRW::create_by_sharing_header(const std::string &segy_name,
                                       const float *src,
                                       const std::vector<size_t> &shape,
                                       const std::vector<size_t> &start,
-                                      bool is2d, const std::string &textual) {
+                                      bool is2d, const std::string &textual,
+                                      bool strict, bool start_time_from_zero,
+                                      size_t dt_new) {
+  // start_time_from_zero and dt_new are not used if strict is true
   size_t nd = is2d ? 2 : m_ndim;
 
   if (shape.size() != start.size() || shape.size() != nd) {
@@ -1301,14 +1337,34 @@ void SegyRW::create_by_sharing_header(const std::string &segy_name,
     ranges[i * 2] = start[i];
     ranges[i * 2 + 1] = start[i] + shape[i];
   }
-  _create_from_segy(segy_name, src, ranges, is2d, textual, false);
+
+  size_t start_time = 0;
+  if (strict) {
+    size_t ts = ranges[nd - 2], te = ranges[nd - 1];
+    if (ts > te || te > m_meta.nt) {
+      throw std::runtime_error("ts and te index out of range");
+    }
+    start_time = m_meta.start_time + ts * m_meta.dt;
+    dt_new = 0;
+  } else {
+    if (start_time_from_zero) {
+      start_time = start[nd - 1];
+    } else {
+      start_time = m_meta.start_time + start[nd - 1] * m_meta.dt / 1000;
+    }
+  }
+
+  _create_from_segy(segy_name, src, ranges, is2d, textual, false, 0, dt_new,
+                    start_time);
 }
 
 void SegyRW::create_by_sharing_header(const std::string &segy_name,
                                       const std::string &src_name,
                                       const std::vector<size_t> &shape,
                                       const std::vector<size_t> &start,
-                                      bool is2d, const std::string &textual) {
+                                      bool is2d, const std::string &textual,
+                                      bool strict, bool start_time_from_zero,
+                                      size_t dt_new) {
   std::error_code error;
   mio::mmap_source float_file;
   float_file.map(src_name, error);
@@ -1328,9 +1384,25 @@ void SegyRW::create_by_sharing_header(const std::string &segy_name,
     ranges[i * 2 + 1] = start[i] + shape[i];
   }
 
+  size_t start_time = 0;
+  if (strict) {
+    size_t ts = ranges[nd - 2], te = ranges[nd - 1];
+    if (ts > te || te > m_meta.nt) {
+      throw std::runtime_error("ts and te index out of range");
+    }
+    start_time = m_meta.start_time + ts * m_meta.dt / 1000;
+    dt_new = 0;
+  } else {
+    if (start_time_from_zero) {
+      start_time = start[nd - 1];
+    } else {
+      start_time = m_meta.start_time + start[nd - 1] * m_meta.dt / 1000;
+    }
+  }
+
   const float *src = reinterpret_cast<const float *>(float_file.data());
   _create_from_segy(segy_name, src, ranges, is2d, textual, false,
-                    float_file.size());
+                    float_file.size(), dt_new, start_time);
 }
 
 inline static void modify_keys(char *dst, const int32_t *keys, size_t keysize) {

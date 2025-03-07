@@ -388,7 +388,10 @@ class RWMixin:
             d = self[...]
         else:
             d = self._segy.read()
+            if self._T:
+                d = d.T
         self._segy.show_progress(False)
+
         return d
 
     def tofile(self, fpath: str, load: bool = True):
@@ -406,6 +409,8 @@ class RWMixin:
         if load:
             self.to_numpy().tofile(fpath)
         else:
+            if self._T:
+                raise ValueError("Cannot save the data in .T mode and not load")
             self._segy.tofile(fpath, self.ndim == 2)
         self._segy.show_progress(False)
 
@@ -908,17 +913,31 @@ class InnerMixin:
 
     def __getitem__(self, slices) -> np.ndarray:
         idx = self._process_keys(slices)
+        if self._T:
+            idx = tuple(idx[i:i+2] for i in range(0, len(idx), 2))[::-1]
+            idx = sum(idx, [])
+
         if self._ndim == 4:
-            return self._read4d(idx)
+            out = self._read4d(idx)
         elif self._ndim == 3:
-            return self._read3d(idx)
+            out = self._read3d(idx)
         else:
-            return self._read2d(idx)
+            out = self._read2d(idx)
+
+        if self._T and isinstance(out, np.ndarray):
+            return out.T
+        return out
 
     def __setitem__(self, slices, data: np.ndarray) -> None:
         if data.dtype != np.float32:
             raise TypeError("The data type of the input data must be np.float32") # yapf: disable
         idx = self._process_keys(slices)
+
+        if self._T:
+            idx = tuple(idx[i:i+2] for i in range(0, len(idx), 2))[::-1]
+            idx = sum(idx, [])
+            data = data.T
+
         if self._ndim == 4:
             return self._write4d(idx, data)
         elif self._ndim == 3:
@@ -1006,6 +1025,8 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         self._shape2 = (self._segy.ntrace, self._segy.nt)
         self._shape3 = None
 
+        self._T = False
+
         if ndim == 2 and as_unsorted:
             warnings.warn("`ndim` is 2, so `as_unsorted` will be ignored")
             as_unsorted = False
@@ -1042,9 +1063,12 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         the shape of the data
         """
         if self.ndim == 2:
-            return tuple(self._shape2)
+            out = list(self._shape2)
         else:
-            return tuple(self._shape3)
+            out = list(self._shape3)
+        if self._T:
+            out = out[::-1]
+        return tuple(out)
 
     @property
     def dtype(self) -> np.dtype:
@@ -1164,3 +1188,8 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
 
     def set_fast_read_steps(self, istep, xstep):
         self._fstep = (istep, xstep)
+
+    @property
+    def T(self):
+        self._T = not self._T
+        return self

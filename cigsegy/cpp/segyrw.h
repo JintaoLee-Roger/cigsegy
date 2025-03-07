@@ -97,17 +97,16 @@ public:
   void tofile(const std::string &binary_out_name, bool is2d = false);
   void cut(const std::string &outname, const std::vector<size_t> &ranges,
            bool is2d = false, const std::string &textual = "");
-  void create_by_sharing_header(const std::string &segy_name, const float *src,
-                                const std::vector<size_t> &shape,
-                                const std::vector<size_t> &start,
-                                bool is2d = false,
-                                const std::string &textual = "");
-  void create_by_sharing_header(const std::string &segy_name,
-                                const std::string &src_name,
-                                const std::vector<size_t> &shape,
-                                const std::vector<size_t> &start,
-                                bool is2d = false,
-                                const std::string &textual = "");
+  void create_by_sharing_header(
+      const std::string &segy_name, const float *src,
+      const std::vector<size_t> &shape, const std::vector<size_t> &start,
+      bool is2d = false, const std::string &textual = "", bool strict = true,
+      bool start_time_from_zero = false, size_t dt_new = 0);
+  void create_by_sharing_header(
+      const std::string &segy_name, const std::string &src_name,
+      const std::vector<size_t> &shape, const std::vector<size_t> &start,
+      bool is2d = false, const std::string &textual = "", bool strict = true,
+      bool start_time_from_zero = false, size_t dt_new = 0);
 
   // write mode
   void write(const float *data);
@@ -145,14 +144,16 @@ private:
   void _read4d_xo(float *dst, LineInfo &linfo, size_t xs, size_t xe, size_t os,
                   size_t oe, size_t ts, size_t te);
   uint64_t _copy_inner(char *dst, const float *src, LineInfo &linfo, size_t ks,
-                       size_t ke, size_t ts, size_t te, bool fromsrc);
+                       size_t ke, size_t ts, size_t te, bool fromsrc,
+                       size_t dt = 0, size_t start_time = 0);
   uint64_t _copy4d_xo(char *dst, const float *src, LineInfo &linfo, size_t xs,
                       size_t xe, size_t os, size_t oe, size_t ts, size_t te,
-                      bool fromsrc);
+                      bool fromsrc, size_t dt = 0, size_t start_time = 0);
   void _create_from_segy(const std::string &outname, const float *src,
                          const std::vector<size_t> &ranges, bool is2d,
                          const std::string &textual, bool fromsrc,
-                         uint64_t check_size = 0);
+                         uint64_t check_size = 0, size_t dt = 0,
+                         size_t start_time = 0);
 
   void _write_inner(const float *src, LineInfo &linfo, size_t ks, size_t ke,
                     size_t ts, size_t te);
@@ -240,8 +241,6 @@ inline void SegyRW::find_idx(std::array<size_t, 4> &idx, LineInfo &linfo,
   idx[2] = linfo.itstart + (xs - start);
   idx[3] = idx[2] + (xe - xs);
 }
-
-
 
 void create_segy(const std::string &segyname, const float *src,
                  const int32_t *keys, const std::vector<size_t> &shape,

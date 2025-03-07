@@ -18,7 +18,6 @@ using npuchar = py::array_t<uchar, py::array::c_style | py::array::forcecast>;
 
 namespace segy {
 
-
 /************ static functions ***********/
 
 static void checkSignals() {
@@ -29,60 +28,59 @@ static void checkSignals() {
 
 // convert 1D list[int] or np.ndarray[int] to std::vector<size_t>
 static std::vector<size_t> convert_to_vector(const py::object &obj) {
-    if (py::isinstance<py::list>(obj) || py::isinstance<py::tuple>(obj)) {
-        // list[int]
-        return obj.cast<std::vector<size_t>>();
-    } else if (py::isinstance<py::array>(obj)) {
-        // np.ndarray[int]
-        auto array = py::array::ensure(obj);
+  if (py::isinstance<py::list>(obj) || py::isinstance<py::tuple>(obj)) {
+    // list[int]
+    return obj.cast<std::vector<size_t>>();
+  } else if (py::isinstance<py::array>(obj)) {
+    // np.ndarray[int]
+    auto array = py::array::ensure(obj);
 
-        if (array.ndim() != 1) {
-            throw std::runtime_error("Input numpy array must be 1-dimensional.");
-        }
-
-        if (!array.dtype().kind() == 'i' && !array.dtype().kind() == 'u') {
-            throw std::runtime_error("Input must be an integer array (signed or unsigned).");
-        }
-
-        auto buf = array.request();
-        std::vector<size_t> result(buf.size);
-        if (array.dtype().is(py::dtype::of<int8_t>())) {
-            auto ptr = static_cast<int8_t *>(buf.ptr);
-            std::copy(ptr, ptr + buf.size, result.begin());
-        } else if (array.dtype().is(py::dtype::of<int16_t>())) {
-            auto ptr = static_cast<int16_t *>(buf.ptr);
-            std::copy(ptr, ptr + buf.size, result.begin());
-        } else if (array.dtype().is(py::dtype::of<int32_t>())) {
-            auto ptr = static_cast<int32_t *>(buf.ptr);
-            std::copy(ptr, ptr + buf.size, result.begin());
-        } else if (array.dtype().is(py::dtype::of<int64_t>())) {
-            auto ptr = static_cast<int64_t *>(buf.ptr);
-            std::copy(ptr, ptr + buf.size, result.begin());
-        } else if (array.dtype().is(py::dtype::of<uint8_t>())) {
-            auto ptr = static_cast<uint8_t *>(buf.ptr);
-            std::copy(ptr, ptr + buf.size, result.begin());
-        } else if (array.dtype().is(py::dtype::of<uint16_t>())) {
-            auto ptr = static_cast<uint16_t *>(buf.ptr);
-            std::copy(ptr, ptr + buf.size, result.begin());
-        } else if (array.dtype().is(py::dtype::of<uint32_t>())) {
-            auto ptr = static_cast<uint32_t *>(buf.ptr);
-            std::copy(ptr, ptr + buf.size, result.begin());
-        } else if (array.dtype().is(py::dtype::of<uint64_t>())) {
-            auto ptr = static_cast<uint64_t *>(buf.ptr);
-            std::copy(ptr, ptr + buf.size, result.begin());
-        } else {
-            throw std::runtime_error("Unsupported integer type in numpy array.");
-        }
-        return result;
-    } else {
-        throw std::runtime_error("Unsupported type, expected list[int] or 1-dimensional np.ndarray.");
+    if (array.ndim() != 1) {
+      throw std::runtime_error("Input numpy array must be 1-dimensional.");
     }
+
+    if (!(array.dtype().kind() == 'i') && !(array.dtype().kind() == 'u')) {
+      throw std::runtime_error(
+          "Input must be an integer array (signed or unsigned).");
+    }
+
+    auto buf = array.request();
+    std::vector<size_t> result(buf.size);
+    if (array.dtype().is(py::dtype::of<int8_t>())) {
+      auto ptr = static_cast<int8_t *>(buf.ptr);
+      std::copy(ptr, ptr + buf.size, result.begin());
+    } else if (array.dtype().is(py::dtype::of<int16_t>())) {
+      auto ptr = static_cast<int16_t *>(buf.ptr);
+      std::copy(ptr, ptr + buf.size, result.begin());
+    } else if (array.dtype().is(py::dtype::of<int32_t>())) {
+      auto ptr = static_cast<int32_t *>(buf.ptr);
+      std::copy(ptr, ptr + buf.size, result.begin());
+    } else if (array.dtype().is(py::dtype::of<int64_t>())) {
+      auto ptr = static_cast<int64_t *>(buf.ptr);
+      std::copy(ptr, ptr + buf.size, result.begin());
+    } else if (array.dtype().is(py::dtype::of<uint8_t>())) {
+      auto ptr = static_cast<uint8_t *>(buf.ptr);
+      std::copy(ptr, ptr + buf.size, result.begin());
+    } else if (array.dtype().is(py::dtype::of<uint16_t>())) {
+      auto ptr = static_cast<uint16_t *>(buf.ptr);
+      std::copy(ptr, ptr + buf.size, result.begin());
+    } else if (array.dtype().is(py::dtype::of<uint32_t>())) {
+      auto ptr = static_cast<uint32_t *>(buf.ptr);
+      std::copy(ptr, ptr + buf.size, result.begin());
+    } else if (array.dtype().is(py::dtype::of<uint64_t>())) {
+      auto ptr = static_cast<uint64_t *>(buf.ptr);
+      std::copy(ptr, ptr + buf.size, result.begin());
+    } else {
+      throw std::runtime_error("Unsupported integer type in numpy array.");
+    }
+    return result;
+  } else {
+    throw std::runtime_error(
+        "Unsupported type, expected list[int] or 1-dimensional np.ndarray.");
+  }
 }
 
-
-
 /************ binding  ***********/
-
 
 class Pysegy : public SegyRW {
 public:
@@ -147,25 +145,27 @@ public:
     return data;
   }
 
-  void create_by_sharing_header(const std::string &segy_name,
-                                const npfloat &src, const py::object &start,
-                                bool is2d = false,
-                                const std::string &textual = "") {
+  void create_by_sharing_header(
+      const std::string &segy_name, const npfloat &src, const py::object &start,
+      bool is2d = false, const std::string &textual = "", bool strict = true,
+      bool start_time_from_zero = false, size_t dt_new = 0) {
     const float *ptr = src.data();
     std::vector<size_t> shape(src.shape(), src.shape() + src.ndim());
     auto sta = convert_to_vector(start);
-    SegyRW::create_by_sharing_header(segy_name, ptr, shape, sta, is2d, textual);
+    SegyRW::create_by_sharing_header(segy_name, ptr, shape, sta, is2d, textual,
+                                     strict, start_time_from_zero, dt_new);
   }
 
-  void create_by_sharing_header(const std::string &segy_name,
-                                const std::string &src_file,
-                                const py::object &shape, const py::object &start,
-                                bool is2d = false,
-                                const std::string &textual = "") {
+  void create_by_sharing_header(
+      const std::string &segy_name, const std::string &src_file,
+      const py::object &shape, const py::object &start, bool is2d = false,
+      const std::string &textual = "", bool strict = true,
+      bool start_time_from_zero = false, size_t dt_new = 0) {
     auto sha = convert_to_vector(shape);
     auto sta = convert_to_vector(start);
     SegyRW::create_by_sharing_header(segy_name, src_file, sha, sta, is2d,
-                                     textual);
+                                     textual, strict, start_time_from_zero,
+                                     dt_new);
   }
 
   npfloat itrace(size_t n) {
@@ -591,11 +591,10 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       .def("coordy", &Pysegy::coordy, py::arg("n"))
       .def("get_binary_header", &Pysegy::get_binary_header)
       .def("get_trace_header", &Pysegy::get_trace_header, py::arg("n"))
-      .def(
-          "get_trace_keys",
-          py::overload_cast<const py::object &, const py::object &, size_t, size_t>(
-              &Pysegy::get_trace_keys),
-          py::arg("keys"), py::arg("length"), py::arg("beg"), py::arg("end"))
+      .def("get_trace_keys",
+           py::overload_cast<const py::object &, const py::object &, size_t,
+                             size_t>(&Pysegy::get_trace_keys),
+           py::arg("keys"), py::arg("length"), py::arg("beg"), py::arg("end"))
       .def("get_trace_keys",
            py::overload_cast<const py::object &, const py::object &,
                              const npint32 &>(&Pysegy::get_trace_keys),
@@ -628,19 +627,24 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
            py::arg("as_2d") = false)
       .def("cut", &Pysegy::cut, py::arg("outname"), py::arg("ranges"),
            py::arg("is2d") = false, py::arg("textual") = "")
-      .def("create_by_sharing_header",
-           py::overload_cast<const std::string &, const npfloat &,
-                             const py::object &, bool, const std::string &>(
-               &Pysegy::create_by_sharing_header),
-           py::arg("segy_name"), py::arg("src"), py::arg("start"),
-           py::arg("is2d") = false, py::arg("textual") = "")
+      .def(
+          "create_by_sharing_header",
+          py::overload_cast<const std::string &, const npfloat &,
+                            const py::object &, bool, const std::string &, bool,
+                            bool, size_t>(&Pysegy::create_by_sharing_header),
+          py::arg("segy_name"), py::arg("src"), py::arg("start"),
+          py::arg("is2d") = false, py::arg("textual") = "",
+          py::arg("strict") = true, py::arg("start_time_from_zero") = false,
+          py::arg("dt_new") = 0)
       .def("create_by_sharing_header",
            py::overload_cast<const std::string &, const std::string &,
                              const py::object &, const py::object &, bool,
-                             const std::string &>(
+                             const std::string &, bool, bool, size_t>(
                &Pysegy::create_by_sharing_header),
            py::arg("segy_name"), py::arg("src_file"), py::arg("shape"),
-           py::arg("start"), py::arg("is2d") = false, py::arg("textual") = "")
+           py::arg("start"), py::arg("is2d") = false, py::arg("textual") = "",
+           py::arg("strict") = true, py::arg("start_time_from_zero") = false,
+           py::arg("dt_new") = 0)
 
       // for write
       .def("set_bkeyi2", &Pysegy::set_bkeyi2, py::arg("loc"), py::arg("val"))
@@ -664,7 +668,8 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       .def("write_traces",
            py::overload_cast<const npfloat &, const npint32 &, size_t, size_t>(
                &Pysegy::write_traces),
-           py::arg("data"), py::arg("indices"), py::arg("tbeg"), py::arg("tend"))
+           py::arg("data"), py::arg("indices"), py::arg("tbeg"),
+           py::arg("tend"))
       .def("write", &Pysegy::write, py::arg("data"))
       .def("write3d", &Pysegy::write3d, py::arg("data"), py::arg("ib"),
            py::arg("ie"), py::arg("xb"), py::arg("xe"), py::arg("tb"),

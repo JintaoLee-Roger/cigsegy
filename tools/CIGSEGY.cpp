@@ -159,7 +159,6 @@ std::map<int, std::pair<std::string, int>> kTraceHeaderHelp = {
 };
 
 
-// 辅助函数：将字节数组转换为整数
 template <typename T>
 T bytes_to_int(const unsigned char* data, bool big_endian = true) {
     T value = 0;
@@ -170,7 +169,6 @@ T bytes_to_int(const unsigned char* data, bool big_endian = true) {
     return value;
 }
 
-// 辅助函数：将字节数组转换为 double（IEEE 754 64-bit）
 double bytes_to_double(const unsigned char* data, bool big_endian = true) {
     double value;
     std::memcpy(&value, data, sizeof(double));
@@ -180,7 +178,6 @@ double bytes_to_double(const unsigned char* data, bool big_endian = true) {
     return value;
 }
 
-// 通用解析函数
 void parse_header(const unsigned char* header, const std::map<int, std::pair<std::string, int>>& help_dict, const std::string& header_type) {
     std::cout << "Parsing " << header_type << " Header:\n";
     std::cout << "----------------------------------------\n";
@@ -200,10 +197,9 @@ void parse_header(const unsigned char* header, const std::map<int, std::pair<std
         } else if (ksize == 8) {
             field_value = bytes_to_int<int64_t>(header + key - 1);
         } else {
-            field_value = 0; // 未处理的字段
+            field_value = 0; 
         }
 
-        // 按照指定格式输出
         output << std::setw(3) << std::right << key << " - "
                << std::setw(3) << std::right << (key + ksize - 1) << ": "
                << std::setw(8) << std::left << field_value << " - "
@@ -379,7 +375,6 @@ Examples:
         }
 
         if (args.count("t")) {
-            std::cout << "yes\n";
             int t_n = args["t"].as<int>();
             if (t_n < 0 || t_n >= segyio.m_meta.ntrace) {
                 throw std::runtime_error("Trace number out of bound");

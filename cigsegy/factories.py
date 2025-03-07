@@ -284,6 +284,11 @@ def create_by_sharing_header(
     is4d: bool = None,
     as2d: bool = False,
     textual: str = "",
+
+    # the following params for freeing the t dimension
+    strict: bool = True,
+    start_time_from_zero: bool = False,
+    dt_new: int = 0,
 ) -> None:
     """
     create a segy and its header is from an existed segy.
@@ -296,6 +301,25 @@ def create_by_sharing_header(
         the header segy file
     src : numpy.ndarray
         source data
+    shape : tuple
+        shape of the data, only used when src is a path of a binary file
+    start : list
+        start of the geometry
+    keylocs : list
+        key locations, [iline, xline, istep, xstep], or [iline, xline, offset, istep, xstep, ostep]
+    is4d : bool
+        if True, the data is 4D, otherwise 3D
+    as2d : bool
+        if True, treat the data as 2D data
+    textual : str
+        textual header
+    strict : bool
+        if True, the src data must be a subset of the header_segy file
+    start_time_from_zero : bool
+        if True, the start time (i.e., start[-1]) is from zero, otherwise it is from the header_segy file.
+        This parameter is only used when strict is False.
+    dt_new : int
+        the new sample interval, only used when strict is False
     """
     segy = _CXX_SEGY.Pysegy(str(header_segy))
     if as2d:
@@ -304,10 +328,10 @@ def create_by_sharing_header(
         if isinstance(src, np.ndarray):
             shape = list(src.shape)
             assert src.ndim == 2, "src's ndim must be 2 when as2d is True"
-            segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual) # yapf: disable
+            segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual, strict, start_time_from_zero, dt_new) # yapf: disable
         else:
             assert shape is not None, "`shape` must input when src is not ndarray"
-            segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual) # yapf: disable
+            segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual, strict, start_time_from_zero, dt_new) # yapf: disable
         return
 
     assert keylocs is None or len(keylocs) == 4 or len(keylocs) == 6
@@ -337,9 +361,9 @@ def create_by_sharing_header(
         start = [0] * len(shape)
     assert len(start) == len(shape), "len(start) == len(shape)"
     if isinstance(src, np.ndarray):
-        segy.create_by_sharing_header(out_segy, src, start, as2d, textual)
+        segy.create_by_sharing_header(out_segy, src, start, as2d, textual, strict, start_time_from_zero, dt_new) # yapf: disable
     else:
-        segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual)
+        segy.create_by_sharing_header(out_segy, src, shape, start, as2d, textual, strict, start_time_from_zero, dt_new) # yapf: disable
     segy.close()
 
 
