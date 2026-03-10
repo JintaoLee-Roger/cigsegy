@@ -473,7 +473,7 @@ def modify_bin_key(segyname: str, loc: int, value, force: int = None) -> None:
     if isinstance(segyname, _CXX_SEGY.Pysegy):
         segy = segyname
     else:
-        segy = _CXX_SEGY.Pysegy(str(segyname))
+        segy = _CXX_SEGY.Pysegy(str(segyname), True)
 
     if force is not None:
         assert isinstance(force, (int, np.integer))

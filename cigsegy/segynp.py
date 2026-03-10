@@ -4,12 +4,14 @@
 # All rights reserved.
 
 from typing import List, Tuple
+from itertools import product
 import numpy as np
 from cigsegy.cpp import _CXX_SEGY
 from cigsegy.transform import get_transform_metrix, apply_transform
 from cigsegy.interp import arbitray_line
 from cigsegy import utils, plot, tools, createtool
 import warnings
+from tqdm import tqdm
 
 
 
@@ -415,6 +417,58 @@ class RWMixin:
         self._segy.show_progress(False)
 
     # fmt: off
+    def _read_regular(self, idx) -> np.ndarray:
+        assert self._ignore, "The data is not regular or shape_hint is not given"
+        self._check_bound2(idx)
+
+        shp = tuple(self.shape)
+        assert len(shp) in (3, 4), f"shape_hint must be 3D or 4D, got {shp}"
+
+        if self.ndim == 3:
+            assert len(shp) == 3, f"ndim=3 but shape_hint={shp}"
+            nx, ny, nt = shp
+            ab, ae = 0, 1
+            xb, xe, yb, ye, tbeg, tend = idx
+            na = 1
+        elif self.ndim == 4:
+            # shape_hint: (na, nx, ny, nt)
+            assert len(shp) == 4, f"ndim=4 but shape_hint={shp}"
+            na, nx, ny, nt = shp
+            ab, ae, xb, xe, yb, ye, tbeg, tend = idx
+        else:
+            raise ValueError(f"_read_regular only supports ndim=3 or 4, got {self.ndim}")
+        
+        dt = tend - tbeg
+
+        def base_index(ia, ix):
+            return ia * (nx * ny) + ix * ny
+
+        oshape = (ae - ab, xe - xb, ye - yb, dt)
+        bytes_total = np.prod(oshape) * 4
+        show_bar = bytes_total >= (1 << 30) if self._show_progress else False
+
+        out = np.zeros(oshape, dtype=np.float32)
+
+
+        iterator = product(range(ab, ae), range(xb, xe))
+        total_iters = oshape[0] * oshape[1]
+
+        if show_bar:
+            iterator = tqdm(iterator, total=total_iters)
+
+
+        for ia, ix in iterator:
+            beg = base_index(ia, ix) + yb
+            end = base_index(ia, ix) + ye
+            block = self._segy.collect(beg, end, tbeg, tend)  # shape: ((ye-yb), dt)
+            out[ia - ab, ix - xb, :, :] = block
+        
+        if self.ndim == 3:
+            out = out[0]  # remove fake dim
+
+        return self._post_process(out)
+
+
     def _read4d(self, idx) -> np.ndarray:
         assert self.ndim == 4, "The data is not 4D"
         self._check_bound2(idx)
@@ -917,7 +971,9 @@ class InnerMixin:
             idx = tuple(idx[i:i+2] for i in range(0, len(idx), 2))[::-1]
             idx = sum(idx, [])
 
-        if self._ndim == 4:
+        if self._ignore:
+            return self._read_regular(idx)
+        elif self._ndim == 4:
             out = self._read4d(idx)
         elif self._ndim == 3:
             out = self._read3d(idx)
@@ -987,8 +1043,10 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
                  mode: str = 'r',
                  *,
                  ndim: int = None,
+                 shape_hint: tuple = None,
                  as_unsorted: bool = False,
                  fast_read: bool = False,
+                 show_progress: bool = False,
                  keys: dict = None) -> None:
         np.set_printoptions(suppress=True)
 
@@ -996,6 +1054,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         self._ndim = ndim
         self._fname = filename
 
+        self._show_progress = show_progress
         self._segy = _CXX_SEGY.Pysegy(str(filename), mode=='rw')
         self._segy.show_progress(False)
         self._mode = mode
@@ -1024,6 +1083,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
 
         self._shape2 = (self._segy.ntrace, self._segy.nt)
         self._shape3 = None
+        self._ignore = False # whether ignore 'scan', only valid when the data is regular and shape_hint is given
 
         self._T = False
 
@@ -1032,7 +1092,7 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
             as_unsorted = False
         self._unsorted = as_unsorted
 
-        if ndim is None or ndim != 2:
+        if shape_hint is None and (ndim is None or ndim != 2):
             if self._unsorted:
                 self._scan_unsorted(keylocs, keys, ndim)
             else:
@@ -1042,6 +1102,17 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
                     raise RuntimeError(f"{str(e)}\n This SEG-Y file may be unsorted, you can pass `as_unsorted` to view it as unsorted file, but it may be slow") from e # yapf: disable
             if ndim is not None and self.ndim != ndim:
                 raise RuntimeError(f"You set ndim as {ndim}, but the SEG-Y file's ndim is {self.ndim}") # yapf: disable
+        elif shape_hint is not None:
+            if len(shape_hint) < 3 and len(shape_hint) > 4:
+                raise ValueError("shape_hint must be of length 3 or 4")
+            if shape_hint[-1] != self._shape2[-1]:
+                raise ValueError(f"shape_hint's last dimension must be equal to nt ({self._shape2[-1]}), but got {shape_hint[-1]}") # yapf: disable 
+            if np.prod(shape_hint) != np.prod(self._shape2):
+                raise ValueError(f"The product shape_hint ({np.prod(shape_hint)}) != (ntrace, nt) ({np.prod(self._shape2)})") # yapf: disable
+            self._ndim = len(shape_hint)
+            self._shape3 = shape_hint
+            self._ignore = True
+
 
     @property
     def ntrace(self) -> int:

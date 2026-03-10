@@ -317,7 +317,7 @@ def guess(segy_name: str,
         # values, counts = np.unique(idx, return_counts=True)
         dif = dif[dif != 0]
         if len(dif) == 0:
-            return 1
+            return 0
         xstepi = dif.min() if dif[0] > 0 else dif.max()
         return xstepi
 
