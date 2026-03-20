@@ -278,7 +278,7 @@ inline void SegyBase::get_trace_keys(int32_t *dst,
 
   int step = cal_progress_steps(end - beg, show_progress_, 10000, 50);
   for (size_t i = beg; i < end; i++) {
-    g_check_signals_callback();
+    check_signals_periodically(i - beg);
     if (step && (i - beg) % step == 0) {
       g_progress_callback(i - beg, end - beg);
     }
@@ -306,7 +306,7 @@ inline void SegyBase::get_trace_keys(int32_t *dst,
                                      const int32_t *indices, size_t n) {
   int step = cal_progress_steps(n, show_progress_, 10000, 50);
   for (size_t i = 0; i < n; i++) {
-    g_check_signals_callback();
+    check_signals_periodically(i);
     if (step && i % step == 0) {
       g_progress_callback(i, n);
     }
@@ -342,7 +342,7 @@ inline void SegyBase::collect(float *data, size_t beg, size_t end, size_t tbeg,
   size_t nt = tend - tbeg;
   int step = cal_progress_steps(end - beg, show_progress_, 10000, 50);
   for (size_t i = beg; i < end; i++) {
-    g_check_signals_callback();
+    check_signals_periodically(i - beg);
     if (step && (i - beg) % step == 0) {
       g_progress_callback(i - beg, end - beg);
     }
@@ -359,7 +359,7 @@ inline void SegyBase::collect(float *data, const int32_t *indices, size_t n,
   size_t nt = tend - tbeg;
   int step = cal_progress_steps(n, show_progress_, 10000, 50);
   for (size_t i = 0; i < n; i++) {
-    g_check_signals_callback();
+    check_signals_periodically(i);
     if (step && i % step == 0) {
       g_progress_callback(i, n);
     }
@@ -422,13 +422,14 @@ inline void SegyBase::write_traces(const float *data, size_t beg, size_t end,
                                    size_t tbeg, size_t tend) {
   check_write(m_w);
   size_t n = end - beg;
+  size_t len = tend - tbeg;
   int step = cal_progress_steps(n, show_progress_, 10000, 50);
   for (size_t i = beg; i < end; i++) {
-    g_check_signals_callback();
+    check_signals_periodically(i - beg);
     if (step && (i - beg) % step == 0) {
       g_progress_callback(i - beg, n);
     }
-    m_wfunc(twDataStart(i, tbeg), data + (uint64_t)(i - beg) * n, n);
+    m_wfunc(twDataStart(i, tbeg), data + (uint64_t)(i - beg) * len, len);
   }
   if (step) {
     g_progress_callback(-1, n);
@@ -441,7 +442,7 @@ inline void SegyBase::write_traces(const float *data, const int32_t *indices,
   size_t len = tend - tbeg;
   int step = cal_progress_steps(n, show_progress_, 10000, 50);
   for (size_t i = 0; i < n; i++) {
-    g_check_signals_callback();
+    check_signals_periodically(i);
     if (step && i % step == 0) {
       g_progress_callback(i, n);
     }

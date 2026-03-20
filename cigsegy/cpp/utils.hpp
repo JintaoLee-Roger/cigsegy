@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cctype>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -65,6 +66,11 @@ constexpr size_t kDefaultCrosslineField = 193;
 constexpr size_t kDefaultXField = 73;
 constexpr size_t kDefaultYField = 77;
 constexpr size_t kInvalid = std::numeric_limits<size_t>::max();
+constexpr size_t kSignalCheckInterval = 1024;
+
+static_assert(
+    (kSignalCheckInterval & (kSignalCheckInterval - 1)) == 0,
+    "kSignalCheckInterval must be a power of two");
 
 // A key map that convert EBCDIC to ASCII format
 const std::unordered_map<uchar, char> kEBCDICtoASCIImap = {
@@ -142,104 +148,103 @@ template <typename T> T swap_endian(T u) {
   return dest.u;
 }
 
+inline uint32_t float_to_bits(float value) {
+  uint32_t bits = 0;
+  std::memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
+inline float bits_to_float(uint32_t bits) {
+  float value = 0.0f;
+  std::memcpy(&value, &bits, sizeof(value));
+  return value;
+}
+
 inline float ieee_to_ibm(float value, bool is_litte_endian_input, bool is_big_endian_output=true) {
+  uint32_t ieee_bits = float_to_bits(value);
   if (!is_litte_endian_input) {
-    value = swap_endian<float>(value);
+    ieee_bits = swap_endian<uint32_t>(ieee_bits);
+    value = bits_to_float(ieee_bits);
   }
 
-  int32_t *addr = reinterpret_cast<int32_t *>(&value);
-  int32_t int_val = *addr;
-
-  int32_t sign = (int_val >> 31) & 1;
-  int32_t exponent = ((int_val & 0x7f800000) >> 23) - 127;
-  int32_t fraction = int_val & 0x007fffff;
-
-  if ((int_val & 0x7fffffff) == 0) {
-    return sign ? -0.0f : 0.0f;
+  const uint32_t sign = ieee_bits & 0x80000000U;
+  if ((ieee_bits & 0x7fffffffU) == 0) {
+    uint32_t out = sign;
+    if (is_big_endian_output) {
+      out = swap_endian<uint32_t>(out);
+    }
+    return bits_to_float(out);
   }
 
-  fraction <<= 1; // 24 bits
-
-  fraction |= 0x01000000; // add 1, 25 bits
-
-  // convert 2-base to 16-base
-  fraction <<= (exponent & 3); // 28 bits
-  exponent >>= 2;
-
-  if (fraction & 0x0f000000) { // 24 bits
-    fraction >>= 4;
-    exponent += 1;
+  // IBM 32-bit float has no NaN/Inf. Use the largest finite IBM value so the
+  // follow-up IBM->IEEE conversion overflows to signed infinity.
+  if (std::isnan(value) || std::isinf(value)) {
+    uint32_t out = sign | 0x7fffffffU;
+    if (is_big_endian_output) {
+      out = swap_endian<uint32_t>(out);
+    }
+    return bits_to_float(out);
   }
 
-  exponent += 64;
+  long double magnitude = std::fabs(static_cast<long double>(value));
+  int exponent2 = 0;
+  std::frexp(magnitude, &exponent2);
 
-  int32_t ibm_value;
-  if (exponent > 127) {
-    return (sign ? -std::numeric_limits<float>::max()
-                 : std::numeric_limits<float>::max());
-  } else if (exponent <= 0) {
-    ibm_value = (sign << 31) | fraction;
-  } else {
-    ibm_value = (sign << 31) | (exponent << 24) | fraction;
+  int exponent16 =
+      static_cast<int>(std::floor(static_cast<long double>(exponent2 - 1) /
+                                  4.0L)) +
+      1;
+  long double fraction = std::ldexp(magnitude, -4 * exponent16);
+  long double scaled = std::ldexp(fraction, 24);
+  auto mantissa = static_cast<uint32_t>(std::nearbyintl(scaled));
+
+  if (mantissa >= (1U << 24)) {
+    mantissa >>= 4;
+    ++exponent16;
   }
 
-  float *float_addr = reinterpret_cast<float *>(&ibm_value);
+  while (mantissa > 0 && mantissa < (1U << 20)) {
+    mantissa <<= 4;
+    --exponent16;
+  }
 
+  int biased_exponent = exponent16 + 64;
+  if (biased_exponent <= 0) {
+    mantissa = 0;
+    biased_exponent = 0;
+  } else if (biased_exponent >= 127) {
+    mantissa = 0x00ffffffU;
+    biased_exponent = 127;
+  }
+
+  uint32_t ibm_bits =
+      sign | (static_cast<uint32_t>(biased_exponent) << 24) |
+      (mantissa & 0x00ffffffU);
   if (is_big_endian_output) {
-    return swap_endian<float>(*float_addr);
+    ibm_bits = swap_endian<uint32_t>(ibm_bits);
   }
-  return *float_addr;
+  return bits_to_float(ibm_bits);
 }
 
 inline float ibm_to_ieee(float value, bool is_big_endian_input) {
+  uint32_t ibm_bits = float_to_bits(value);
   if (is_big_endian_input) {
-    value = swap_endian<float>(value);
+    ibm_bits = swap_endian<uint32_t>(ibm_bits);
   }
 
-  int32_t *int_addr = reinterpret_cast<int32_t *>(&value);
-  int32_t int_val = *int_addr;
-
-  int32_t sign = (int_val >> 31) & 1;
-  int32_t fraction = int_val & 0x00ffffff;
-
+  const uint32_t sign = ibm_bits & 0x80000000U;
+  const uint32_t fraction = ibm_bits & 0x00ffffffU;
   if (fraction == 0) {
-    return sign ? -0.0f : 0.0f;
+    return bits_to_float(sign);
   }
 
-  // Convert exponent to be of base 2 and remove IBM exponent bias.
-  int32_t exponent = ((int_val & 0x7f000000) >> 22) - 256;
-
-  // Drop the last bit since we can store only 23 bits in IEEE.
-  fraction >>= 1;
-
-  // Normalize such that the implicit leading bit of the fraction is 1.
-  while (fraction && (fraction & 0x00800000) == 0) {
-    fraction <<= 1;
-    --exponent;
+  const int exponent16 = static_cast<int>((ibm_bits >> 24) & 0x7fU) - 64;
+  long double magnitude =
+      std::ldexp(static_cast<long double>(fraction), 4 * exponent16 - 24);
+  if (sign != 0) {
+    magnitude = -magnitude;
   }
-
-  // Drop the implicit leading bit.
-  fraction &= 0x007fffff;
-
-  // Add IEEE bias to the exponent.
-  exponent += 127;
-
-  // Handle overflow.
-  if (exponent >= 255) {
-    return (sign ? -std::numeric_limits<float>::max()
-                 : std::numeric_limits<float>::max());
-  }
-
-  int32_t ieee_value;
-
-  // Handle underflow.
-  if (exponent <= 0)
-    ieee_value = (sign << 31) | fraction;
-  else
-    ieee_value = (sign << 31) | (exponent << 23) | fraction;
-
-  float *float_addr = reinterpret_cast<float *>(&ieee_value);
-  return *float_addr;
+  return static_cast<float>(magnitude);
 }
 
 inline float ibm_to_ieee(const void *src) {
@@ -627,6 +632,12 @@ inline int cal_progress_steps(int total, bool show_progress, int min_iters = 100
 
     return total / max_iters;
 
+}
+
+inline void check_signals_periodically(size_t iteration) {
+    if ((iteration & (kSignalCheckInterval - 1)) == 0) {
+        g_check_signals_callback();
+    }
 }
 
 } // namespace segy

@@ -81,7 +81,7 @@ void SegyRW::scan() {
   size_t jumpx = 1;
   // int step = cal_progress_steps(ni, show_progress_, 50);
   for (size_t ii = 0; ii < ni; ++ii) {
-    g_check_signals_callback();
+    check_signals_periodically(ii);
     // if (step && ii % step == 0) {
     //   g_progress_callback(ii, ni);
     // }
@@ -315,11 +315,12 @@ void SegyRW::scan() {
 
   // if line or xline is not continouse, we record their idx for fast indexing
   size_t rcount = 0; // We only read 10 lines? OPTIMIZE: How many lines?
-  for (auto &linfo : m_iinfos) {
-    g_check_signals_callback();
+  for (size_t i = 0; i < m_iinfos.size(); ++i) {
+    check_signals_periodically(i);
     if (rcount > 10) {
       break;
     }
+    auto &linfo = m_iinfos[i];
     if (!is4D) {
       if (!(linfo.count == kInvalid)) {
         continue;
@@ -402,7 +403,7 @@ void SegyRW::read4d(float *dst, size_t is, size_t ie, size_t xs, size_t xe,
 
   int step = cal_progress_steps(ie - is, show_progress_, 50, 50);
   for (size_t ii = is; ii < ie; ii++) {
-    g_check_signals_callback();
+    check_signals_periodically(ii - is);
     if (step && (ii - is) % step == 0) {
       g_progress_callback(ii - is, ie - is);
     }
@@ -428,7 +429,7 @@ void SegyRW::read3d(float *dst, size_t is, size_t ie, size_t xs, size_t xe,
 
   int step = cal_progress_steps(ie - is, show_progress_, 50, 50);
   for (size_t ii = is; ii < ie; ii++) {
-    g_check_signals_callback();
+    check_signals_periodically(ii - is);
     if (step && (ii - is) % step == 0) {
       g_progress_callback(ii - is, ie - is);
     }
@@ -455,7 +456,7 @@ void SegyRW::read_tslice(float *dst, size_t t, size_t stepi, size_t stepx) {
   uint64_t sizeXT = (m_meta.nx + stepx - 1) / stepx;
 
   for (size_t ii = 0; ii < m_meta.ni; ii += stepi) {
-    g_check_signals_callback();
+    check_signals_periodically(ii / stepi);
 
     LineInfo &linfo = m_iinfos[ii];
     float *dstl = dst + ii / stepi * sizeXT;
@@ -562,7 +563,7 @@ void SegyRW::write3d(const float *data, size_t is, size_t ie, size_t xs,
 
   int step = cal_progress_steps(ie - is, show_progress_, 50, 50);
   for (size_t ii = is; ii < ie; ii++) {
-    g_check_signals_callback();
+    check_signals_periodically(ii - is);
     if (step && (ii - is) % step == 0) {
       g_progress_callback(ii - is, ie - is);
     }
@@ -591,7 +592,7 @@ void SegyRW::write4d(const float *data, size_t is, size_t ie, size_t xs,
 
   int step = cal_progress_steps(ie - is, show_progress_, 50, 50);
   for (size_t ii = is; ii < ie; ii++) {
-    g_check_signals_callback();
+    check_signals_periodically(ii - is);
     if (step && (ii - is) % step == 0) {
       g_progress_callback(ii - is, ie - is);
     }
@@ -1247,9 +1248,13 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
 
   // copy trace
   if (is2d || m_ndim == 2) {
+    WriteFunc wfunc;
+    if (!fromsrc) {
+      setWFunc(wfunc, m_meta.dformat);
+    }
     int step = cal_progress_steps(tend - tstart, show_progress_, 10000, 50);
     for (size_t it = tstart; it < tend; it++) {
-      g_check_signals_callback();
+      check_signals_periodically(it - tstart);
       if (step && (it - tstart) % step == 0) {
         g_progress_callback(it - tstart, tend - tstart);
       }
@@ -1265,7 +1270,12 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
         segy::set_keyi2(outptr, kTSampleIntervalField, dt);
       }
       outptr += kTraceHeaderSize;
-      memcpy(outptr, trDataStart(it, ts), nt * m_meta.esize);
+      if (fromsrc) {
+        memcpy(outptr, trDataStart(it, ts), nt * m_meta.esize);
+      } else {
+        wfunc(outptr, src, nt);
+        src += nt;
+      }
       outptr += nt * m_meta.esize;
     }
     if (step) {
@@ -1275,7 +1285,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
     uint64_t jump = 0;
     int step = cal_progress_steps(ie - is, show_progress_, 10000, 50);
     for (size_t ii = is; ii < ie; ii++) {
-      g_check_signals_callback();
+      check_signals_periodically(ii - is);
       if (step && (ii - is) % step == 0) {
         g_progress_callback(ii - is, ie - is);
       }
@@ -1340,11 +1350,11 @@ void SegyRW::create_by_sharing_header(const std::string &segy_name,
 
   size_t start_time = 0;
   if (strict) {
-    size_t ts = ranges[nd - 2], te = ranges[nd - 1];
+    size_t ts = ranges[(nd - 1) * 2], te = ranges[(nd - 1) * 2 + 1];
     if (ts > te || te > m_meta.nt) {
       throw std::runtime_error("ts and te index out of range");
     }
-    start_time = m_meta.start_time + ts * m_meta.dt;
+    start_time = m_meta.start_time + ts * m_meta.dt / 1000;
     dt_new = 0;
   } else {
     if (start_time_from_zero) {
@@ -1386,7 +1396,7 @@ void SegyRW::create_by_sharing_header(const std::string &segy_name,
 
   size_t start_time = 0;
   if (strict) {
-    size_t ts = ranges[nd - 2], te = ranges[nd - 1];
+    size_t ts = ranges[(nd - 1) * 2], te = ranges[(nd - 1) * 2 + 1];
     if (ts > te || te > m_meta.nt) {
       throw std::runtime_error("ts and te index out of range");
     }
@@ -1461,7 +1471,7 @@ void create_segy(const std::string &segyname, const float *src,
     throw std::runtime_error("mmap fail in 'rw' mode: " + segyname);
   }
   char *dst = rw_mmap.data();
-  int dformat = swap_endian<int16_t>(bheader + kBSampleFormatField);
+  int dformat = swap_endian<int16_t>(bheader + kBSampleFormatField - 1);
   size_t esize = 0;
 
   auto it = kElementSize.find(dformat);
@@ -1482,7 +1492,7 @@ void create_segy(const std::string &segyname, const float *src,
 
   int step = cal_progress_steps(ntrace, true, 10000, 50);
   for (size_t i = 0; i < ntrace; i++) {
-    g_check_signals_callback();
+    check_signals_periodically(i);
     if (step && i % step == 0) {
       g_progress_callback(i, ntrace);
     }

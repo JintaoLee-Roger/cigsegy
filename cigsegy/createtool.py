@@ -13,7 +13,8 @@ from cigsegy import utils
 
 def assemble_metainfo(shape, dformat=5, start=None, interval=None):
     ndim = len(shape)
-    assert ndim >= 2 and ndim <= 4
+    if ndim < 2 or ndim > 4:
+        raise ValueError(f"shape must be 2D, 3D, or 4D, got {shape}")
     meta = {}
     meta['ndim'] = ndim
     meta['unit'] = 'm'
@@ -27,7 +28,7 @@ def assemble_metainfo(shape, dformat=5, start=None, interval=None):
         meta['nx'] = shape[1]
         if ndim == 4:
             meta['no'] = shape[2]
-        meta['ntarce'] = np.prod(shape[:-1])
+        meta['ntrace'] = int(np.prod(shape[:-1]))
 
     # start
     if ndim == 2:
@@ -47,8 +48,8 @@ def assemble_metainfo(shape, dformat=5, start=None, interval=None):
         meta['end_xline'] = start[1] + meta['nx'] - 1
         meta['start_time'] = start[-1]
         if ndim == 4:
-            meta['start_offset'] = start[1]
-            meta['end_offset'] = start[1] + meta['nx'] - 1
+            meta['start_offset'] = start[2]
+            meta['end_offset'] = start[2] + meta['no'] - 1
 
     # interval
     if ndim == 2:
@@ -74,6 +75,14 @@ def assemble_metainfo(shape, dformat=5, start=None, interval=None):
 
 
 def generate_textual(meta, textual=None):
+    if isinstance(textual, (bytes, bytearray)):
+        textual = bytes(textual)
+        if len(textual) != 3200:
+            raise ValueError(
+                f"textual header length must be exactly 3200 bytes, got {len(textual)}"
+            )
+        return textual
+
     if textual is None:
         textual = parser_textual(meta)
     else:
@@ -246,12 +255,14 @@ class SegyCreate:
     """
 
     def __init__(self, fname: str, data: np.ndarray, metainfo=None):
+        self.fname = fname
         self.filename = fname
         self.textual_header = None
         self.binary_header = None
         self.trace_header = None
-        assert data.ndim >= 2 and data.ndim <= 4
-        self.data = data
+        if data.ndim < 2 or data.ndim > 4:
+            raise ValueError(f"data must be 2D, 3D, or 4D, got shape={data.shape}")
+        self.data = np.ascontiguousarray(data, dtype=np.float32)
         self.shape = data.shape
         if metainfo is None:
             metainfo = assemble_metainfo(data.shape)
@@ -264,8 +275,9 @@ class SegyCreate:
     def set_binary_header(self, bheader: np.ndarray = None):
         if bheader is None:
             bheader = self._init_bheader()
-        bheader = bheader.view(np.uint8)
-        assert bheader.size == 400
+        bheader = np.ascontiguousarray(bheader, dtype=np.uint8)
+        if bheader.size != 400:
+            raise ValueError(f"binary header size must be 400, got {bheader.size}")
         self._set_keyi2(bheader, 17, self.metainfo['dt'])
         self._set_keyi2(bheader, 21, self.metainfo['nt'])
         self._set_keyi2(bheader, 25, self.metainfo['dformat'])
@@ -274,8 +286,9 @@ class SegyCreate:
     def set_trace_header(self, theader: np.ndarray = None):
         if theader is None:
             theader = self._init_theader()
-        theader = theader.view(np.uint8)
-        assert theader.size == 240
+        theader = np.ascontiguousarray(theader, dtype=np.uint8)
+        if theader.size != 240:
+            raise ValueError(f"trace header size must be 240, got {theader.size}")
         self._set_keyi2(theader, 69, self.metainfo['scalar'])
         self._set_keyi2(theader, 115, self.metainfo['nt'])
         self._set_keyi2(theader, 117, self.metainfo['dt'])
@@ -286,6 +299,7 @@ class SegyCreate:
         self.metainfo['dt'] = dt
         if self.binary_header is not None:
             self._set_keyi2(self.binary_header, 17, dt)
+        if self.trace_header is not None:
             self._set_keyi2(self.trace_header, 117, dt)
 
     def set_start_time(self, start_time):
@@ -294,8 +308,8 @@ class SegyCreate:
             self._set_keyi2(self.trace_header, 105, start_time)
 
     def copy_textual_from(self, segyname):
-        with open(segyname, 'r') as f:
-            self.textual_header = str(f.read(3200))
+        with open(segyname, 'rb') as f:
+            self.textual_header = f.read(3200)
 
     def copy_bheader_from(self, segyname):
         self.binary_header = np.fromfile(
@@ -318,18 +332,31 @@ class SegyCreate:
     def create(self, keys: np.ndarray = None):
         if keys is None:
             keys = self._generate_keys()
-        assert keys.ndim == 2
+        keys = np.ascontiguousarray(keys, dtype=np.int32)
+        if keys.ndim != 2:
+            raise ValueError("keys must be a 2D array")
         if (self._ndim < 4 and keys.shape[1] == 2) or (self._ndim == 4
                                                        and keys.shape[1] == 3):
             xy = self._generate_xy()
-            assert xy.shape[0] == keys.shape[0]
+            if xy.shape[0] != keys.shape[0]:
+                raise ValueError("xy size does not match keys size")
             keys = np.concatenate([keys, xy], axis=1)
         if self._ndim < 4:
-            assert keys.shape[1] == 4
+            if keys.shape[1] != 4:
+                raise ValueError(
+                    f"2D/3D create expects keys.shape[1] == 4, got {keys.shape[1]}"
+                )
         else:
-            assert keys.shape[1] == 5
+            if keys.shape[1] != 5:
+                raise ValueError(
+                    f"4D create expects keys.shape[1] == 5, got {keys.shape[1]}"
+                )
 
-        assert keys.shape[0] == np.prod(self.shape[:-1])
+        ntrace = int(np.prod(self.shape[:-1]))
+        if keys.shape[0] != ntrace:
+            raise ValueError(
+                f"keys rows must equal trace count ({ntrace}), got {keys.shape[0]}"
+            )
 
         if self.textual_header is None:
             self.set_textual_header()
@@ -344,8 +371,9 @@ class SegyCreate:
     # fmt: off
     def _generate_keys(self):
         if self._ndim == 2:
-            x, y = np.meshgrid(np.array([10]), np.arange(100, self.shape[0]+100), indexing='ij')
-            keys = np.c_[x.flatten(), y.flatten()]
+            x = np.ones(self.shape[0], dtype=np.int32)
+            y = np.arange(100, self.shape[0] + 100, dtype=np.int32)
+            keys = np.column_stack([x, y])
         else:
             ib = self.metainfo['start_iline']
             ie = ib + self.shape[0]
@@ -353,29 +381,28 @@ class SegyCreate:
             xe = xb + self.shape[1]
             if self._ndim == 3:
                 x, y = np.meshgrid(np.arange(ib, ie, 1), np.arange(xb, xe, 1), indexing='ij')
-                keys = np.c_[x.flatten(), y.flatten()]
+                keys = np.column_stack([x.ravel(), y.ravel()]).astype(np.int32, copy=False)
             else:
                 ob = self.metainfo['start_offset']
                 oe = ob + self.shape[2]
                 x, y, z = np.meshgrid(np.arange(ib, ie, 1), np.arange(xb, xe, 1), np.arange(ob, oe, 1), indexing='ij')
-                keys = np.c_[x.flatten(), y.flatten(), z.flatten()]
+                keys = np.column_stack([x.ravel(), y.ravel(), z.ravel()]).astype(np.int32, copy=False)
         return keys
 
     def _generate_xy(self):
         if self._ndim == 2:
-            x, y = np.meshgrid(np.array([]), np.arange(), indexing='ij')
-            xy = np.c_[x.flatten(), y.flatten()]
+            x = np.zeros(self.shape[0], dtype=np.int32)
+            y = np.arange(self.shape[0], dtype=np.int32)
+            xy = np.column_stack([x, y])
         else:
             di = self.metainfo['di']
             dx = self.metainfo['dx']
-            ni = np.arange(108232, 108232+di*self.shape[0], di)
-            nx = np.arange(413897, 413897+dx*self.shape[1], dx)
-            if self._ndim == 3:
-                x, y = np.meshgrid(x, y, indexing='ij')
-                xy = np.c_[x.flatten(), y.flatten()]
-            else:
-                x, y, z = np.meshgrid(x, y, np.arange(10, self.shape[2]+10), indexing='ij')
-                xy = np.c_[x.flatten(), y.flatten(), z.flatten()]
+            xvals = np.rint(108232 + di * np.arange(self.shape[0])).astype(np.int32)
+            yvals = np.rint(413897 + dx * np.arange(self.shape[1])).astype(np.int32)
+            x, y = np.meshgrid(xvals, yvals, indexing='ij')
+            xy = np.column_stack([x.ravel(), y.ravel()]).astype(np.int32, copy=False)
+            if self._ndim == 4:
+                xy = np.repeat(xy, self.shape[2], axis=0)
 
         return xy
     # fmt: on

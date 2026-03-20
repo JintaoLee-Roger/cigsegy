@@ -351,26 +351,7 @@ def guess(segy_name: str,
 
     # eval xloc and yloc
     if xloc is None or yloc is None:
-        xys = _get_keys4(segy, [181, 185, 73, 77], 0, 100)
-        if len(np.unique(xys[:, 2])) == 0 and len(np.unique(xys[:, 3])) == 0:
-            xloc, yloc = 181, 185
-        elif len(np.unique(xys[:, 0])) == 0 and len(np.unique(xys[:, 1])) == 0:
-            xloc, yloc = 73, 77
-        else:
-            scalar = segy.keyi2(0, 71)
-            if scalar < -1000 or scalar > 1000:
-                scalar = 1
-            scalar = 1 if scalar == 0 else scalar
-            scalar = -1 / scalar if scalar < 0 else scalar
-            xys = xys * scalar
-            d1 = ((xys[-1, 0] - xys[0, 0])**2 +
-                  (xys[-1, 1] - xys[0, 1])**2)**0.5
-            d2 = ((xys[-1, 2] - xys[0, 2])**2 +
-                  (xys[-1, 3] - xys[0, 3])**2)**0.5
-            if d1 < 3 and d2 > 3:
-                xloc, yloc = 73, 77
-            else:
-                xloc, yloc = 181, 185
+        xloc, yloc = _guess_xy_locations(segy)
     return iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d
 
 
@@ -439,10 +420,14 @@ def parse_metainfo(meta: dict):
     rangeinfo += timer
     out += rangeinfo + "\n"
 
-    tracesort = "trace sorting code: " + kTraceSortingHelp[meta['trace_sorting_code']] # yapf: disable
+    tracesort = "trace sorting code: " + kTraceSortingHelp.get(
+        meta.get('trace_sorting_code', 0), "Unknown"
+    )
     out += tracesort + "\n"
 
-    dformat = f"scalar: {meta['scalar']}, data format: " + kDataSampleFormatHelp[meta['dformat']] # yapf: disable
+    dformat = f"scalar: {meta.get('scalar', 1)}, data format: " + kDataSampleFormatHelp.get(  # yapf: disable
+        meta.get('dformat', 5), "Unknown"
+    )
     out += dformat + "\n"
 
     kinfo = "(key info) "
@@ -451,9 +436,13 @@ def parse_metainfo(meta: dict):
         kinfo += f"iline: {meta['iline']:3}, xline: {meta['xline']:3}"
         stepinfo += f"istep: {meta['istep']:3}, xstep: {meta['xstep']:3}"
     if meta['ndim'] == 4:
-        kinfo += f", offset: {meta['offset']:3}"
-        stepinfo += f"ostep: {meta['ostep']:3}"
-    kinfo += f", xloc: {meta['xloc']:3}, yloc: {meta['yloc']:3}\n"
+        kinfo += f"iline: {meta['iline']:3}, xline: {meta['xline']:3}, offset: {meta['offset']:3}"
+        stepinfo += f"istep: {meta['istep']:3}, xstep: {meta['xstep']:3}, ostep: {meta['ostep']:3}"
+    elif meta['ndim'] == 2:
+        kinfo += f"xloc: {meta.get('xloc', 181):3}, yloc: {meta.get('yloc', 185):3}"
+    if meta['ndim'] > 2:
+        kinfo += f", xloc: {meta['xloc']:3}, yloc: {meta['yloc']:3}"
+    kinfo += "\n"
     out += kinfo
     out += stepinfo + "\n"
 
@@ -462,7 +451,7 @@ def parse_metainfo(meta: dict):
 
 def post_process_meta(segy: Pysegy, meta: dict, apply_scalar=True):
     unit = segy.bkeyi2(55)
-    if apply_scalar:
+    if apply_scalar and 'di' in meta and 'dx' in meta:
         if meta['scalar'] == 0:
             meta['scalar'] = 1
         scalar = -1 / meta['scalar'] if meta['scalar'] < 0 else meta['scalar']
@@ -473,6 +462,32 @@ def post_process_meta(segy: Pysegy, meta: dict, apply_scalar=True):
     else:
         meta['unit'] = 'm'
     return meta
+
+
+def make_2d_meta(segy: Pysegy, xloc: int = None, yloc: int = None):
+    if xloc is None or yloc is None:
+        xloc, yloc = _guess_xy_locations(segy)
+
+    dt = segy.bkeyi2(17)
+    if dt <= 0:
+        dt = segy.keyi2(0, 117)
+    scalar = segy.keyi2(0, 71)
+    if scalar == 0:
+        scalar = 1
+
+    meta = {
+        'ndim': 2,
+        'ntrace': segy.ntrace,
+        'nt': segy.nt,
+        'dt': dt,
+        'start_time': segy.keyi2(0, 105),
+        'trace_sorting_code': segy.bkeyi2(29),
+        'dformat': segy.bkeyi2(25),
+        'scalar': scalar,
+        'xloc': xloc,
+        'yloc': yloc,
+    }
+    return post_process_meta(segy, meta, False)
 
 
 ############# Internal functions #############
@@ -496,6 +511,30 @@ def _get_keys4(segy: Pysegy, keyloc, beg=-1, end=0):
         return int(d[0])
     else:
         return d
+
+
+def _guess_xy_locations(segy: Pysegy):
+    sample_end = min(segy.ntrace, 100)
+    xys = _get_keys4(segy, [181, 185, 73, 77], 0, sample_end)
+    if xys.ndim == 1:
+        xys = xys.reshape(1, -1)
+
+    if len(np.unique(xys[:, 2])) == 1 and len(np.unique(xys[:, 3])) == 1:
+        return 181, 185
+    if len(np.unique(xys[:, 0])) == 1 and len(np.unique(xys[:, 1])) == 1:
+        return 73, 77
+
+    scalar = segy.keyi2(0, 71)
+    if scalar < -1000 or scalar > 1000:
+        scalar = 1
+    scalar = 1 if scalar == 0 else scalar
+    scalar = -1 / scalar if scalar < 0 else scalar
+    xys = xys * scalar
+    d1 = ((xys[-1, 0] - xys[0, 0])**2 + (xys[-1, 1] - xys[0, 1])**2)**0.5
+    d2 = ((xys[-1, 2] - xys[0, 2])**2 + (xys[-1, 3] - xys[0, 3])**2)**0.5
+    if d1 < 3 and d2 > 3:
+        return 73, 77
+    return 181, 185
 
 
 def _to_number(d, loc, ksize, dtype):

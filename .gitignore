@@ -32,6 +32,8 @@ compile_commands.json
 *.lib
 *_
 
+test*
+
 test.*
 thridpart/
 .cache

@@ -38,9 +38,10 @@ def get_transform_metrix(p1: np.ndarray, p2: np.ndarray) -> np.ndarray:
 
     A = np.zeros((2 * N, 6), float)
     b = p2.flatten()
-    for i in range(N):
-        A[2 * i] = [p1[i, 0], p1[i, 1], 1, 0, 0, 0]
-        A[2 * i + 1] = [0, 0, 0, p1[i, 0], p1[i, 1], 1]
+    A[0::2, :2] = p1
+    A[0::2, 2] = 1
+    A[1::2, 3:5] = p1
+    A[1::2, 5] = 1
     H, residuals, rank, s = np.linalg.lstsq(A, b, rcond=None)
     H = np.concatenate([H, [0, 0, 1]], 0)
 

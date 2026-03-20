@@ -3,22 +3,16 @@
 # University of Science and Technology of China (USTC).
 # All rights reserved.
 
-import os, sys
-import subprocess
 from pathlib import Path
 from setuptools import setup, find_packages
 from distutils.ccompiler import get_default_compiler
 
-
-def install_package(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-
 try:
     from pybind11.setup_helpers import Pybind11Extension, build_ext
 except ImportError:
-    install_package("pybind11")
-    from pybind11.setup_helpers import Pybind11Extension, build_ext
+    raise RuntimeError(
+        "pybind11 is required to build cigsegy. Install build dependencies first."
+    )
 
 cwd = Path(__file__).resolve().parent
 
@@ -59,13 +53,12 @@ setup(
     license='MIT',
     install_requires=['numpy', 'tqdm'],
     python_requires=">=3.6",
-    setup_requires=['pybind11'],
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},
     packages=find_packages(exclude=['docs', 'python', 'tools', 'tests']),
     include_package_data=True,
     package_data={
-        "cigse": ["*.pyi"],
-        "cigse.cpp": ["*.pyi"],
+        "cigsegy": ["*.pyi"],
+        "cigsegy.cpp": ["*.pyi"],
     },
 )

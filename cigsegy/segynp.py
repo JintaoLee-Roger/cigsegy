@@ -21,8 +21,8 @@ class ScanMixin:
     def _eval_range(self):
         if self.ntrace < 6000:
             p0 = self._segy.collect(0, self.ntrace, 0, self.nt)
-            self._min = mi
-            self._max = ma
+            self._min = float(p0.min())
+            self._max = float(p0.max())
             return
 
         s, e = self.ntrace - 4000, 4000
@@ -78,7 +78,7 @@ class ScanMixin:
                 is4d = None
             else:
                 is4d = ndim == 4
-            if isinstance(keylocs, List):
+            if isinstance(keylocs, (list, tuple)):
                 geom = tools.full_scan(self._segy, *keylocs[:3], is4d=is4d)
             else:
                 offset = keylocs.get('offset', 37)
@@ -386,7 +386,7 @@ class RWMixin:
     def to_numpy(self):
         """like pandas"""
         self._segy.show_progress(True)
-        if self.unsorted and self.ndim > 2:
+        if self._ignore or (self.unsorted and self.ndim > 2):
             d = self[...]
         else:
             d = self._segy.read()
@@ -415,6 +415,21 @@ class RWMixin:
                 raise ValueError("Cannot save the data in .T mode and not load")
             self._segy.tofile(fpath, self.ndim == 2)
         self._segy.show_progress(False)
+
+    def _collect_with_valid_indices(self, tidx, shape, tb: int, te: int):
+        tidx = np.asarray(tidx, dtype=np.int32).reshape(-1)
+        ns = te - tb
+        out = np.zeros((tidx.size, ns), dtype=np.float32)
+        valid = tidx >= 0
+        if np.any(valid):
+            out[valid] = self._segy.collect(tidx[valid], tb, te)
+        return out.reshape(*shape, ns)
+
+    def _require_writable_trace_indices(self, tidx):
+        tidx = np.asarray(tidx, dtype=np.int32).reshape(-1)
+        if np.any(tidx < 0):
+            raise IndexError("Cannot write into missing traces in the geometry")
+        return tidx
 
     # fmt: off
     def _read_regular(self, idx) -> np.ndarray:
@@ -483,10 +498,11 @@ class RWMixin:
             grid, shape = self._create_meshgrid(idx[:-2])
             tidx = self.map_to_indices(grid)
             if idx[-1] is None:
-                d = self._segy.collect(tidx, 0, self.nt).reshape(*shape, -1)
+                d = self._collect_with_valid_indices(tidx, shape, 0, self.nt)
                 d = d[..., idx[-2]]
             else:
-                d = self._segy.collect(tidx, idx[-2], idx[-1]).reshape(*shape, -1)
+                d = self._collect_with_valid_indices(tidx, shape, idx[-2],
+                                                     idx[-1])
 
         return self._post_process(d)
 
@@ -506,10 +522,11 @@ class RWMixin:
             grid, shape = self._create_meshgrid(idx[:-2])
             tidx = self.map_to_indices(grid)
             if idx[-1] is None:
-                d = self._segy.collect(tidx, 0, self.nt).reshape(*shape, -1)
+                d = self._collect_with_valid_indices(tidx, shape, 0, self.nt)
                 d = d[..., idx[-2]]
             else:
-                d = self._segy.collect(tidx, idx[-2], idx[-1]).reshape(*shape, -1)
+                d = self._collect_with_valid_indices(tidx, shape, idx[-2],
+                                                     idx[-1])
 
         return self._post_process(d)
 
@@ -550,7 +567,8 @@ class RWMixin:
             if not self.is_create_geometry:
                 raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
             grid, shape = self._create_meshgrid(idx[:-2])
-            tidx = self.map_to_indices(grid)
+            tidx = self._require_writable_trace_indices(
+                self.map_to_indices(grid))
             self._segy.write_traces(data, tidx, idx[-2], idx[-1])
 
 
@@ -568,7 +586,8 @@ class RWMixin:
             if not self.is_create_geometry:
                 raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
             grid, shape = self._create_meshgrid(idx[:-2])
-            tidx = self.map_to_indices(grid)
+            tidx = self._require_writable_trace_indices(
+                self.map_to_indices(grid))
             self._segy.write_traces(data, tidx, idx[-2], idx[-1])
 
 
@@ -584,8 +603,7 @@ class RWMixin:
             # the time dim is ndarray
             self._segy.write_traces(data, idx[0], idx[2], idx[3])
         else:  # the first dim is ib, ie
-
-            self._segy.write_traces(idx[0], idx[1], idx[2], idx[3])
+            self._segy.write_traces(data, idx[0], idx[1], idx[2], idx[3])
 
 
     def _create_meshgrid(self, idx):
@@ -700,8 +718,8 @@ class RWMixin:
                 if not (k.step is None or k.step == 1):
                     raise IndexError(f"only support step is 1, while got a step {k.step} in the {i}th dimension")
 
-                start_idx[i] = k.start or 0
-                end_idx[i] = k.stop or self.shape[i]
+                start_idx[i] = 0 if k.start is None else k.start
+                end_idx[i] = self.shape[i] if k.stop is None else k.stop
 
             elif isinstance(k, (List, np.ndarray)):
                 start_idx[i] = np.array(k)
@@ -735,10 +753,10 @@ class CheckMixin:
 
     def _check_bound(self, dim, ib, ie):
         if ie == None:
-            assert isinstance(ib, np.ndarray) and ib.ndim == 1, f"if ie is 0, ib must be a 1D numpy array"
-            assert ib.min() >= 0 and ib.max() <= self.shape[dim], f"index array out of range in dim {dim}"
+            assert isinstance(ib, np.ndarray) and ib.ndim == 1, f"if ie is None, ib must be a 1D numpy array"
+            assert ib.min() >= 0 and ib.max() < self.shape[dim], f"index array out of range in dim {dim}"
         else:
-            assert ib >= 0 and ib < ie and ib <= self.shape[dim], f"index out of range in dim {dim}"
+            assert ib >= 0 and ib < ie and ie <= self.shape[dim], f"index out of range in dim {dim}"
 
 
     def _check_bound2(self, idx):
@@ -759,7 +777,7 @@ class CheckMixin:
         dstshape = []
         for i in range(self.ndim):
             if idx[i * 2 + 1] is None:
-                dstshape.append(idx[i * 2].shape)
+                dstshape.append(np.asarray(idx[i * 2]).size)
             else:
                 dstshape.append(idx[i * 2 + 1] - idx[i * 2])
         dstshape = [k for k in dstshape if k != 1]
@@ -807,11 +825,12 @@ class SegyCMixin:
         if start is None:
             start = [0] * len(shape)
 
-        if len(textual) > 0 and len(textual) != 3200:
-            textual = createtool.generate_textual(textual)
+        if textual not in ("", None):
+            textual = createtool.generate_textual(self._metainfo, textual)
 
         self._segy.show_progress(True)
         if isinstance(src, np.ndarray):
+            src = np.ascontiguousarray(src, dtype=np.float32)
             self._segy.create_by_sharing_header(outname, src, start, as2d, textual)
         else:
             self._segy.create_by_sharing_header(outname, src, shape, start, as2d, textual)
@@ -824,20 +843,27 @@ class AccessMixin:
 
     def __getattr__(self, name):
         if name in ['iline', 'xline', 'offset', 'coordx', 'coordy', 'itrace']:
-            return self._SegyAccessor(self._segy, name)
+            return self._SegyAccessor(self._segy, name, getattr(self, '_mode', 'r'))
 
         return super().__getattr__(name)
 
 
     def __setattr__(self, name: str, value) -> None:
         if name in ['iline', 'xline', 'offset', 'coordx', 'coordy', 'itrace']:
-            accessor = self._SegyAccessor(self._segy, name)
+            accessor = self._SegyAccessor(self._segy, name, getattr(self, '_mode', 'r'))
             accessor[:] = value
             return
         else:
             super().__setattr__(name, value)
 
     class _SegyAccessor:
+        _HEADER_KEYLOCS = {
+            'iline': 'iline',
+            'xline': 'xline',
+            'offset': 'offset',
+            'coordx': 'xloc',
+            'coordy': 'yloc',
+        }
 
         def __init__(self, segy, attribute, mode='r'):
             assert mode in ['r', 'rw']
@@ -850,24 +876,96 @@ class AccessMixin:
             method = getattr(self._segy, self.attribute)
             if isinstance(index, (int, np.integer)):
                 return method(index)
-            else:
-                return np.array([method(i) for i in index])
+            return self._batch_get(index)
 
         def __setitem__(self, index, value):
             if self._mode == 'r':
                 raise RuntimeError("The SEG-Y file is not writable, as you set the `mode` to 'r'. If you want to enable write mode, set to `rw`") # yapf: disable
             index = self._process_index(index)
-            # TODO: check the value size?
+            if isinstance(index, (int, np.integer)):
+                self._set_scalar(index, value)
+                return
+            self._set_batch(index, value)
+
+        def _batch_get(self, index: np.ndarray):
+            if index.size == 0:
+                if self.attribute == 'itrace':
+                    return np.empty((0, self._segy.nt), dtype=np.float32)
+                return np.empty((0,), dtype=np.int32)
+            if self.attribute == 'itrace':
+                return self._collect_traces(index)
+            keyloc = self._segy.get_keylocs()[self._HEADER_KEYLOCS[self.attribute]]
+            return self._get_trace_keys(index, [keyloc], [4]).reshape(-1)
+
+        def _set_scalar(self, index, value):
+            if self.attribute == 'itrace':
+                trace = np.ascontiguousarray(np.asarray(value, dtype=np.float32))
+                self._segy.write_itrace(trace, int(index))
+                return
+
+            method = getattr(self._segy, f"set_{self.attribute}")
+            method(int(index), value)
+
+        def _set_batch(self, index: np.ndarray, value):
+            if index.size == 0:
+                return
 
             if self.attribute == 'itrace':
-                method = getattr(self._segy, f"write_{self.attribute}")
+                traces = np.ascontiguousarray(np.asarray(value, dtype=np.float32))
+                if self._is_contiguous_range(index):
+                    self._segy.write_traces(
+                        traces,
+                        int(index[0]),
+                        int(index[-1]) + 1,
+                        0,
+                        self._segy.nt,
+                    )
+                else:
+                    self._segy.write_traces(
+                        traces,
+                        index.astype(np.int32, copy=False),
+                        0,
+                        self._segy.nt,
+                    )
+                return
+
+            values = np.asarray(value)
+            if values.ndim == 0:
+                values = np.full(index.shape, values.item())
             else:
-                method = getattr(self._segy, f"set_{self.attribute}")
-            if isinstance(index, (int, np.integer)):
-                method(index, value)
-            else:
-                for i, v in zip(index, value):
-                    method(i, v)
+                values = values.reshape(-1)
+            if values.size != index.size:
+                raise ValueError(
+                    "The number of values must match the number of indices")
+
+            method = getattr(self._segy, f"set_{self.attribute}")
+            for i, v in zip(index, values):
+                method(int(i), v.item() if isinstance(v, np.generic) else v)
+
+        def _collect_traces(self, index: np.ndarray) -> np.ndarray:
+            if self._is_contiguous_range(index):
+                return self._segy.collect(
+                    int(index[0]),
+                    int(index[-1]) + 1,
+                    0,
+                    self._segy.nt,
+                )
+            return self._segy.collect(index.astype(np.int32, copy=False), 0,
+                                      self._segy.nt)
+
+        def _get_trace_keys(self, index: np.ndarray, keys, length) -> np.ndarray:
+            if self._is_contiguous_range(index):
+                return self._segy.get_trace_keys(
+                    keys,
+                    length,
+                    int(index[0]),
+                    int(index[-1]) + 1,
+                )
+            return self._segy.get_trace_keys(keys, length,
+                                             index.astype(np.int32, copy=False))
+
+        def _is_contiguous_range(self, index: np.ndarray) -> bool:
+            return index.size > 0 and np.all(index[1:] == index[:-1] + 1)
 
         def _process_index(self, keys):
             if isinstance(keys, tuple):
@@ -881,12 +979,16 @@ class AccessMixin:
 
             elif isinstance(keys, slice):
                 # Slice index
-                start, stop, step = keys.start, keys.stop, keys.step
-                if keys.start < 0:
+                start = 0 if keys.start is None else keys.start
+                stop = self._segy.ntrace if keys.stop is None else keys.stop
+                step = 1 if keys.step is None else keys.step
+                if start < 0:
                     start += self._segy.ntrace
-                if keys.stop < 0:
+                if stop < 0:
                     stop += self._segy.ntrace
                 keys = np.arange(start, stop, step)
+                if keys.size == 0:
+                    return keys
                 assert keys.min() >= 0 and keys.max() < self._segy.ntrace, "Index out of range"
                 return keys
 
@@ -894,6 +996,9 @@ class AccessMixin:
                 # List or numpy array of indices
                 keys = np.array(keys).squeeze()
                 assert keys.ndim == 1, "Only 1D indexing is supported."
+                if keys.size == 0:
+                    return keys
+                keys = np.where(keys < 0, keys + self._segy.ntrace, keys)
                 assert keys.min() >= 0 and keys.max() < self._segy.ntrace, "Index out of range"
                 return keys
 
@@ -985,8 +1090,7 @@ class InnerMixin:
         return out
 
     def __setitem__(self, slices, data: np.ndarray) -> None:
-        if data.dtype != np.float32:
-            raise TypeError("The data type of the input data must be np.float32") # yapf: disable
+        data = np.asarray(data, dtype=np.float32)
         idx = self._process_keys(slices)
 
         if self._T:
@@ -1023,10 +1127,11 @@ class InnerMixin:
 
     def __repr__(self) -> str:
         out = f"cigsegy.SegyNP class, file name: '{self.file_name}'\n\n"
-        keys = self._segy.get_keylocs()
-        meta = self._segy.get_metainfo()
-        meta = {**keys, **meta}
-        meta = utils.post_process_meta(self._segy, meta)
+        if self.ndim == 2 or self._metainfo is None:
+            meta = utils.make_2d_meta(self._segy)
+        else:
+            meta = {**self._keylocs, **self._metainfo}
+            meta = utils.post_process_meta(self._segy, meta)
         out += utils.parse_metainfo(meta)
         return out
 
@@ -1036,6 +1141,7 @@ class InnerMixin:
 
 class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
              ScanMixin, CheckMixin, AccessMixin, SegyCMixin):
+    _VALID_VIEW_MODES = {'scan', 'lazy', '2d', 'unsorted'}
 
     def __init__(self,
                  filename: str,
@@ -1047,12 +1153,16 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
                  as_unsorted: bool = False,
                  fast_read: bool = False,
                  show_progress: bool = False,
-                 keys: dict = None) -> None:
+                 keys: dict = None,
+                 view_mode: str = None) -> None:
         np.set_printoptions(suppress=True)
 
         assert mode in ['r', 'rw'], "`mode` only can be 'r' or 'rw'"
         self._ndim = ndim
         self._fname = filename
+        self._requested_keylocs = keylocs
+        self._requested_keys = keys
+        self._requested_ndim = ndim
 
         self._show_progress = show_progress
         self._segy = _CXX_SEGY.Pysegy(str(filename), mode=='rw')
@@ -1069,7 +1179,6 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         # for values
         self._min = None
         self._max = None
-        self._eval_range()
 
         # for coordinates transform
         self._trans_matrix = None
@@ -1087,23 +1196,16 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
 
         self._T = False
 
-        if ndim == 2 and as_unsorted:
-            warnings.warn("`ndim` is 2, so `as_unsorted` will be ignored")
-            as_unsorted = False
-        self._unsorted = as_unsorted
+        self._view_mode = self._resolve_view_mode(view_mode, ndim, shape_hint,
+                                                  as_unsorted)
+        self._unsorted = self._view_mode == 'unsorted'
 
-        if shape_hint is None and (ndim is None or ndim != 2):
-            if self._unsorted:
-                self._scan_unsorted(keylocs, keys, ndim)
-            else:
-                try:
-                    self._scan(keylocs)
-                except Exception as e:
-                    raise RuntimeError(f"{str(e)}\n This SEG-Y file may be unsorted, you can pass `as_unsorted` to view it as unsorted file, but it may be slow") from e # yapf: disable
-            if ndim is not None and self.ndim != ndim:
-                raise RuntimeError(f"You set ndim as {ndim}, but the SEG-Y file's ndim is {self.ndim}") # yapf: disable
-        elif shape_hint is not None:
-            if len(shape_hint) < 3 and len(shape_hint) > 4:
+        if shape_hint is not None:
+            if view_mode not in (None, 'lazy'):
+                raise ValueError(
+                    "shape_hint can only be used with view_mode='lazy' or by leaving view_mode unset"
+                )
+            if len(shape_hint) < 3 or len(shape_hint) > 4:
                 raise ValueError("shape_hint must be of length 3 or 4")
             if shape_hint[-1] != self._shape2[-1]:
                 raise ValueError(f"shape_hint's last dimension must be equal to nt ({self._shape2[-1]}), but got {shape_hint[-1]}") # yapf: disable 
@@ -1112,6 +1214,67 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
             self._ndim = len(shape_hint)
             self._shape3 = shape_hint
             self._ignore = True
+            self._view_mode = 'lazy'
+        elif self._view_mode == 'unsorted':
+            self._scan_unsorted(keylocs, keys, ndim)
+        elif self._view_mode == 'scan':
+            try:
+                self._scan(keylocs)
+            except Exception as e:
+                if ndim in (None, 2):
+                    self._init_as_2d(str(e))
+                else:
+                    raise RuntimeError(f"{str(e)}\n This SEG-Y file may be unsorted, you can pass `as_unsorted` to view it as unsorted file, but it may be slow") from e # yapf: disable
+            if ndim is not None and self.ndim != ndim:
+                raise RuntimeError(f"You set ndim as {ndim}, but the SEG-Y file's ndim is {self.ndim}") # yapf: disable
+        else:
+            self._init_as_2d()
+
+    def _resolve_view_mode(self, view_mode, ndim, shape_hint, as_unsorted):
+        if view_mode is not None:
+            if view_mode not in self._VALID_VIEW_MODES:
+                raise ValueError(
+                    f"view_mode must be one of {sorted(self._VALID_VIEW_MODES)}, got {view_mode!r}"
+                )
+            if as_unsorted and view_mode != 'unsorted':
+                warnings.warn(
+                    f"`as_unsorted=True` is ignored because `view_mode='{view_mode}'`"
+                )
+            resolved = view_mode
+        else:
+            if as_unsorted:
+                resolved = 'unsorted'
+            elif shape_hint is not None:
+                resolved = 'lazy'
+            elif ndim == 2:
+                resolved = '2d'
+            else:
+                resolved = 'scan'
+
+        if resolved == 'unsorted' and ndim == 2:
+            warnings.warn("`ndim` is 2, so unsorted view will be ignored")
+            return '2d'
+
+        return resolved
+
+    def _init_as_2d(self, reason: str = None):
+        if reason:
+            warnings.warn(
+                f"Failed to create 3D/4D geometry, fallback to 2D trace view: {reason}"
+            )
+        self._ndim = 2
+        self._shape3 = None
+        self._metainfo = utils.make_2d_meta(self._segy)
+        self._keylocs = {
+            'iline': None,
+            'xline': None,
+            'offset': None,
+            'istep': 1,
+            'xstep': 1,
+            'ostep': 1,
+            'xloc': self._metainfo['xloc'],
+            'yloc': self._metainfo['yloc'],
+        }
 
 
     @property
@@ -1204,14 +1367,30 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         Treat the SEG-Y file as a collection of traces, shape is like (ntrace, nt)
         """
         self._ndim = 2
+        self._view_mode = '2d'
 
     def to_nd(self):
         """
         Treat the SEG-Y file as a 3D/4D array. If the SEG-Y file is scanned, the keylocs will be ignored 
         """
+        if self._ignore:
+            self._ndim = len(self._shape3)
+            self._view_mode = 'lazy'
+            return
+
+        if self._view_mode == 'unsorted':
+            if self._shape3 is None:
+                self._scan_unsorted(self._requested_keylocs,
+                                    self._requested_keys,
+                                    self._requested_ndim)
+            self._ndim = len(self._shape3)
+            self._view_mode = 'unsorted'
+            return
+
         if self._shape3 is None:
-            self._scan()
+            self._scan(self._requested_keylocs)
         self._ndim = self._segy.ndim
+        self._view_mode = 'scan'
 
     def max(self, real=False) -> float:
         """
@@ -1220,7 +1399,9 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         if real is True, we read all traces to calculate max
         """
         if real:
-            return self[...].min()
+            return self[...].max()
+        if self._max is None:
+            self._eval_range()
         return self._max
 
     def min(self, real=False) -> float:
@@ -1230,7 +1411,9 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
         if real is True, we read all traces to calculate min
         """
         if real:
-            return self[...].max()
+            return self[...].min()
+        if self._min is None:
+            self._eval_range()
         return self._min
 
     @property
@@ -1248,6 +1431,10 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
     @property
     def access_mode(self) -> str:
         return self._mode
+
+    @property
+    def view_mode(self) -> str:
+        return self._view_mode
 
     @property
     def fast_read(self) -> bool:

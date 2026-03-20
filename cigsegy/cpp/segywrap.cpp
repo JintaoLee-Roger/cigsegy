@@ -525,7 +525,8 @@ npfloat ieees_to_ibms(const npfloat &ieee_arr, bool is_litte_endian_input,
 }
 
 npfloat ibms_to_ieees(const npfloat &ibm_arr, bool is_big_endian) {
-  std::vector<int> shape_vec(ibm_arr.shape(), ibm_arr.shape() + ibm_arr.ndim());
+  std::vector<size_t> shape_vec(ibm_arr.shape(),
+                                ibm_arr.shape() + ibm_arr.ndim());
 
   size_t size = ibm_arr.size();
 
@@ -538,7 +539,7 @@ npfloat ibms_to_ieees(const npfloat &ibm_arr, bool is_big_endian) {
     ieee_ptr[i] = segy::ibm_to_ieee(ibm_ptr[i], is_big_endian);
   }
 
-  return ibm_arr;
+  return ieee_arr;
 }
 
 PYBIND11_MODULE(_CXX_SEGY, m) {

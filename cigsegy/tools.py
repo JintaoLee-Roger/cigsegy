@@ -34,7 +34,7 @@ def read_header(fname: str, type, n=0, printstr=True):
         try:
             segy = Pysegy(fname)
             arr = segy.get_binary_header()
-        except:
+        except Exception:
             warnings.warn("The SEG-Y file is broken, try to read binary header by numpy")
             arr = np.fromfile(fname, dtype=np.uint8, count=400, offset=3200)
 
@@ -43,7 +43,7 @@ def read_header(fname: str, type, n=0, printstr=True):
         try:
             segy = Pysegy(fname)
             arr = segy.get_trace_header(n)
-        except:
+        except Exception:
             if n == 0:
                 warnings.warn("The SEG-Y file is broken, try to read trace header by numpy")
                 arr = np.fromfile(fname, dtype=np.uint8, count=240, offset=3600)
@@ -102,29 +102,33 @@ def get_metaInfo(
     """
     if isinstance(segyname, Pysegy):
         segy = segyname
+        need_close = False
     else:
         segy = Pysegy(str(segyname))
+        need_close = True
 
-    [iline, xline, offset, istep, xstep, ostep, xloc, yloc, _is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
-    if is4d is None:
-        is4d = _is4d
-    # print(iline, xline, offset, istep, xstep, ostep, xloc, yloc, is4d)
-    segy.setLocations(iline, xline, offset)
-    segy.setSteps(istep, xstep, ostep)
-    segy.setXYLocations(xloc, yloc)
-    ndim = 4 if is4d else 3
-    segy.set_segy_type(ndim)
-    segy.scan()
-    keys = segy.get_keylocs()
-    meta = segy.get_metainfo()
-    meta = {**keys, **meta}
-
-    meta = utils.post_process_meta(segy, meta, apply_scalar)
-
-    if not isinstance(segyname, Pysegy):
-        segy.close()
-
-    return meta
+    try:
+        [iline, xline, offset, istep, xstep, ostep, xloc, yloc, _is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, xloc, yloc) # yapf: disable
+        if is4d is None:
+            is4d = _is4d
+        segy.setLocations(iline, xline, offset)
+        segy.setSteps(istep, xstep, ostep)
+        segy.setXYLocations(xloc, yloc)
+        ndim = 4 if is4d else 3
+        segy.set_segy_type(ndim)
+        segy.scan()
+        keys = segy.get_keylocs()
+        meta = segy.get_metainfo()
+        meta = {**keys, **meta}
+        return utils.post_process_meta(segy, meta, apply_scalar)
+    except Exception as exc:
+        warnings.warn(
+            f"Failed to scan SEG-Y geometry as 3D/4D, fallback to 2D metadata: {exc}"
+        )
+        return utils.make_2d_meta(segy, xloc, yloc)
+    finally:
+        if need_close:
+            segy.close()
 
 
 def get_lineInfo(
@@ -167,15 +171,14 @@ def get_lineInfo(
         N = lineinfo.shape[0]
         out = np.zeros((N * 2 + 1, 4), dtype=np.int32)
         out[:N, :2] = lineinfo[:, :2]
-        for i in range(N):
-            idx = lineinfo[i, 3]
-            out[i, 2:] = [segy.coordx(idx), segy.coordy(idx)]
+        first_indices = np.asarray(lineinfo[:, 3], dtype=np.int32)
+        out[:N, 2:] = segy.get_trace_keys([xloc, yloc], [4, 4], first_indices)
 
         lineinfo = lineinfo[::-1, ...]
         out[N:2 * N, :2] = lineinfo[:, [0, 2]]
-        for i in range(N):
-            idx = lineinfo[i, 4]
-            out[N + i, 2:] = [segy.coordx(idx), segy.coordy(idx)]
+        second_indices = np.asarray(lineinfo[:, 4], dtype=np.int32)
+        out[N:2 * N, 2:] = segy.get_trace_keys([xloc, yloc], [4, 4],
+                                               second_indices)
 
         out[-1] = out[0]
     else:
@@ -221,90 +224,97 @@ def full_scan(fname: str,
     """
     if isinstance(fname, Pysegy):
         segy = fname
+        need_close = False
     else:
         segy = Pysegy(str(fname))
+        need_close = True
 
-    if keys is None:
-        if iline is None or xline is None:
-            raise ValueError("keys is None, so iline and xline must be inputed, but got None")
-        keys = segy.get_trace_keys([iline, xline, offset], [4] * 3, 0, segy.ntrace)
-    else:
-        assert keys.ndim == 2
-        if keys.shape[1] == 2:
-            is4d = False 
-        elif keys.shape[1] == 3:
-            is4d = True
+    try:
+        if keys is None:
+            if iline is None or xline is None:
+                raise ValueError("keys is None, so iline and xline must be inputed, but got None")
+            keys = segy.get_trace_keys([iline, xline, offset], [4] * 3, 0, segy.ntrace)
         else:
-            raise ValueError("keys' shape must be (N, 2) or (N, 3)")
-
-    ib = keys[:, 0].min()
-    ie = keys[:, 0].max()
-    diff = np.diff(np.sort(keys[:, 0]))
-    diff = diff[diff != 0]
-    istep = diff.min()
-    if (ie - ib) % istep != 0:
-        raise RuntimeError("can not create geomtry (error when determine iline/istep)") # yapf: disable
-
-    xb = keys[:, 1].min()
-    xe = keys[:, 1].max()
-    diff = np.diff(np.sort(keys[:, 1]))
-    diff = diff[diff != 0]
-    xstep = diff.min()
-    if (xe - xb) % xstep != 0:
-        raise RuntimeError("can not create geomtry (error when determine xline/xstep)") # yapf: disable
-
-    if is4d is None or is4d == True:
-        is4d = True
-        ob = keys[:, 2].min()
-        oe = keys[:, 2].max()
-        if oe == ob:
-            is4d = False
-        elif np.unique(keys[:, 2]).size > 500:
-            is4d = False
-        else:
-            try:
-                diff = np.diff(np.sort(keys[:, 2]))
-                diff = diff[diff != 0]
-                ostep = diff.min()
-                if (oe - ob) % ostep != 0:
-                    raise RuntimeError("can not create geomtry (error when determine xline/xstep)") # yapf: disable
-
-                no = int((oe - ob) // ostep + 1)
-            except:
+            keys = np.asarray(keys).copy()
+            assert keys.ndim == 2
+            if keys.shape[1] == 2:
                 is4d = False
+            elif keys.shape[1] == 3:
+                is4d = True
+            else:
+                raise ValueError("keys' shape must be (N, 2) or (N, 3)")
 
-    ni = int((ie - ib) // istep + 1)
-    nx = int((xe - xb) // xstep + 1)
-    nt = segy.nt
-    location = [iline, xline, offset] if is4d else [iline, xline]
-    shape = [ni, nx, no, nt] if is4d else [ni, nx, nt]
-    ir = dict(min_iline=ib, max_iline=ie, istep=istep)
-    xr = dict(min_xline=xb, max_xline=xe, xstep=xstep)
+        ib = keys[:, 0].min()
+        ie = keys[:, 0].max()
+        diff = np.diff(np.sort(keys[:, 0]))
+        diff = diff[diff != 0]
+        istep = diff.min()
+        if (ie - ib) % istep != 0:
+            raise RuntimeError("can not create geomtry (error when determine iline/istep)") # yapf: disable
 
-    keys[:, 0] = (keys[:, 0] - ib) / istep
-    keys[:, 1] = (keys[:, 1] - xb) / xstep
-    if is4d:
-        keys[:, 2] = (keys[:, 2] - ob) / ostep
-    keys = np.round(keys).astype(np.int32)
+        xb = keys[:, 1].min()
+        xe = keys[:, 1].max()
+        diff = np.diff(np.sort(keys[:, 1]))
+        diff = diff[diff != 0]
+        xstep = diff.min()
+        if (xe - xb) % xstep != 0:
+            raise RuntimeError("can not create geomtry (error when determine xline/xstep)") # yapf: disable
 
-    geom = np.full(shape[:-1], -1, np.int32)
-    if is4d:
-        geom[keys[:, 0], keys[:, 1], keys[:, 2]] = np.arange(segy.ntrace)
-    else:
-        geom[keys[:, 0], keys[:, 1]] = np.arange(segy.ntrace)
+        if is4d is None or is4d == True:
+            is4d = True
+            ob = keys[:, 2].min()
+            oe = keys[:, 2].max()
+            if oe == ob:
+                is4d = False
+            elif np.unique(keys[:, 2]).size > 500:
+                is4d = False
+            else:
+                try:
+                    diff = np.diff(np.sort(keys[:, 2]))
+                    diff = diff[diff != 0]
+                    ostep = diff.min()
+                    if (oe - ob) % ostep != 0:
+                        raise RuntimeError("can not create geomtry (error when determine xline/xstep)") # yapf: disable
 
-    geominfo = {
-        'location': location,
-        'shape': shape,
-        'iline': ir,
-        'xline': xr,
-    }
-    if is4d:
-        geominfo['offset'] = dict(min_offset=ob, max_offset=oe, ostep=ostep)
+                    no = int((oe - ob) // ostep + 1)
+                except Exception:
+                    is4d = False
 
-    geominfo['geom'] = geom
+        ni = int((ie - ib) // istep + 1)
+        nx = int((xe - xb) // xstep + 1)
+        nt = segy.nt
+        location = [iline, xline, offset] if is4d else [iline, xline]
+        shape = [ni, nx, no, nt] if is4d else [ni, nx, nt]
+        ir = dict(min_iline=ib, max_iline=ie, istep=istep)
+        xr = dict(min_xline=xb, max_xline=xe, xstep=xstep)
 
-    return geominfo
+        keys[:, 0] = (keys[:, 0] - ib) / istep
+        keys[:, 1] = (keys[:, 1] - xb) / xstep
+        if is4d:
+            keys[:, 2] = (keys[:, 2] - ob) / ostep
+        keys = np.round(keys).astype(np.int32)
+
+        geom = np.full(shape[:-1], -1, np.int32)
+        if is4d:
+            geom[keys[:, 0], keys[:, 1], keys[:, 2]] = np.arange(segy.ntrace)
+        else:
+            geom[keys[:, 0], keys[:, 1]] = np.arange(segy.ntrace)
+
+        geominfo = {
+            'location': location,
+            'shape': shape,
+            'iline': ir,
+            'xline': xr,
+        }
+        if is4d:
+            geominfo['offset'] = dict(min_offset=ob, max_offset=oe, ostep=ostep)
+
+        geominfo['geom'] = geom
+
+        return geominfo
+    finally:
+        if need_close:
+            segy.close()
 
 
 def load_by_geom(
@@ -342,37 +352,54 @@ def load_by_geom(
 
     ie = shape[0] if ie == -1 else ie
     xe = shape[1] if xe == -1 else xe
-    te = shape[3] if te == -1 else te
+    te = shape[-1] if te == -1 else te
     if is4d:
         oe = shape[2] if oe == -1 else oe
 
     # check bound
     assert ib >= 0 and ib < ie and ie <= shape[0]
     assert xb >= 0 and xb < xe and xe <= shape[1]
-    assert tb >= 0 and tb < te and te <= shape[3]
+    assert tb >= 0 and tb < te and te <= shape[-1]
     if is4d:
         assert ob >= 0 and ob < oe and oe <= shape[2]
 
     if isinstance(fname, Pysegy):
         segy = fname
+        need_close = False
     else:
         segy = Pysegy(str(fname))
+        need_close = True
 
-    if not is4d:
-        x, y = np.meshgrid(np.arange(ib, ie), np.arange(xb, xe), indexing='ij')
-        shape = x.shape
-        index = geominfo['geom'][x.flatten(), y.flatten()]
-        d = segy.collect(index, tb, te).reshape(*shape, -1)
-    else:
-        x, y, z = np.meshgrid(np.arange(ib, ie),
-                              np.arange(xb, xe),
-                              np.arange(ob, oe),
-                              indexing='ij')
-        shape = x.shape
-        index = geominfo['geom'][x.flatten(), y.flatten(), z.flatten()]
-        d = segy.collect(index, tb, te).reshape(*shape, -1)
+    try:
+        if not is4d:
+            x, y = np.meshgrid(np.arange(ib, ie), np.arange(xb, xe), indexing='ij')
+            shape = x.shape
+            index = geominfo['geom'][x.flatten(), y.flatten()]
+            d = _collect_with_valid_indices(segy, index, shape, tb, te)
+        else:
+            x, y, z = np.meshgrid(np.arange(ib, ie),
+                                  np.arange(xb, xe),
+                                  np.arange(ob, oe),
+                                  indexing='ij')
+            shape = x.shape
+            index = geominfo['geom'][x.flatten(), y.flatten(), z.flatten()]
+            d = _collect_with_valid_indices(segy, index, shape, tb, te)
 
-    return d
+        return d
+    finally:
+        if need_close:
+            segy.close()
+
+
+def _collect_with_valid_indices(segy: Pysegy, index: np.ndarray, shape,
+                                tb: int, te: int) -> np.ndarray:
+    index = np.asarray(index, dtype=np.int32)
+    ns = te - tb
+    out = np.zeros((index.size, ns), dtype=np.float32)
+    valid = index >= 0
+    if np.any(valid):
+        out[valid] = segy.collect(index[valid], tb, te)
+    return out.reshape(*shape, ns)
 
 
 ################# atomic operation ####################
