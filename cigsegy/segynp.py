@@ -3,7 +3,8 @@
 # University of Science and Technology of China (USTC).
 # All rights reserved.
 
-from typing import List, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 from itertools import product
 import numpy as np
 from cigsegy.cpp import _CXX_SEGY
@@ -13,6 +14,113 @@ from cigsegy import utils, plot, tools, createtool
 import warnings
 from tqdm import tqdm
 
+
+@dataclass
+class AxisSelector:
+    indices: np.ndarray
+    is_scalar: bool = False
+
+    def __post_init__(self):
+        self.indices = np.asarray(self.indices, dtype=np.int64).reshape(-1)
+
+    @property
+    def size(self) -> int:
+        return int(self.indices.size)
+
+    def contiguous_bounds(self) -> Optional[Tuple[int, int]]:
+        if self.size == 0:
+            return (0, 0)
+        if self.size == 1:
+            idx = int(self.indices[0])
+            return (idx, idx + 1)
+        steps = np.diff(self.indices)
+        if np.all(steps == 1):
+            return int(self.indices[0]), int(self.indices[-1]) + 1
+        return None
+
+    def constant_step(self) -> Optional[int]:
+        if self.size <= 1:
+            return 1
+        steps = np.diff(self.indices)
+        if np.all(steps == steps[0]):
+            return int(steps[0])
+        return None
+
+    def dense_window(self) -> Tuple[int, int, np.ndarray]:
+        if self.size == 0:
+            return 0, 0, np.empty(0, dtype=np.int64)
+        lo = int(self.indices.min())
+        hi = int(self.indices.max()) + 1
+        return lo, hi, (self.indices - lo).astype(np.int64, copy=False)
+
+    def full_axis_step(self, axis_size: int) -> Optional[int]:
+        if self.is_scalar or self.size == 0:
+            return None
+        step = self.constant_step()
+        if step is None or step <= 0:
+            return None
+        expected = np.arange(0, axis_size, step, dtype=np.int64)
+        if np.array_equal(self.indices, expected):
+            return step
+        return None
+
+
+@dataclass
+class NormalizedIndex:
+    selectors: Tuple[AxisSelector, ...]
+    result_tokens: Tuple[Tuple[str, int], ...]
+
+    @property
+    def has_newaxis(self) -> bool:
+        return any(kind == 'newaxis' for kind, _ in self.result_tokens)
+
+    @property
+    def base_shape(self) -> Tuple[int, ...]:
+        return tuple(selector.size for selector in self.selectors)
+
+    @property
+    def result_shape(self) -> Tuple[int, ...]:
+        if not self.result_tokens:
+            return ()
+        shape = []
+        for kind, axis in self.result_tokens:
+            if kind == 'newaxis':
+                shape.append(1)
+            else:
+                shape.append(self.selectors[axis].size)
+        return tuple(shape)
+
+    def format_result(self, data):
+        arr = np.asarray(data)
+        if arr.shape != self.base_shape:
+            arr = arr.reshape(self.base_shape)
+        if not self.result_tokens:
+            return arr.reshape(()).item()
+        return arr.reshape(self.result_shape)
+
+    def prepare_value(self, value, dtype=np.float32) -> np.ndarray:
+        if self.has_newaxis:
+            raise IndexError("np.newaxis is not supported in assignment")
+
+        arr = np.asarray(value, dtype=dtype)
+        if self.result_shape == ():
+            if arr.size != 1:
+                raise ValueError(
+                    f"cannot assign input with shape {arr.shape} to a scalar selection"
+                )
+            arr = arr.reshape(())
+        else:
+            try:
+                arr = np.broadcast_to(arr, self.result_shape)
+            except ValueError as exc:
+                raise ValueError(
+                    f"cannot broadcast input shape {arr.shape} to indexed shape {self.result_shape}"
+                ) from exc
+            arr = np.asarray(arr, dtype=dtype)
+
+        if arr.shape != self.base_shape:
+            arr = arr.reshape(self.base_shape)
+        return np.ascontiguousarray(arr, dtype=dtype)
 
 
 class ScanMixin:
@@ -431,12 +539,132 @@ class RWMixin:
             raise IndexError("Cannot write into missing traces in the geometry")
         return tidx
 
-    # fmt: off
+    def _data_shape(self) -> Tuple[int, ...]:
+        if self._ndim == 2:
+            return tuple(self._shape2)
+        return tuple(self._shape3)
+
+    def _normalize_axis_key(self, key, axis_size: int, axis: int) -> AxisSelector:
+        if isinstance(key, (int, np.integer)):
+            idx = int(key)
+            if idx < 0:
+                idx += axis_size
+            if idx < 0 or idx >= axis_size:
+                raise IndexError(
+                    f"index {key} is out of bounds for axis {axis} with size {axis_size}"
+                )
+            return AxisSelector(np.array([idx]), is_scalar=True)
+
+        if isinstance(key, slice):
+            try:
+                start, stop, step = key.indices(axis_size)
+            except ValueError as exc:
+                raise ValueError(str(exc)) from exc
+            return AxisSelector(np.arange(start, stop, step, dtype=np.int64))
+
+        if isinstance(key, (list, tuple, np.ndarray)):
+            arr = np.asarray(key)
+            if arr.ndim == 0:
+                return self._normalize_axis_key(arr.item(), axis_size, axis)
+            if arr.ndim != 1:
+                raise IndexError(
+                    f"only support 1D index arrays, while got ndim={arr.ndim} in axis {axis}"
+                )
+            if arr.dtype == np.bool_:
+                if arr.size != axis_size:
+                    raise IndexError(
+                        f"boolean index size {arr.size} does not match axis {axis} size {axis_size}"
+                    )
+                return AxisSelector(np.flatnonzero(arr))
+            if not np.issubdtype(arr.dtype, np.integer):
+                raise IndexError(
+                    f"index array for axis {axis} must be integer or boolean, got {arr.dtype}"
+                )
+            arr = arr.astype(np.int64, copy=False)
+            arr = np.where(arr < 0, arr + axis_size, arr)
+            if arr.size and ((arr < 0).any() or (arr >= axis_size).any()):
+                raise IndexError(
+                    f"index array out of bounds for axis {axis} with size {axis_size}"
+                )
+            return AxisSelector(arr)
+
+        raise IndexError("Invalid index slices")
+
+    def _normalize_key(self, key, shape=None) -> NormalizedIndex:
+        shape = tuple(self.shape if shape is None else shape)
+        ndim = len(shape)
+
+        if not isinstance(key, tuple):
+            key = (key, )
+        tokens = list(key)
+
+        num_ellipsis = sum(token is Ellipsis for token in tokens)
+        if num_ellipsis > 1:
+            raise IndexError("Only one ellipsis (...) allowed")
+
+        if num_ellipsis == 1:
+            consumed = sum(token is not Ellipsis and token is not None
+                           for token in tokens)
+            if consumed > ndim:
+                raise IndexError(
+                    f"Too many dimensions: expected at most {ndim}, got {consumed}"
+                )
+            fill = ndim - consumed
+            ellipsis_idx = next(i for i, token in enumerate(tokens)
+                                if token is Ellipsis)
+            tokens = tokens[:ellipsis_idx] + [slice(None)] * fill + tokens[
+                ellipsis_idx + 1:]
+
+        consumed = sum(token is not None for token in tokens)
+        if consumed > ndim:
+            raise IndexError(
+                f"Too many dimensions: expected at most {ndim}, got {consumed}"
+            )
+
+        tokens.extend([slice(None)] * (ndim - consumed))
+
+        selectors = []
+        result_tokens = []
+        axis = 0
+        for token in tokens:
+            if token is None:
+                result_tokens.append(('newaxis', -1))
+                continue
+
+            selector = self._normalize_axis_key(token, shape[axis], axis)
+            selectors.append(selector)
+            if not selector.is_scalar:
+                result_tokens.append(('axis', len(selectors) - 1))
+            axis += 1
+
+        return NormalizedIndex(tuple(selectors), tuple(result_tokens))
+
+    def _selectors_to_bounds(self, selectors) -> Optional[List[int]]:
+        out = []
+        for selector in selectors:
+            bounds = selector.contiguous_bounds()
+            if bounds is None:
+                return None
+            out.extend(bounds)
+        return out
+
+    def _fast_tslice_params(self, selectors) -> Optional[Tuple[int, int, int]]:
+        if self.ndim != 3 or self._ignore or self._view_mode == 'unsorted':
+            return None
+        if not self._fast_read or not selectors[-1].is_scalar:
+            return None
+
+        shape = self._data_shape()
+        stepi = selectors[0].full_axis_step(shape[0])
+        stepx = selectors[1].full_axis_step(shape[1])
+        if stepi is None or stepx is None:
+            return None
+        return int(selectors[2].indices[0]), stepi, stepx
+
     def _read_regular(self, idx) -> np.ndarray:
         assert self._ignore, "The data is not regular or shape_hint is not given"
-        self._check_bound2(idx)
 
-        shp = tuple(self.shape)
+        shp = self._data_shape()
         assert len(shp) in (3, 4), f"shape_hint must be 3D or 4D, got {shp}"
 
         if self.ndim == 3:
@@ -444,15 +672,14 @@ class RWMixin:
             nx, ny, nt = shp
             ab, ae = 0, 1
             xb, xe, yb, ye, tbeg, tend = idx
-            na = 1
         elif self.ndim == 4:
-            # shape_hint: (na, nx, ny, nt)
             assert len(shp) == 4, f"ndim=4 but shape_hint={shp}"
-            na, nx, ny, nt = shp
+            _, nx, ny, nt = shp
             ab, ae, xb, xe, yb, ye, tbeg, tend = idx
         else:
-            raise ValueError(f"_read_regular only supports ndim=3 or 4, got {self.ndim}")
-        
+            raise ValueError(
+                f"_read_regular only supports ndim=3 or 4, got {self.ndim}")
+
         dt = tend - tbeg
 
         def base_index(ia, ix):
@@ -464,289 +691,149 @@ class RWMixin:
 
         out = np.zeros(oshape, dtype=np.float32)
 
-
         iterator = product(range(ab, ae), range(xb, xe))
         total_iters = oshape[0] * oshape[1]
-
         if show_bar:
             iterator = tqdm(iterator, total=total_iters)
-
 
         for ia, ix in iterator:
             beg = base_index(ia, ix) + yb
             end = base_index(ia, ix) + ye
-            block = self._segy.collect(beg, end, tbeg, tend)  # shape: ((ye-yb), dt)
+            block = self._segy.collect(beg, end, tbeg, tend)
             out[ia - ab, ix - xb, :, :] = block
-        
-        if self.ndim == 3:
-            out = out[0]  # remove fake dim
-
-        return self._post_process(out)
-
-
-    def _read4d(self, idx) -> np.ndarray:
-        assert self.ndim == 4, "The data is not 4D"
-        self._check_bound2(idx)
-
-        num = idx[1::2].count(-1)
-
-        if num == 0 and not self.unsorted:
-            d = self._segy.read4d(*idx)
-        else:
-            if not self.is_create_geometry:
-                raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
-            grid, shape = self._create_meshgrid(idx[:-2])
-            tidx = self.map_to_indices(grid)
-            if idx[-1] is None:
-                d = self._collect_with_valid_indices(tidx, shape, 0, self.nt)
-                d = d[..., idx[-2]]
-            else:
-                d = self._collect_with_valid_indices(tidx, shape, idx[-2],
-                                                     idx[-1])
-
-        return self._post_process(d)
-
-
-    def _read3d(self, idx) -> np.ndarray:
-        assert self.ndim == 3, "The data is not 3D"
-        self._check_bound2(idx)
-        num = idx[1::2].count(-1)
-        if num == 0 and not self.unsorted:
-            if self._fast_read and self._is_time_slice(idx):
-                d = self._segy.read_tslice(idx[4], self._fstep[0], self._fstep[1])
-            else:
-                d = self._segy.read3d(*idx)
-        else:
-            if not self.is_create_geometry:
-                raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
-            grid, shape = self._create_meshgrid(idx[:-2])
-            tidx = self.map_to_indices(grid)
-            if idx[-1] is None:
-                d = self._collect_with_valid_indices(tidx, shape, 0, self.nt)
-                d = d[..., idx[-2]]
-            else:
-                d = self._collect_with_valid_indices(tidx, shape, idx[-2],
-                                                     idx[-1])
-
-        return self._post_process(d)
-
-
-    def _read2d(self, idx) -> np.ndarray:
-        assert self.ndim == 2, "The data is not 2D"
-        self._check_bound2(idx)
-
-        # the first dim is ndarray
-        if idx[1] is None:
-            # the time dim is ndarray
-            if idx[-1] is None:
-                data = self._segy.collect(idx[0], 0, self.nt)
-                data = data[:, idx[2]]
-            else:
-                data = self._segy.collect(idx[0], idx[2], idx[3])
-        else:  # the first dim is ib, ie
-            if idx[-1] is None:
-                data = self._segy.collect(idx[0], idx[1], 0, self.nt)
-                data = data[:, idx[2]]
-            else:
-                data = self._segy.collect(idx[0], idx[1], idx[2], idx[3])
-
-        return self._post_process(data)
-
-
-    def _write4d(self, idx, data) -> None:
-        assert self.ndim == 4, "The data is not 4D"
-        self._check_bound2(idx)
-        self._check_wmode_lastdim(idx)
-        self._check_data_shape(data, idx)
-
-        num = idx[1::2].count(-1)
-
-        if num == 0 and not self.unsorted:
-            self._segy.write4d(data, *idx)
-        else:
-            if not self.is_create_geometry:
-                raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
-            grid, shape = self._create_meshgrid(idx[:-2])
-            tidx = self._require_writable_trace_indices(
-                self.map_to_indices(grid))
-            self._segy.write_traces(data, tidx, idx[-2], idx[-1])
-
-
-    def _write3d(self, idx, data) -> None:
-        assert self.ndim == 3, "The data is not 3D"
-        self._check_bound2(idx)
-        self._check_wmode_lastdim(idx)
-        self._check_data_shape(data, idx)
-
-        num = idx[1::2].count(-1)
-
-        if num == 0 and not self.unsorted:
-            self._segy.write3d(data, *idx)
-        else:
-            if not self.is_create_geometry:
-                raise RuntimeError("Need create the geometry first, please call `update_geometry` first")
-            grid, shape = self._create_meshgrid(idx[:-2])
-            tidx = self._require_writable_trace_indices(
-                self.map_to_indices(grid))
-            self._segy.write_traces(data, tidx, idx[-2], idx[-1])
-
-
-    def _write2d(self, idx, data) -> None:
-        assert self.ndim == 2, "The data is not 2D"
-        assert data.ndim <= 2, "The data is not 2D"
-        self._check_bound2(idx)
-        self._check_wmode_lastdim(idx)
-        self._check_data_shape(data, idx)
-
-        # the first dim is ndarray
-        if idx[1] is None:
-            # the time dim is ndarray
-            self._segy.write_traces(data, idx[0], idx[2], idx[3])
-        else:  # the first dim is ib, ie
-            self._segy.write_traces(data, idx[0], idx[1], idx[2], idx[3])
-
-
-    def _create_meshgrid(self, idx):
-        if idx[1] is None:
-            x = idx[0]
-        else:
-            x = np.arange(idx[0], idx[1])
-        if idx[3] is None:
-            y = idx[2]
-        else:
-            y = np.arange(idx[2], idx[3])
 
         if self.ndim == 3:
-            X, Y = np.meshgrid(x, y, indexing='ij')
-            shape = X.shape
-            return np.c_[X.flatten(), Y.flatten()], shape
-        elif self.ndim == 4:
-            if idx[5] is None:
-                z = idx[4]
-            else:
-                z = np.arange(idx[4], idx[5])
-            X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
-            shape = X.shape
-            return np.c_[X.flatten(), Y.flatten(), Z.flatten()], shape
-        else:
-            raise RuntimeError("only support ndim == 3 or ndim == 4")
-
-
-    def _post_process(self, d: np.ndarray):
-        d = d.squeeze()
-        if d.ndim == 1 and d.size == 1:
-            return d[0]
-        elif d.ndim == 0:
-            return float(d)
-        return d
-
-
-    def _process_keys(self, key) -> List:
-        if isinstance(key, (int, np.integer)):
-
-            if key < 0:
-                key += self.shape[0]
-            if key < 0 or key >= self.shape[0]:
-                raise IndexError("Index out of range")
-
-            if self.ndim == 2:
-                return key, key + 1, 0, self.shape[1]
-            elif self.ndim == 3:
-                return key, key + 1, 0, self.shape[1], 0, self.shape[2]
-            else:
-                return key, key + 1, 0, self.shape[1], 0, self.shape[2], 0, self.shape[3]
-
-        elif key is Ellipsis:
-
-            if self.ndim == 2:
-                return 0, self.shape[0], 0, self.shape[1]
-            elif self.ndim == 3:
-                return 0, self.shape[0], 0, self.shape[1], 0, self.shape[2]
-            else:
-                return 0, self.shape[0], 0, self.shape[1], 0, self.shape[2], 0, self.shape[3]
-
-        elif isinstance(key, Tuple):
-
-            return self._process_keys_tuple(key)
-
-        elif isinstance(key, (slice, List, np.ndarray)):
-
-            if isinstance(key, slice):
-                ib = 0 if key.start is None else key.start
-                ie = self.shape[0] if key.stop is None else key.stop
-                assert key.step is None, "step is not supported"
-            else:
-                ib, ie = np.array(key), None
-
-            if self.ndim == 2:
-                return ib, ie, 0, self.shape[1]
-            elif self.ndim == 3:
-                return ib, ie, 0, self.shape[1], 0, self.shape[2]
-            else:
-                return ib, ie, 0, self.shape[1], 0, self.shape[2], 0, self.shape[3]
-
-        else:
-            raise IndexError("Invalid index slices")
-
-
-    def _process_keys_tuple(self, key) -> List:
-        if len(key) > self.ndim:
-            raise IndexError(f"Too many dimensions: expected at most {self.ndim}, got {len(key)}")
-
-        num_ellipsis = key.count(Ellipsis)
-        if num_ellipsis > 1:
-            raise ValueError("Only one ellipsis (...) allowed")
-
-        if num_ellipsis == 1:
-            idx = key.index(Ellipsis)
-            n_insert = self.ndim - len(key) + 1
-            key = key[:idx] + (slice(None),) * n_insert + key[idx + 1:]
-
-        start_idx = [None] * self.ndim
-        end_idx = [None] * self.ndim
-        for i, k in enumerate(key):
-            if k is None:
-                continue
-
-            if isinstance(k, (int, np.integer)):
-                if k < 0:
-                    k += self.shape[i]
-                start_idx[i] = k
-                end_idx[i] = k + 1
-
-            elif isinstance(k, slice):
-                if not (k.step is None or k.step == 1):
-                    raise IndexError(f"only support step is 1, while got a step {k.step} in the {i}th dimension")
-
-                start_idx[i] = 0 if k.start is None else k.start
-                end_idx[i] = self.shape[i] if k.stop is None else k.stop
-
-            elif isinstance(k, (List, np.ndarray)):
-                start_idx[i] = np.array(k)
-                end_idx[i] = -1
-
-            else:
-                raise IndexError("Invalid index slices")
-
-        out = []
-        for i in range(self.ndim):
-            if start_idx[i] is None:
-                out.append(0)
-            else:
-                out.append(start_idx[i])
-
-            if end_idx[i] is None:
-                out.append(self.shape[i])
-            else:
-                out.append(end_idx[i])
-
+            out = out[0]
         return out
 
-    def _is_time_slice(self, idx):
-        # Only used in _read3d and num==0 and not unsorted
-        if idx[1] - idx[0] == self.shape[0] and idx[3] - idx[2] == self.shape[1] and idx[5]-idx[4]==1: # yapf: disable
-            return True
-        return False
+    def _spatial_trace_indices(self, selectors) -> np.ndarray:
+        shape = tuple(selector.size for selector in selectors)
+        if any(size == 0 for size in shape):
+            return np.empty(shape, dtype=np.int32)
+
+        grids = np.meshgrid(*[selector.indices for selector in selectors],
+                            indexing='ij')
+        flat_coords = [grid.reshape(-1) for grid in grids]
+
+        if self._ignore or self._view_mode != 'unsorted':
+            tidx = np.ravel_multi_index(flat_coords,
+                                        self._data_shape()[:-1]).astype(
+                                            np.int32)
+        else:
+            if not self.is_create_geometry:
+                raise RuntimeError(
+                    "Need create the geometry first, please call `update_geometry` first"
+                )
+            coord_grid = np.stack(flat_coords, axis=1)
+            tidx = np.asarray(self.map_to_indices(coord_grid), dtype=np.int32)
+
+        return tidx.reshape(shape)
+
+    def _read_trace_window(self, tidx, time_selector: AxisSelector) -> np.ndarray:
+        tidx = np.asarray(tidx, dtype=np.int32).reshape(-1)
+        ns = time_selector.size
+        if tidx.size == 0 or ns == 0:
+            return np.empty((tidx.size, ns), dtype=np.float32)
+
+        bounds = time_selector.contiguous_bounds()
+        if bounds is not None:
+            tb, te = bounds
+            if np.any(tidx < 0):
+                return self._collect_with_valid_indices(tidx, (tidx.size, ),
+                                                        tb, te)
+            return self._segy.collect(tidx, tb, te)
+
+        lo, hi, rel = time_selector.dense_window()
+        if np.any(tidx < 0):
+            block = self._collect_with_valid_indices(tidx, (tidx.size, ), lo,
+                                                     hi)
+        else:
+            block = self._segy.collect(tidx, lo, hi)
+        return block[:, rel]
+
+    def _write_trace_window(self, tidx, time_selector: AxisSelector,
+                            data: np.ndarray) -> None:
+        tidx = self._require_writable_trace_indices(tidx)
+        ns = time_selector.size
+        if tidx.size == 0 or ns == 0:
+            return
+
+        payload = np.ascontiguousarray(data.reshape(tidx.size, ns),
+                                       dtype=np.float32)
+        trace_bounds = AxisSelector(tidx).contiguous_bounds()
+        time_bounds = time_selector.contiguous_bounds()
+
+        if time_bounds is not None:
+            tb, te = time_bounds
+            if trace_bounds is not None:
+                self._segy.write_traces(payload, trace_bounds[0],
+                                        trace_bounds[1], tb, te)
+            else:
+                self._segy.write_traces(payload, tidx, tb, te)
+            return
+
+        lo, hi, rel = time_selector.dense_window()
+        block = self._segy.collect(tidx, lo, hi)
+        block[:, rel] = payload
+        if trace_bounds is not None:
+            self._segy.write_traces(block, trace_bounds[0], trace_bounds[1],
+                                    lo, hi)
+        else:
+            self._segy.write_traces(block, tidx, lo, hi)
+
+    def _read_base(self, selectors) -> np.ndarray:
+        base_shape = tuple(selector.size for selector in selectors)
+        if any(size == 0 for size in base_shape):
+            return np.empty(base_shape, dtype=np.float32)
+
+        if self.ndim == 2:
+            data = self._read_trace_window(selectors[0].indices, selectors[1])
+            return data.reshape(base_shape)
+
+        if self._ignore:
+            bounds = self._selectors_to_bounds(selectors)
+            if bounds is not None:
+                return self._read_regular(bounds)
+
+        if self._view_mode != 'unsorted':
+            tslice_params = self._fast_tslice_params(selectors)
+            if tslice_params is not None:
+                t, stepi, stepx = tslice_params
+                return self._segy.read_tslice(t, stepi, stepx)[..., None]
+
+            bounds = self._selectors_to_bounds(selectors)
+            if bounds is not None:
+                if self.ndim == 3:
+                    return self._segy.read3d(*bounds)
+                return self._segy.read4d(*bounds)
+
+        spatial = self._spatial_trace_indices(selectors[:-1])
+        data = self._read_trace_window(spatial.reshape(-1), selectors[-1])
+        return data.reshape(*spatial.shape, selectors[-1].size)
+
+    def _write_base(self, selectors, data: np.ndarray) -> None:
+        if any(selector.size == 0 for selector in selectors):
+            return
+
+        data = np.ascontiguousarray(data, dtype=np.float32)
+
+        if self.ndim == 2:
+            self._write_trace_window(selectors[0].indices, selectors[1], data)
+            return
+
+        bounds = self._selectors_to_bounds(selectors)
+        if bounds is not None and not self._ignore and self._view_mode != 'unsorted':
+            if self.ndim == 3:
+                self._segy.write3d(data, *bounds)
+            else:
+                self._segy.write4d(data, *bounds)
+            return
+
+        spatial = self._spatial_trace_indices(selectors[:-1]).reshape(-1)
+        spatial = self._require_writable_trace_indices(spatial)
+        payload = np.ascontiguousarray(
+            data.reshape(spatial.size, selectors[-1].size), dtype=np.float32)
+        self._write_trace_window(spatial, selectors[-1], payload)
 
 
 class CheckMixin:
@@ -1071,39 +1158,28 @@ class InnerMixin:
         return self.to_numpy()
 
     def __getitem__(self, slices) -> np.ndarray:
-        idx = self._process_keys(slices)
+        visible_index = self._normalize_key(slices)
+        selectors = visible_index.selectors
+
         if self._T:
-            idx = tuple(idx[i:i+2] for i in range(0, len(idx), 2))[::-1]
-            idx = sum(idx, [])
-
-        if self._ignore:
-            return self._read_regular(idx)
-        elif self._ndim == 4:
-            out = self._read4d(idx)
-        elif self._ndim == 3:
-            out = self._read3d(idx)
+            base = self._read_base(selectors[::-1])
+            axes = tuple(range(base.ndim - 1, -1, -1))
+            base = np.transpose(base, axes=axes)
         else:
-            out = self._read2d(idx)
+            base = self._read_base(selectors)
 
-        if self._T and isinstance(out, np.ndarray):
-            return out.T
-        return out
+        return visible_index.format_result(base)
 
     def __setitem__(self, slices, data: np.ndarray) -> None:
-        data = np.asarray(data, dtype=np.float32)
-        idx = self._process_keys(slices)
+        visible_index = self._normalize_key(slices)
+        payload = visible_index.prepare_value(data, dtype=np.float32)
 
         if self._T:
-            idx = tuple(idx[i:i+2] for i in range(0, len(idx), 2))[::-1]
-            idx = sum(idx, [])
-            data = data.T
+            axes = tuple(range(payload.ndim - 1, -1, -1))
+            payload = np.transpose(payload, axes=axes)
+            return self._write_base(visible_index.selectors[::-1], payload)
 
-        if self._ndim == 4:
-            return self._write4d(idx, data)
-        elif self._ndim == 3:
-            return self._write3d(idx, data)
-        else:
-            return self._write2d(idx, data)
+        return self._write_base(visible_index.selectors, payload)
 
     def __array_function__(self, func, types, args, kwargs):
         if func is np.min:

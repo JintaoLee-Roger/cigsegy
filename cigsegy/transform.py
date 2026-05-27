@@ -13,7 +13,7 @@ import numpy as np
 
 
 def get_transform_metrix(p1: np.ndarray, p2: np.ndarray) -> np.ndarray:
-    """
+    r"""
     Calculate affine transform metrix `H` using LSTSQ, and ignore w.
 
     p2 = H \cdot p1

@@ -10,6 +10,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <mutex>
 
 namespace py = pybind11;
 using npfloat = py::array_t<float, py::array::c_style | py::array::forcecast>;
@@ -21,6 +22,7 @@ namespace segy {
 /************ static functions ***********/
 
 static void checkSignals() {
+  py::gil_scoped_acquire acquire;
   if (PyErr_CheckSignals() != 0) {
     throw py::error_already_set();
   }
@@ -83,8 +85,19 @@ static std::vector<size_t> convert_to_vector(const py::object &obj) {
 /************ binding  ***********/
 
 class Pysegy : public SegyRW {
+private:
+  mutable std::mutex m_io_mutex;
+
+  template <typename Func> void run_io_without_gil(Func &&func) {
+    py::gil_scoped_release release;
+    std::lock_guard<std::mutex> lock(m_io_mutex);
+    func();
+  }
+
 public:
   using SegyRW::SegyRW;
+
+  void scan() { run_io_without_gil([&]() { SegyRW::scan(); }); }
 
   npfloat read4d(size_t ib, size_t ie, size_t xb, size_t xe, size_t ob,
                  size_t oe, size_t tb, size_t te) {
@@ -102,7 +115,9 @@ public:
     size_t no = oe - ob;
     auto data = py::array_t<float>({ni, nx, no, nt});
     float *ptr = data.mutable_data();
-    SegyRW::read4d(ptr, ib, ie, xb, xe, ob, oe, tb, te);
+    run_io_without_gil([&]() {
+      SegyRW::read4d(ptr, ib, ie, xb, xe, ob, oe, tb, te);
+    });
     return data;
   }
 
@@ -122,14 +137,15 @@ public:
     size_t nx = xe - xb;
     auto data = py::array_t<float>({ni, nx, nt});
     float *ptr = data.mutable_data();
-    SegyRW::read3d(ptr, ib, ie, xb, xe, tb, te);
+    run_io_without_gil(
+        [&]() { SegyRW::read3d(ptr, ib, ie, xb, xe, tb, te); });
     return data;
   }
 
   npfloat read() {
     py::array_t<float> out(shape());
     float *ptr = out.mutable_data();
-    SegyRW::read(ptr);
+    run_io_without_gil([&]() { SegyRW::read(ptr); });
     return out;
   }
 
@@ -141,7 +157,8 @@ public:
     size_t nx = (m_meta.nx + stepx - 1) / stepx;
     auto data = py::array_t<float>({ni, nx});
     float *ptr = data.mutable_data();
-    SegyRW::read_tslice(ptr, t, stepi, stepx);
+    run_io_without_gil(
+        [&]() { SegyRW::read_tslice(ptr, t, stepi, stepx); });
     return data;
   }
 
@@ -176,7 +193,7 @@ public:
 
     py::array_t<float> out(m_meta.nt);
     float *ptr = out.mutable_data();
-    SegyRW::itrace(ptr, n);
+    run_io_without_gil([&]() { SegyRW::itrace(ptr, n); });
     return out;
   }
 
@@ -187,7 +204,7 @@ public:
 
     auto data = py::array_t<float>({end - beg, tend - tbeg});
     float *ptr = data.mutable_data();
-    SegyRW::collect(ptr, beg, end, tbeg, tend);
+    run_io_without_gil([&]() { SegyRW::collect(ptr, beg, end, tbeg, tend); });
     return data;
   }
 
@@ -200,11 +217,13 @@ public:
     }
 
     size_t N = indices.shape()[0];
-    const int32_t *idx = indices.data();
+    const int32_t *idx_ptr = indices.data();
+    std::vector<int32_t> idx(idx_ptr, idx_ptr + N);
 
     auto data = py::array_t<float>({N, tend - tbeg});
     float *ptr = data.mutable_data();
-    SegyRW::collect(ptr, idx, N, tbeg, tend);
+    run_io_without_gil(
+        [&]() { SegyRW::collect(ptr, idx.data(), N, tbeg, tend); });
     return data;
   }
 
@@ -243,7 +262,9 @@ public:
     size_t n2 = keysvec.size();
     py::array_t<int> out({n1, n2});
     int *ptr = out.mutable_data();
-    SegyRW::get_trace_keys(ptr, keysvec, lengthvec, beg, end);
+    run_io_without_gil([&]() {
+      SegyRW::get_trace_keys(ptr, keysvec, lengthvec, beg, end);
+    });
     return out;
   }
 
@@ -265,8 +286,12 @@ public:
 
     py::array_t<int> out({n1, n2});
     int *ptr = out.mutable_data();
+    const int32_t *idx_ptr = indices.data();
+    std::vector<int32_t> idx(idx_ptr, idx_ptr + n1);
 
-    SegyRW::get_trace_keys(ptr, keysvec, lengthvec, indices.data(), n1);
+    run_io_without_gil([&]() {
+      SegyRW::get_trace_keys(ptr, keysvec, lengthvec, idx.data(), n1);
+    });
 
     return out;
   }

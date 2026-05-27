@@ -57,8 +57,8 @@ def eval_iline(segy: Pysegy) -> int:
         possible result
     """
     ntrace = segy.ntrace
-    options = [189, 5, 9, 221, 13, 17]
-    select = [189, 5, 9, 221, 13, 17]
+    options = [189, 5, 9, 221, 13, 17, 41]
+    select = [189, 5, 9, 221, 13, 17, 41]
 
     for op in options:
         l0 = _get_keys4(segy, op, 0)
@@ -263,7 +263,7 @@ def guess(segy_name: str,
     start = int(N // 3)
     lines = set()
     oix = []
-    xlines = [193, 17, 21, 13] if xline is None else [xline]
+    xlines = [193, 17, 21, 13, 45] if xline is None else [xline]
     while True and (start + 400) <= segy.ntrace:
         part = _get_keys4(segy, [offset, iline, *xlines], start, start + 400)
         oix.append(part)
@@ -384,6 +384,418 @@ def eval_offset(segyname, offset: int = 37) -> int:
     if ostep == 0:
         return 0, False
     return ostep, True
+
+
+_PROFILE_KEY_SPECS = [
+    ("trace_sequence_line", 1, 4),
+    ("trace_sequence_file", 5, 4),
+    ("field_record", 9, 4),
+    ("trace_in_field_record", 13, 4),
+    ("energy_source_point", 17, 4),
+    ("ensemble", 21, 4),
+    ("trace_in_ensemble", 25, 4),
+    ("offset", 37, 4),
+    ("elevation_or_shot_z", 41, 4),
+    ("elevation_or_receiver_z", 45, 4),
+    ("source_x", 73, 4),
+    ("source_y", 77, 4),
+    ("receiver_x", 81, 4),
+    ("receiver_y", 85, 4),
+    ("shot_line", 139, 2),
+    ("shot_number", 141, 2),
+    ("depth", 181, 4),
+    ("iline", 189, 4),
+    ("xline", 193, 4),
+    ("shotpoint", 197, 4),
+    ("extension_221", 221, 4),
+]
+
+
+def _normalize_profile_key_specs(key_specs):
+    if key_specs is None:
+        return list(_PROFILE_KEY_SPECS)
+
+    out = []
+    for spec in key_specs:
+        if isinstance(spec, dict):
+            name = spec.get("name", f"key_{spec['loc']}")
+            out.append((name, int(spec["loc"]), int(spec.get("length", 4))))
+        elif len(spec) == 2:
+            loc, length = spec
+            out.append((f"key_{loc}", int(loc), int(length)))
+        else:
+            name, loc, length = spec
+            out.append((str(name), int(loc), int(length)))
+    return out
+
+
+def _mode_value(values):
+    values, counts = np.unique(values, return_counts=True)
+    return values[np.argmax(counts)], counts.max()
+
+
+def _dominant_step(values):
+    dif = np.diff(values)
+    dif = dif[dif != 0]
+    if dif.size == 0:
+        return None
+    step, _ = _mode_value(dif)
+    return int(step)
+
+
+def _range_count(vmin, vmax, step):
+    if step is None or step == 0:
+        return None
+    span = int(vmax) - int(vmin)
+    astep = abs(int(step))
+    if astep == 0 or span < 0 or span % astep != 0:
+        return None
+    return span // astep + 1
+
+
+def _estimate_period(values, step):
+    if values.size < 3 or step == 0:
+        return None
+
+    repeated = np.flatnonzero(values == values[0])
+    repeated = repeated[repeated >= 4]
+    if repeated.size > 0:
+        return int(repeated[0])
+
+    dif = np.diff(values)
+    if step > 0:
+        resets = np.flatnonzero(dif < 0) + 1
+    else:
+        resets = np.flatnonzero(dif > 0) + 1
+
+    if resets.size == 0:
+        return None
+    if resets.size == 1:
+        period = int(resets[0])
+        return period if period >= 4 else None
+    periods = np.diff(np.r_[0, resets])
+    period, _ = _mode_value(periods)
+    period = int(period)
+    return period if period >= 4 else None
+
+
+def _score_fast_axis(values, loc):
+    dif = np.diff(values)
+    nonzero = dif[dif != 0]
+    if nonzero.size == 0:
+        return {
+            "score": 0.0,
+            "step": 0,
+            "period": None,
+            "unique": int(np.unique(values).size),
+        }
+
+    step, step_count = _mode_value(nonzero)
+    step = int(step)
+    step_ratio = float(step_count) / max(1, dif.size)
+    unique_ratio = min(1.0, float(np.unique(values).size) / max(1, values.size))
+    period = _estimate_period(values, step)
+    reset_bonus = 1.0 if period is not None else 0.0
+
+    priors = {
+        193: 0.18,
+        21: 0.12,
+        13: 0.14,
+        25: 0.10,
+        37: 0.12,
+        45: 0.04,
+        181: 0.04,
+    }
+    score = 0.45 * step_ratio + 0.25 * unique_ratio + 0.25 * reset_bonus
+    score += priors.get(loc, 0.0)
+    if period is None:
+        score *= 0.45
+    score = min(1.0, score)
+    vmin = int(values.min())
+    vmax = int(values.max())
+    range_values = values
+    if period is not None and period <= values.size:
+        range_values = values[:period]
+        vmin = int(range_values.min())
+        vmax = int(range_values.max())
+
+    return {
+        "score": float(score),
+        "step": step,
+        "period": period,
+        "unique": int(np.unique(values).size),
+        "min": vmin,
+        "max": vmax,
+        "range_count": _range_count(vmin, vmax, step),
+    }
+
+
+def _score_group_axis(values, period, loc):
+    if period is None or period < 1:
+        return {"score": 0.0, "unique": int(np.unique(values).size)}
+
+    ngroup = values.size // period
+    if ngroup < 2:
+        return {"score": 0.0, "unique": int(np.unique(values).size)}
+
+    trimmed = values[:ngroup * period].reshape(ngroup, period)
+    within = np.array([np.unique(row).size == 1 for row in trimmed])
+    group_values = trimmed[:, 0]
+    group_unique = np.unique(group_values).size
+    group_step = _dominant_step(group_values)
+    change_ratio = min(1.0, float(group_unique - 1) / max(1, ngroup - 1))
+
+    priors = {
+        189: 0.18,
+        221: 0.16,
+        9: 0.14,
+        5: 0.08,
+        139: 0.08,
+        141: 0.08,
+        73: 0.04,
+        77: 0.04,
+    }
+    score = 0.65 * float(within.mean()) + 0.30 * change_ratio
+    score += priors.get(loc, 0.0)
+    score = min(1.0, score)
+    return {
+        "score": float(score),
+        "unique": int(group_unique),
+        "step": group_step,
+    }
+
+
+def _relation_with_period(values, period):
+    if period is None or period < 2:
+        return {
+            "constant_within": False,
+            "monotonic_within": False,
+            "changes_within": False,
+        }
+
+    ngroup = values.size // period
+    if ngroup < 1:
+        return {
+            "constant_within": False,
+            "monotonic_within": False,
+            "changes_within": False,
+        }
+
+    rows = values[:ngroup * period].reshape(ngroup, period)
+    sample = rows[:min(4, ngroup)]
+    constant = [np.unique(row).size == 1 for row in sample]
+    changes = [np.unique(row).size > 1 for row in sample]
+    monotonic = []
+    for row in sample:
+        dif = np.diff(row)
+        nz = dif[dif != 0]
+        monotonic.append(nz.size > 0 and (np.all(nz > 0) or np.all(nz < 0)))
+
+    return {
+        "constant_within": bool(np.mean(constant) >= 0.75),
+        "monotonic_within": bool(np.mean(monotonic) >= 0.75),
+        "changes_within": bool(np.mean(changes) >= 0.75),
+    }
+
+
+def _profile_kind(fast, group, by_name, period):
+    fast_loc = fast["loc"]
+    group_loc = group["loc"] if group is not None else None
+
+    depth_rel = _relation_with_period(by_name["depth"], period) if "depth" in by_name else {} # yapf: disable
+    sx_rel = _relation_with_period(by_name["source_x"], period) if "source_x" in by_name else {} # yapf: disable
+    sy_rel = _relation_with_period(by_name["source_y"], period) if "source_y" in by_name else {} # yapf: disable
+    rx_rel = _relation_with_period(by_name["receiver_x"], period) if "receiver_x" in by_name else {} # yapf: disable
+    ry_rel = _relation_with_period(by_name["receiver_y"], period) if "receiver_y" in by_name else {} # yapf: disable
+
+    source_constant = sx_rel.get("constant_within", False) or sy_rel.get("constant_within", False) # yapf: disable
+    receiver_changes = rx_rel.get("changes_within", False) or ry_rel.get("changes_within", False) # yapf: disable
+    depth_monotonic = depth_rel.get("monotonic_within", False)
+
+    if depth_monotonic and source_constant and receiver_changes:
+        return "das_vsp"
+    if fast_loc == 37:
+        if group_loc == 21:
+            return "cdp_gather"
+        return "shot_gather"
+    if fast_loc in (193, 21, 13, 17, 45) and group_loc in (189, 221, 9, 5, 41):
+        return "volume_3d"
+    if period is not None:
+        return "gather_3d"
+    return "trace_collection"
+
+
+def guess_profile(segy_name,
+                  key_specs=None,
+                  sample_size: int = 8192,
+                  top: int = 5):
+    """
+    Experimental profile inference for SEG-Y trace order.
+
+    Unlike :func:`guess`, this function does not assume an inline/crossline
+    volume. It first looks for a fast axis that changes within a gather/line
+    and resets, then looks for a slow/group axis that is constant within that
+    period. The result is a structured dictionary for inspection.
+
+    This function is experimental and is not used by existing APIs.
+    """
+    if isinstance(segy_name, Pysegy):
+        segy = segy_name
+        need_close = False
+    else:
+        segy = Pysegy(str(segy_name))
+        need_close = True
+
+    try:
+        specs = _normalize_profile_key_specs(key_specs)
+        sample_size = max(2, min(int(sample_size), int(segy.ntrace)))
+        keys = [loc for _, loc, _ in specs]
+        lengths = [length for _, _, length in specs]
+        data = segy.get_trace_keys(keys, lengths, 0, sample_size)
+        if data.ndim == 1:
+            data = data.reshape(-1, 1)
+
+        columns = []
+        by_name = {}
+        for i, (name, loc, length) in enumerate(specs):
+            values = np.asarray(data[:, i], dtype=np.int64)
+            item = {
+                "name": name,
+                "loc": loc,
+                "length": length,
+                "values": values,
+            }
+            columns.append(item)
+            by_name[name] = values
+
+        fast_candidates = []
+        for item in columns:
+            stat = _score_fast_axis(item["values"], item["loc"])
+            if stat["score"] <= 0:
+                continue
+            fast_candidates.append({
+                "name": item["name"],
+                "loc": item["loc"],
+                "length": item["length"],
+                **stat,
+            })
+        fast_candidates.sort(key=lambda x: x["score"], reverse=True)
+
+        if not fast_candidates:
+            return {
+                "profile": "trace_collection",
+                "confidence": 0.0,
+                "ndim": 2,
+                "shape": (int(segy.ntrace), int(segy.nt)),
+                "axes": {
+                    "trace": {"size": int(segy.ntrace)},
+                    "time": {"size": int(segy.nt)},
+                },
+                "candidates": {"fast": [], "group": []},
+            }
+
+        fast = fast_candidates[0]
+        period = fast["period"]
+        group_candidates = []
+        for item in columns:
+            if item["loc"] == fast["loc"] and item["length"] == fast["length"]:
+                continue
+            stat = _score_group_axis(item["values"], period, item["loc"])
+            if stat["score"] <= 0:
+                continue
+            group_candidates.append({
+                "name": item["name"],
+                "loc": item["loc"],
+                "length": item["length"],
+                **stat,
+            })
+        group_candidates.sort(key=lambda x: x["score"], reverse=True)
+        group = group_candidates[0] if group_candidates else None
+
+        profile = _profile_kind(fast, group, by_name, period)
+        nfast = int(period) if period else None
+        ngroup = None
+        is_regular = None
+        dense_trace_count = None
+        shape = (int(segy.ntrace), int(segy.nt))
+        ndim = 2
+        shape_source = "trace"
+        if profile == "volume_3d" and group is not None and fast["range_count"]:
+            endpoints = segy.get_trace_keys(
+                [group["loc"]],
+                [group["length"]],
+                np.array([0, segy.ntrace - 1], dtype=np.int32),
+            ).reshape(-1)
+            g0, g1 = int(endpoints[0]), int(endpoints[-1])
+            gmin, gmax = min(g0, g1), max(g0, g1)
+            ngroup = _range_count(gmin, gmax, group.get("step"))
+            if ngroup is not None:
+                nfast = int(fast["range_count"])
+                dense_trace_count = int(ngroup * nfast)
+                is_regular = dense_trace_count == int(segy.ntrace)
+                shape = (ngroup, nfast, int(segy.nt))
+                ndim = 3
+                shape_source = "range"
+                group["start"] = g0
+                group["end"] = g1
+                group["min"] = gmin
+                group["max"] = gmax
+        elif nfast and profile != "trace_collection":
+            ngroup = int((segy.ntrace + nfast - 1) // nfast)
+            dense_trace_count = int(ngroup * nfast)
+            is_regular = dense_trace_count == int(segy.ntrace)
+            shape = (ngroup, nfast, int(segy.nt))
+            ndim = 3
+            shape_source = "period"
+
+        confidence = fast["score"]
+        if group is not None:
+            confidence = min(1.0, 0.55 * fast["score"] + 0.45 * group["score"])
+
+        axes = {
+            "fast": {
+                k: fast[k]
+                for k in ("name", "loc", "length", "step", "period", "unique",
+                          "min", "max", "range_count")
+            },
+            "time": {"size": int(segy.nt), "dt": int(segy.bkeyi2(17))},
+        }
+        if group is not None:
+            axes["group"] = {
+                k: group[k]
+                for k in ("name", "loc", "length", "unique", "step")
+                if k in group
+            }
+            for k in ("start", "end", "min", "max"):
+                if k in group:
+                    axes["group"][k] = group[k]
+        if ngroup is not None:
+            axes["group_size"] = ngroup
+            axes["fast_size"] = nfast
+
+        out = {
+            "profile": profile,
+            "confidence": float(confidence),
+            "ndim": ndim,
+            "shape": shape,
+            "shape_source": shape_source,
+            "trace_shape": (int(segy.ntrace), int(segy.nt)),
+            "ntrace": int(segy.ntrace),
+            "nt": int(segy.nt),
+            "axes": axes,
+            "candidates": {
+                "fast": fast_candidates[:top],
+                "group": group_candidates[:top],
+            },
+        }
+        if is_regular is not None:
+            out["regular"] = is_regular
+            out["dense_trace_count"] = dense_trace_count
+            out["missing_or_partial_traces"] = dense_trace_count - int(segy.ntrace)
+        return out
+    finally:
+        if need_close:
+            segy.close()
 
 
 def parse_metainfo(meta: dict):
