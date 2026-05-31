@@ -20,6 +20,8 @@ Documents: [https://cigsegy.readthedocs.io](https://cigsegy.readthedocs.io) \n
 pypi: [https://pypi.org/project/cigsegy](https://pypi.org/project/cigsegy) 
 """
 
+import os
+
 
 class ExceptionWrapper:
     """
@@ -65,7 +67,8 @@ def progress_callback(current, total):
         pbar = None
 
 from .cpp import _CXX_SEGY
-_CXX_SEGY.set_progress_callback(progress_callback)
+if os.environ.get("CIGSEGY_BUILDING_DOCS") != "1":
+    _CXX_SEGY.set_progress_callback(progress_callback)
 # _CXX_SEGY.set_global_show_progress(False)
 from .cpp._CXX_SEGY import Pysegy
 
@@ -80,3 +83,4 @@ from . import transform
 from . import constinfo
 from . import createtool
 from .createtool import SegyCreate
+from .writer import SegyWriter

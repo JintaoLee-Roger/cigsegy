@@ -94,7 +94,8 @@ public:
               size_t te);
   void read(float *dst);
   void read_tslice(float *dst, size_t it, size_t stepi = 1, size_t stepx = 1);
-  void tofile(const std::string &binary_out_name, bool is2d = false);
+  void tofile(const std::string &binary_out_name, bool is2d = false,
+              uint64_t offset = 0);
   void cut(const std::string &outname, const std::vector<size_t> &ranges,
            bool is2d = false, const std::string &textual = "");
   void create_by_sharing_header(

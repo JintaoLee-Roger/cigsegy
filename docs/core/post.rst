@@ -1,239 +1,303 @@
-Read Poststack data
-###################
+Read, Process, and Write with NumPy
+###################################
+
+This page is for the common script workflow: inspect a SEG-Y file, read samples
+into NumPy, process the array, and write or export the result.
+
+Use this path when:
+
+- the data fits in memory and you want a plain ``numpy.ndarray``;
+- you are building a conversion or processing script;
+- you want explicit control over file creation;
+- you need quick header inspection without keeping a SEG-Y object around.
+
+Use :doc:`SegyNP` instead when the file should stay on disk and you need lazy
+slicing, repeated random access, coordinate transforms, arbitrary lines, or
+in-place editing through an array-like object.
+
+Most functions try to infer inline, crossline, offset, step, and coordinate byte
+locations from trace headers.  Pass explicit locations only when the inferred
+geometry is wrong or ambiguous.
 
 
-Meta Information
-================
+Inspect Headers and Metadata
+============================
 
-Use ``cigsegy.metaInfo`` to scan the SEG-Y file and obtain some meta information
-of the file, such as shape, dt, data format ...
-
-From textual header, we may get some key information, such as inline/crossline 
-location, inline/crossline step, cdp x/y location, ... See :ref:`textual_header`.
-
-.. code-block:: python
-
-    # inline/xline/istep/xstep/xloc/yloc = 189/193/2/1/73/77
-    >>> cigsegy.metaInfo('rogan.sgy', iline=189, xline=193, istep=2, xstep=1, xloc=73, yloc=77)
-    # shape: (n-inline, n-crossline, n-time) = (663, 769, 1001)
-    # N traces: 380762
-    # interval: di(iline) = 35.00 ft, dx(xline) = 17.50 ft, dt = 4 ms
-    # range: inline: 360 - 1684, crossline: 1764 - 2532, t: 0 - 4000.0 ms
-    # trace sorting code: Unknown
-    # scalar: 1, data format: 4-byte IBM floating-point
-    # (key info) iline: 189, xline: 193, xloc:  73, yloc:  77
-    #         istep:   2, xstep:   1
-
-    >>> cigsegy.metaInfo('rogan.sgy')
-    # shape: (n-inline, n-crossline, n-time) = (663, 769, 1001)
-    # N traces: 380762
-    # interval: di(iline) = 35.00 ft, dx(xline) = 17.50 ft, dt = 4 ms
-    # range: inline: 360 - 1684, crossline: 1764 - 2532, t: 0 - 4000.0 ms
-    # trace sorting code: Unknown
-    # scalar: 1, data format: 4-byte IBM floating-point
-    # (key info) iline: 189, xline: 193, xloc:  73, yloc:  77
-    #         istep:   2, xstep:   1
-
-
-In some SEG-Y files, we cannot get useful information from textual header, i.e., 
-don't know iline/xline/istep/xstep. You can just ignore them, and cigsegy 
-will automatically guess the locations and steps of inline and crossline.
-
-.. Note::
-
-    For the previous version, you may need to set ``use_guess=True``. For the lasted version,
-    you don't need do this, just ignore them.
+Start with the textual header:
 
 .. code-block:: python
 
-    >>> cigsegy.metaInfo('rogan.sgy', 189, 193) # ignore istep and xstep
-    # shape: (n-inline, n-crossline, n-time) = (663, 769, 1001)
-    # N traces: 380762
-    # interval: di(iline) = 35.00 ft, dx(xline) = 17.50 ft, dt = 4 ms
-    # range: inline: 360 - 1684, crossline: 1764 - 2532, t: 0 - 4000.0 ms
-    # trace sorting code: Unknown
-    # scalar: 1, data format: 4-byte IBM floating-point
-    # (key info) iline: 189, xline: 193, xloc:  73, yloc:  77
-    #         istep:   2, xstep:   1
+   import cigsegy
 
+   cigsegy.textual_header("input.sgy")
 
-To get the meta information in ``dict`` format, use ``cigsegy.tools.get_metaInfo``:
+Get a geometry summary:
 
 .. code-block:: python
 
-    >>> meta = cigsegy.tools.get_metaInfo('rogan.sgy')
-    >>> print(meta)
-    # {'iline': 189, 'istep': 2, 'offset': 37, 'ostep': 1, 'xline': 193, 
-    # 'xloc': 73, 'xstep': 1, 'yloc': 77, 'dformat': 1, 'di': 34.99929428100586, 
-    # 'dt': 4000, 'dx': 17.499540328979492, 'end_iline': 1684, 'end_offset': 0, 
-    # 'end_xline': 2532, 'esize': 4, 'fillNoValue': 0.0, 'ndim': 3, 'ni': 663, 
-    # 'no': 1, 'nt': 1001, 'ntrace': 380762, 'nx': 769, 'scalar': 1, 
-    # 'start_iline': 360, 'start_offset': 0, 'start_time': 0, 'start_xline': 1764, 
-    # 'trace_sorting_code': 0, 'tracesize': 4244, 'unit': 'ft'}
+   cigsegy.metaInfo("input.sgy")
+
+If the automatic scan needs help:
+
+.. code-block:: python
+
+   cigsegy.metaInfo("input.sgy", iline=189, xline=193)
+   cigsegy.metaInfo("gather.sgy", iline=189, xline=193, offset=37, is4d=True)
+
+Use ``tools.get_metaInfo`` when code needs the metadata dictionary:
+
+.. code-block:: python
+
+   meta = cigsegy.tools.get_metaInfo("input.sgy")
+   print(meta["ni"], meta["nx"], meta["nt"], meta["dt"])
+
+Read decoded binary or trace headers:
+
+.. code-block:: python
+
+   binary = cigsegy.tools.read_header("input.sgy", type="bh", printstr=False)
+   trace0 = cigsegy.tools.read_header("input.sgy", type="th", n=0, printstr=False)
+
+   print(binary[17])   # sample interval
+   print(binary[21])   # samples per trace
+   print(trace0[189])  # inline if byte 189 is used by this file
 
 
-.. Note::
+Read Samples
+============
 
-    You can use ``cigsegy.tools.trace_count('rogan.sgy')`` to get the trace number.
+``fromfile`` scans geometry and returns a NumPy array:
+
+.. code-block:: python
+
+   data = cigsegy.fromfile("poststack.sgy")
+   print(data.shape)  # (n_inline, n_xline, n_sample)
+
+For prestack data, try the same automatic path first:
+
+.. code-block:: python
+
+   gathers = cigsegy.fromfile("prestack.sgy")
+   print(gathers.shape)  # (n_inline, n_xline, n_offset, n_sample)
+
+If the geometry needs explicit fields:
+
+.. code-block:: python
+
+   data = cigsegy.fromfile("poststack.sgy", iline=189, xline=193)
+   gathers = cigsegy.fromfile(
+       "prestack.sgy",
+       iline=189,
+       xline=193,
+       offset=37,
+       is4d=True,
+   )
+
+``collect`` reads file-order traces as ``(n_trace, n_sample)``.  It is useful
+for 2D lines, irregular files, quick sampling, and index-based reads:
+
+.. code-block:: python
+
+   traces = cigsegy.collect("line.sgy")
+   part = cigsegy.collect("line.sgy", beg=1000, end=2000)
+   trace = cigsegy.collect("line.sgy", beg=100)
+   window = cigsegy.collect("line.sgy", beg=1000, end=2000, tbeg=200, tend=800)
+
+Read arbitrary trace indices:
+
+.. code-block:: python
+
+   import numpy as np
+
+   indices = np.array([0, 50, 100], dtype=np.int32)
+   traces = cigsegy.collect("line.sgy", indices=indices)
 
 
-Read 3D poststack data
+Read Trace Header Keys
 ======================
 
-Use ``cigsegy.fromfile`` to read data as ``numpy.ndarray``:
+``get_trace_keys`` reads selected trace header fields over many traces:
 
 .. code-block:: python
 
-    >>> d = cigsegy.fromfile('rogan.sgy', iline=9, xline=21, istep=2, xstep=1)
-    >>> d.shape 
-    # (663, 769, 1001) # (n-inline, n-crossline, n-time)
+   keys = cigsegy.get_trace_keys("input.sgy", keyloc=[189, 193], beg=0, end=1000)
+   ilines = keys[:, 0]
+   xlines = keys[:, 1]
 
-
-Use ``cigsegy.tofile`` to convert SEG-Y file to a binary file (without any headers).
-When using ``cigsegy.tofile()``, you **don't** have to worry about 
-running out of memory. Therefore, this function is very useful when 
-dealing with **huge** files.
+Read all trace values for one key:
 
 .. code-block:: python
 
-    >>> cigsegy.tofile('rogan.sgy', 'out.dat', iline=9, xline=21, istep=2, xstep=1)
+   ilines = cigsegy.get_trace_keys("input.sgy", keyloc=189)
 
-
-
-
-Read unsorted 3D poststack data
-==================================
-
-If the SEG-Y file is unsorted, you can use ``cigsegy.tools.full_scan`` to scan the 
-geometry of the file, and then use ``cigsegy.tools.load_by_geom`` to read the data.
-
-But, please note that ``cigsegy.tools.full_scan`` is slow, because it needs to scan the whole file.
-Besides, ``iline`` and ``xline`` are required to be specified.
+For non-standard byte locations, pass ``force`` as the byte width:
 
 .. code-block:: python
 
-    >>> geom = cigsegy.tools.full_scan('rogan.sgy', 189, 193) # must pass iline and xline
-    >>> d = cigsegy.tools.load_by_geom('rogan.sgy', geom)
+   values = cigsegy.get_trace_keys("input.sgy", keyloc=221, beg=0, end=1000, force=4)
 
 
+Export Raw Samples
+==================
 
-
-Read 3D poststack data by ignoring header
-==========================================
-
-You can use ``cigsegy.collect('rogan.sgy').reshape(ni, nx, nt)`` to do it.
-
-
-
-Use plot tools you will see like:
-
-.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/rogan3d.png
-    :alt: rogan3d
-    :align: center
-
-
-Read 2D poststack data
-======================
-
-Use ``cigsegy.collect`` to read all traces as a 2D array:
+``tofile`` writes sample values only, without textual, binary, or trace headers.
+The output is raw little-endian IEEE float32 samples:
 
 .. code-block:: python
 
-    >>> d = cigsegy.collect('L03_MIG_CB.sgy')
-    >>> d.shape
-    # (5038, 6000) # (n-traces, n-time)
+   cigsegy.tofile("poststack.sgy", "poststack.dat")
 
+The main reason to use ``tofile`` is memory pressure.  ``fromfile`` returns a
+NumPy array and therefore needs enough RAM for the whole volume.  ``tofile``
+streams through the SEG-Y and writes the samples directly to disk, which is
+useful when the machine cannot hold the full volume in memory or when another
+program expects raw float32 data.
 
-.. note::
-
-    ``collect`` function can read traces from ``beg`` to ``end``.
-
-    - default, collect all traces
-
-    .. code-block:: python
-
-        >>> d = cigsegy.collect('L03_MIG_CB.sgy')
-        >>> d.shape
-        # (5038, 6000) # (n-traces, n-time)
-
-    - set ``beg`` and ``end`` (``0 <= beg < end <= trace_count``) to collect traces from ``beg`` to ``end``, ``end`` is not included.
-
-    .. code-block:: python
-
-        >>> d = cigsegy.collect('L03_MIG_CB.sgy', 10, 100)
-        >>> d.shape
-        # (90, 6000)
-
-
-    - read one trace with a trace index, this is equivalent to setting ``beg=index`` and ``end=0``.
-
-    .. code-block:: python
-
-        >>> d = cigsegy.collect('L03_MIG_CB.sgy', 100)
-        >>> d.shape
-        # (1, 6000), the 100-th trace
-
-        # equivalent to
-        >>> d = cigsegy.collect('L03_MIG_CB.sgy', beg=100, end=0)
-
-
-    - set ``end=-1`` to collect traces from ``beg`` to ``trace_count``.
-
-    .. code-block:: python
-
-        >>> d = cigsegy.collect('L03_MIG_CB.sgy', 1000, -1)
-        >>> d.shape
-        # (4038, 6000), range like [1000:trace_count]
-
-
-Arbitrary slicing and extration
-===============================
-
-Use ``cigsegy.SegyNP`` class is a more efficient way, which treats the SEG-Y file as a 3D/2D numpy array.
-Please see ``SegyNP`` for more details. (From version 1.1.7)
-
-
-Plot the slices, you will see:
-
-.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/slice.png
-    :alt: slices
-    :align: center
-
-
-Cut a sub SEG-Y
-===============
-
-Use ``cigsegy.SegyNP`` class is a more efficient way, which treats the SEG-Y file as a 3D/2D numpy array.
-
-
-Plot region map 
-===============
-
-Use ``cigsegy.plot.plot_region`` to plot the region where the segy file was located
-(x/y axis is inline/crossline).
+The raw output has no shape metadata.  Record the shape from ``metaInfo`` or
+``tools.get_metaInfo`` and reopen it with ``numpy.memmap`` when needed:
 
 .. code-block:: python
 
-    # loc: [iline, xline, istep, xstep]
-    >>> cigsegy.plot.plot_region('rogan.sgy', iline=9, xline=21, xxx)
+   meta = cigsegy.tools.get_metaInfo("poststack.sgy")
+   shape = (meta["ni"], meta["nx"], meta["nt"])
 
-You will see:
+   data = np.memmap("poststack.dat", dtype="<f4", mode="r", shape=shape)
 
-.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/rogan.png
-    :alt: rogan
-    :align: center
-
-``rogan.sgy`` file is a **irregular** SEG-Y file which missing some traces.
-
-If you want to plot the region in CDP X and CDP Y axis, set ``mode='cdpxy'``, and set 
-``xloc=cdpx, yloc=cdpy`` if nessesary.
+Use ``as2d=True`` when you want a simple trace-by-sample dump without geometry:
 
 .. code-block:: python
 
-    # loc: [iline, xline, istep, xstep]
-    >>> cigsegy.plot.plot_region('rogan.sgy', mode='cdpxy', iline=9, xline=21, xloc=73, yloc=77, xxx)
+   cigsegy.tofile("input.sgy", "traces.dat", as2d=True)
+
+If you want a NumPy file with shape and dtype metadata, use ``to_npy``.  It also
+streams data and does not materialize the full volume in memory:
+
+.. code-block:: python
+
+   shape = cigsegy.to_npy("poststack.sgy", "poststack.npy")
+   data = np.load("poststack.npy", mmap_mode="r")
 
 
-.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/roganxy.png
-    :alt: roganxy
-    :align: center
+Write SEG-Y
+===========
+
+For new writing code, use :doc:`writer`.  The most common path is
+``SegyWriter.from_template``:
+
+.. code-block:: python
+
+   processed = process(data)
+
+   b = cigsegy.SegyWriter.from_template("poststack.sgy", "processed.sgy")
+   b.overwrite(True)
+
+   with b.open() as w:
+       w.write(processed)
+
+Write a continuous sub-volume by passing its logical start:
+
+.. code-block:: python
+
+   sub = data[100:300, 40:200, 0:800]
+
+   b = cigsegy.SegyWriter.from_template("poststack.sgy", "sub.sgy")
+   b.overwrite(True)
+
+   with b.open() as w:
+       w.write(sub, start=(100, 40, 0))
+
+For time resampling, set the output sample interval explicitly:
+
+.. code-block:: python
+
+   b = cigsegy.SegyWriter.from_template(
+       "input_2ms.sgy",
+       "output_1ms.sgy",
+       sample_interval_us=1000,
+       overwrite=True,
+   )
+   b.strict(False)
+
+   with b.open() as w:
+       w.write(super_res_data)
+
+Older shortcuts such as ``create_by_sharing_header`` and ``create`` remain
+available for compact scripts and legacy code.  See :doc:`create`.
+
+
+Edit Header Values
+==================
+
+Header editing changes the SEG-Y file in place.  Work on a copy unless you are
+intentionally modifying the original file.
+
+Modify a binary header key:
+
+.. code-block:: python
+
+   cigsegy.modify_bin_key("copy.sgy", loc=17, value=2000)
+
+Modify one trace header key:
+
+.. code-block:: python
+
+   cigsegy.modify_trace_key("copy.sgy", loc=189, value=1024, idx=0)
+
+Use ``idx=-1`` to modify all traces:
+
+.. code-block:: python
+
+   cigsegy.modify_trace_key("copy.sgy", loc=117, value=2000, idx=-1)
+
+
+Irregular or Unsorted Geometry
+==============================
+
+For convenient random access, prefer ``SegyNP(..., as_unsorted=True)``.  The
+lower-level tools are still available when you want direct control:
+
+.. code-block:: python
+
+   geom = cigsegy.tools.full_scan("input.sgy", 189, 193)
+   data = cigsegy.tools.load_by_geom("input.sgy", geom)
+
+Full scans read all trace headers, so they are slower than regular geometry
+scans.
+
+
+Plot Helpers
+============
+
+Plotting helpers are useful while confirming header locations and geometry:
+
+.. code-block:: python
+
+   cigsegy.plot.plot_trace_keys("input.sgy", keyloc=193, beg=0, end=2000)
+   cigsegy.plot.plot_trace_ix("input.sgy")
+   cigsegy.plot.plot_region("input.sgy")
+
+Pass explicit locations when checking a suspected geometry:
+
+.. code-block:: python
+
+   cigsegy.plot.plot_trace_ix("input.sgy", iline=189, xline=193)
+   cigsegy.plot.plot_region("input.sgy", iline=189, xline=193)
+
+
+Sample Format Helpers
+=====================
+
+For low-level conversion work, ``cigsegy`` exposes IBM/IEEE floating-point
+helpers:
+
+.. code-block:: python
+
+   ieee = cigsegy.ibm_to_ieee(ibm_values, is_big_endian=True)
+   ibm = cigsegy.ieee_to_ibm(
+       ieee_values,
+       is_little_endian_input=True,
+       is_big_endian_output=True,
+   )
+
+Most users do not need these functions directly; SEG-Y readers and writers use
+the file sample format code automatically.

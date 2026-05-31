@@ -10,6 +10,8 @@ These functions are designed for quick and direct usage, allowing you to perform
 like header reading, file scanning, data retrieval, and file creation using a convenient `cigsegy.xxx` syntax.
 """
 
+import gc
+import os
 import warnings
 import numpy as np
 from cigsegy.cpp import _CXX_SEGY
@@ -251,6 +253,44 @@ def collect(
     return data
 
 
+def _prepare_segy_for_stream_export(
+    segy_name,
+    iline: int = None,
+    xline: int = None,
+    offset: int = None,
+    istep: int = None,
+    xstep: int = None,
+    ostep: int = None,
+    *,
+    is4d: bool = None,
+    as2d: bool = False,
+):
+    if isinstance(segy_name, _CXX_SEGY.Pysegy):
+        segy = segy_name
+        need_close = False
+    else:
+        segy = _CXX_SEGY.Pysegy(str(segy_name))
+        need_close = True
+
+    try:
+        if as2d:
+            return segy, need_close, (int(segy.ntrace), int(segy.nt))
+
+        [iline, xline, offset, istep, xstep, ostep, xloc, yloc, _is4d] = utils.guess(segy, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
+        if is4d is None:
+            is4d = _is4d
+        segy.setLocations(iline, xline, offset)
+        segy.setSteps(istep, xstep, ostep)
+        ndim = 4 if is4d else 3
+        segy.set_segy_type(ndim)
+        segy.scan()
+        return segy, need_close, tuple(int(v) for v in segy.shape)
+    except Exception:
+        if need_close:
+            segy.close()
+        raise
+
+
 def tofile(
     segy_name: str,
     out_name: str,
@@ -263,9 +303,13 @@ def tofile(
     *,
     is4d: bool = None,
     as2d: bool = False,
-) -> np.ndarray:
+) -> None:
     """
-    convert a segy file to a binary file
+    Stream SEG-Y samples to a raw binary file.
+
+    This function writes little-endian IEEE float32 samples without textual,
+    binary, or trace headers.  It is useful when the SEG-Y is too large to load
+    with ``fromfile`` but a downstream tool can consume raw float32 data.
 
     Parameters
     ----------
@@ -281,29 +325,81 @@ def tofile(
         the step of inline numbers
     xstep : int
         the step of crossline numbers
-    as_2d : bool
+    as2d : bool
         if True, just remove the header and convert data to IEEE 32 in litte endian
     """
-    if isinstance(segy_name, _CXX_SEGY.Pysegy):
-        segy = segy_name
-    else:
-        segy = _CXX_SEGY.Pysegy(str(segy_name))
-
-    if as2d:
+    out_name = os.fspath(out_name)
+    segy, need_close, _ = _prepare_segy_for_stream_export(
+        segy_name,
+        iline,
+        xline,
+        offset,
+        istep,
+        xstep,
+        ostep,
+        is4d=is4d,
+        as2d=as2d,
+    )
+    try:
         segy.tofile(out_name, as2d)
-    else:
-        [iline, xline, offset, istep, xstep, ostep, xloc, yloc, _is4d] = utils.guess(segy_name, iline, xline, offset, istep, xstep, ostep, 181, 185) # yapf: disable
-        if is4d is None:
-            is4d = _is4d
-        segy.setLocations(iline, xline, offset)
-        segy.setSteps(istep, xstep, ostep)
-        ndim = 4 if is4d else 3
-        segy.set_segy_type(ndim)
-        segy.scan()
-        segy.tofile(out_name, as2d)
+    finally:
+        if need_close:
+            segy.close()
 
-    if not isinstance(segy_name, _CXX_SEGY.Pysegy):
-        segy.close()
+
+def to_npy(
+    segy_name: str,
+    out_name: str,
+    iline: int = None,
+    xline: int = None,
+    offset: int = None,
+    istep: int = None,
+    xstep: int = None,
+    ostep: int = None,
+    *,
+    is4d: bool = None,
+    as2d: bool = False,
+) -> tuple:
+    """
+    Stream SEG-Y samples directly to a NumPy ``.npy`` file.
+
+    Unlike ``fromfile(...); np.save(...)``, this function does not materialize
+    the whole SEG-Y volume in memory.  It writes a NumPy header first and then
+    streams little-endian float32 samples into the array payload.
+
+    Returns
+    -------
+    tuple
+        The output array shape.
+    """
+    out_name = os.fspath(out_name)
+    segy, need_close, shape = _prepare_segy_for_stream_export(
+        segy_name,
+        iline,
+        xline,
+        offset,
+        istep,
+        xstep,
+        ostep,
+        is4d=is4d,
+        as2d=as2d,
+    )
+    try:
+        mmap = np.lib.format.open_memmap(
+            out_name,
+            mode="w+",
+            dtype=np.dtype("<f4"),
+            shape=shape,
+        )
+        payload_offset = int(mmap.offset)
+        mmap.flush()
+        del mmap
+        gc.collect()
+        segy.tofile(out_name, as2d, payload_offset)
+        return shape
+    finally:
+        if need_close:
+            segy.close()
 
 
 def create_by_sharing_header(

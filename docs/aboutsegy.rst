@@ -1,106 +1,105 @@
 About SEG-Y
 ###########
 
-The SEG-Y (sometimes SEG Y or SEGY) file format is one of several data 
-standards developed by the Society of Exploration Geophysicists (SEG) 
-for the exchange of geophysical data. It is an open standard, and is 
-controlled by the SEG Technical Standards Committee, a non-profit organization.
+SEG-Y is the common exchange format for seismic data.  A practical reader or
+writer must handle two things at the same time:
 
-The format was originally developed in 1973 to store single-line seismic 
-reflection digital data on magnetic tapes. The specification was 
-published in 1975.
+- the byte-level SEG-Y structure;
+- the survey geometry encoded in trace headers.
 
-The format and its name evolved from the SEG "Ex" or Exchange 
-Tape Format. However, since its release, there have been significant 
-advancements in geophysical data acquisition, such as 3-dimensional 
-seismic techniques and high speed, high capacity recording.
-
-The most recent revision of the SEG-Y format was published in 2002, 
-named the rev 1 specification. It still features certain legacies 
-of the original format (referred as rev 0), such as an optional SEG-Y 
-tape label, the main 3200 byte textual file header and a 400 byte 
-binary file header [1]_.
+``cigsegy`` focuses on making those two layers accessible from Python while
+using C++ for the heavy file I/O and sample encoding work.
 
 
-Version
-=======
+SEG-Y Revisions
+===============
 
-There are several version of SEG-Y, you can find the documents at `SEG Technical Standards <https://library.seg.org/seg-technical-standards>`_.
+Useful references:
 
-The marjor versions include:
+- `SEG-Y rev 0 (1975) <https://library.seg.org/pb-assets/technical-standards/seg_y_rev0-1686080980707.pdf>`_
+- `SEG-Y rev 1 (2002) <https://library.seg.org/pb-assets/technical-standards/seg_y_rev1-1686080991247.pdf>`_
+- `SEG-Y rev 2.0 (2017) <https://library.seg.org/pb-assets/technical-standards/seg_y_rev2_0-mar2017-1686080998003.pdf>`_
 
-- `SEG-Y v0 (1975) <https://library.seg.org/pb-assets/technical-standards/seg_y_rev0-1686080980707.pdf>`_
-- `SEG-Y v1 (2002) <https://library.seg.org/pb-assets/technical-standards/seg_y_rev1-1686080991247.pdf>`_
-- `SEG-Y v2 (2017) <https://library.seg.org/pb-assets/technical-standards/seg_y_rev2_0-mar2017-1686080998003.pdf>`_
-
-All version compression (click `here <https://wiki.seg.org/w/images/4/42/SEG-Y_bytestream_all_revisions.pdf>`_ for source pdf version):
-
-.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/comparison.png
-    :alt: segy comparison
-    :align: center
+Many real files mix conventions from different revisions.  ``cigsegy`` reads
+the binary header and trace headers directly, so you can override geometry byte
+locations when a file does not follow the expected convention.
 
 
-Structure
-=========
+File Structure
+==============
 
-By comparing several versions of the SEG-Y files, we can observe that 
-the SEG-Y file is primarily composed of the following **mandatory parts**: 
-``3200 bytes Textual Header``, ``400 bytes Binary Header``, ``240 bytes Trace Headers`` 
-and corresponding ``data traces``. And there are several **optional parts** in 
-version 1 and version 2: ``Optional 128 byte SEG-Y Tape Label``, ``Extended
-Textual File Header``, ``Data Trailer``.
+The common layout is:
 
-**CIGSEGY** only supports these **mandatory parts**, 
-and other **optional parts** are currently not supported 
-(this is because the vast majority of SEG-Y files only include these **mandatory parts**), 
-i.e., **cigsegy** considers that a SEG-Y file contains **one** ``Textual Header``, 
-**one** ``Binary Header``, **N** ``Trace Headers``, **N** ``data traces``, 
-where N is the total number of traces.
+1. 3200-byte textual header;
+2. 400-byte binary header;
+3. optional extended textual headers;
+4. repeated trace records:
 
-Although the SEG-Y file structure and Version 0 closely resemble 
-what cigsegy considers, this doesn't imply that cigsegy can only 
-handle Version 0 SEG-Y files. 
-CIGSEGY takes into account the information from 
-the binary header and trace headers of Version 1 and Version 2 as well.
+   - 240-byte trace header;
+   - sample bytes for that trace;
+
+5. optional data trailer.
+
+``SegyWriter`` can write textual headers, binary headers, extended textual
+headers, trace headers, sample bytes, and an optional data trailer.  Most common
+reading workflows still assume one textual header, one binary header, and
+file-order trace records.
 
 
-Type of data
-============
+Geometry
+========
 
-The seismic data can be devided into two categories: Poststack seismic data
-and Prestack seismic gather. 
+SEG-Y does not have a universal array model.  A 3D post-stack cube becomes an
+array only after you decide which trace header fields represent inline and
+crossline.  A 4D/pre-stack volume also needs an offset field.
 
-Inside the binary trace header of a SEG-Y file, there is a 2-byte integer 
-stored at bytes 3229-3230. This integer describes the category to 
-which this SEG-Y file belongs.
+Common byte locations are:
 
-+-------+--------------------------------+-------------------+
-| value | data type                      | post or pre stack |
-+=======+================================+===================+
-| -1    | Other                          | \-                |
-+-------+--------------------------------+-------------------+
-| 0     | Unknown                        | \-                |
-+-------+--------------------------------+-------------------+
-| 1     | As recorded (no sorting)       | prestack          |
-+-------+--------------------------------+-------------------+
-| 2     | CDP ensemble                   | prestack          |
-+-------+--------------------------------+-------------------+
-| 3     | Single fold continuous profile | \-                |
-+-------+--------------------------------+-------------------+
-| 4     | Horizontally stacked           | poststack         |
-+-------+--------------------------------+-------------------+
-| 5     | Common source point            | prestack          |
-+-------+--------------------------------+-------------------+
-| 6     | Common receiver point          | prestack          |
-+-------+--------------------------------+-------------------+
-| 7     | Common offset point            | prestack          |
-+-------+--------------------------------+-------------------+
-| 8     | Common mid-point               | prestack          |
-+-------+--------------------------------+-------------------+
-| 9     | Common conversion point        | prestack          |
-+-------+--------------------------------+-------------------+
+- inline: 189 or 9;
+- crossline: 193 or 21;
+- offset: 37;
+- X coordinate: 181 or 73;
+- Y coordinate: 185 or 77.
 
---------------------
+These are conventions, not guarantees.  Use ``textual_header``,
+``metaInfo``, ``get_trace_keys``, or plotting helpers to confirm a file.
 
-.. [1] `From SEG wiki: SEG-Y (https://wiki.seg.org/wiki/SEG-Y) <https://wiki.seg.org/wiki/SEG-Y>`_
 
+Sample Formats
+==============
+
+The binary header field at bytes 3225-3226 stores the SEG-Y sample format code.
+Common values include:
+
+- ``1``: 4-byte IBM floating point;
+- ``2``: 4-byte signed integer;
+- ``3``: 2-byte signed integer;
+- ``5``: 4-byte IEEE floating point;
+- ``8``: 1-byte signed integer.
+
+``SegyWriter.write_trace_block`` accepts float32-compatible data and lets the
+C++ backend encode it according to the selected sample format.
+``write_raw_trace_block`` bypasses conversion and copies already encoded sample
+bytes exactly.
+
+
+Post-Stack and Pre-Stack
+========================
+
+Post-stack data is usually represented as:
+
+.. code-block:: text
+
+   (n_inline, n_xline, n_sample)
+
+Pre-stack or gather data often becomes:
+
+.. code-block:: text
+
+   (n_inline, n_xline, n_offset, n_sample)
+
+2D lines can be treated as:
+
+.. code-block:: text
+
+   (n_trace, n_sample)

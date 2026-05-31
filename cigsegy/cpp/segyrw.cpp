@@ -606,7 +606,8 @@ void SegyRW::write4d(const float *data, size_t is, size_t ie, size_t xs,
   }
 }
 
-void SegyRW::tofile(const std::string &binary_out_name, bool is2d) {
+void SegyRW::tofile(const std::string &binary_out_name, bool is2d,
+                    uint64_t offset) {
   if (!is2d && m_ndim == 2) {
     throw std::runtime_error("ndim == 2, maybe you need set is2d=true");
   }
@@ -621,15 +622,20 @@ void SegyRW::tofile(const std::string &binary_out_name, bool is2d) {
     need_size = _need_size_b(2);
   }
 
-  create_file(binary_out_name, need_size);
+  if (offset == 0) {
+    create_file(binary_out_name, need_size);
+  }
 
   std::error_code error;
   mio::mmap_sink rw_mmap = mio::make_mmap_sink(binary_out_name, error);
   if (error) {
     throw std::runtime_error("mmap fail in 'rw' mode: " + binary_out_name);
   }
+  if (rw_mmap.size() < offset + need_size) {
+    throw std::runtime_error("output file is smaller than offset + data size");
+  }
 
-  float *dst = reinterpret_cast<float *>(rw_mmap.data());
+  float *dst = reinterpret_cast<float *>(rw_mmap.data() + offset);
 
   // or need split into serveral chunks?
   if (!is2d) {

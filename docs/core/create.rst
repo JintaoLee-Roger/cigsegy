@@ -1,86 +1,119 @@
-Create a SEG-Y file
-###################
+Legacy Creation APIs
+####################
 
-Create from numpy array (or binary file) and SEG-Y headers
-==========================================================
-
-There is often such a workflow:
-    a. Display SEG-Y format data ``orig.segy`` in specialized software, such as Petrel.
-    b. Use Python code to process this data and obtain new data ``afterprocess``, which is in NumPy array format
-    c. To display this processed data in specialized software, it needs to be converted back to SEG-Y format and use the headers from the original data, i.e., using the NumPy array ``afterprocess`` and the header of ``orig.segy`` to create a new SEG-Y file ``out.segy``.
-
-You can use ``cigsegy.create_by_sharing_header`` to create a new 
-SEG-Y file ``out.segy`` whose headers are same as ``orig.segy``.
-
-.. code-block:: python
-
-    # read orig.segy to numpy array
-    >>> orig = cigsegy.fromfile('orig.segy', 9, 21)
-    >>> orig.shape 
-    # (589, 762, 1001)
-
-    # do some prosess
-    >>> afterprocess = do_some_process(orig)
-    >>> afterprocess.shape 
-    # (589, 762, 1001)
-
-    # assume the iline/xline/istep/xstep of **orig.segy** are 9/21/1/1
-    >>> cigsegy.create_by_sharing_header('out.segy', 'orig.segy', afterprocess, \
-        keylocs=[9, 21, 1, 1])
-
-    # using binary file instead of numpy array
-    # assume shape = (589, 762, 1001) = (n-inline, n-crossline, n-time)
-    >>> cigsegy.create_by_sharing_header('out.segy', 'orig.segy', 'afterprocess.dat', \
-        (589, 762, 1001), keylocs=[9, 21, 1, 1])
+For new writing code, use :doc:`writer`.  This page documents the shorter
+factory functions that remain useful for old scripts and compact workflows.
 
 
-If ``afterprocess`` is a sub-volume, i.e., only process a part of ``orig.segy``, you 
-can set ``start=(iline_start, xline_start, time_start)`` to create a new SEG-Y file.
+create_by_sharing_header
+========================
 
-For example:
+``create_by_sharing_header`` creates a SEG-Y file by copying headers from an
+existing SEG-Y file and writing new sample values.
 
 .. code-block:: python
 
-    # read orig.segy to numpy array
-    >>> orig = cigsegy.fromfile('orig.segy', 9, 21)
-    >>> orig.shape 
-    # (589, 762, 1001)
+   import cigsegy
 
-    # cut orig, only process a part of orig array
-    # offset is (100, 400, 300)
-    >>> toprocess = orig[100:520, 400:700, 300:900]
-    >>> afterprocess = do_some_process(toprocess)
-    >>> afterprocess.shape 
-    # (420, 300, 600)
+   processed = process(data)
 
-    # create 'out.segy' using afterprocess (data) and a part
-    # of header in 'orig.segy'
-    >>> cigsegy.create_by_sharing_header('out.segy', 'orig.segy', afterprocess, \
-        keylocs=[9, 21, 1, 1], start=(100, 400, 300))
+   cigsegy.create_by_sharing_header(
+       "processed.sgy",
+       "template.sgy",
+       processed,
+       keylocs=[189, 193, 1, 1],
+   )
 
-
-.. Note::
-
-    For all ``create``-like functions, you can speacify the ``textual`` to 
-    custom textual header, e.g.,
-
-    .. code-block:: python
-        
-        # you can special the first 12 lines of textual header
-        >>> textual12 = "xxxxx"
-        >>> cigsegy.create_by_sharing_header('out.segy', 'orig.segy', afterprocess, \
-            keylocs=[9, 21, 1, 1], start=(100, 400, 300), textual=my_info)
-        >>> cigsegy.textual_header('out.segy')
-        # xxx
-
-
-
-Create from numpy array and some parameters
-===========================================
+For a raw float32 binary file, pass ``shape``:
 
 .. code-block:: python
 
-    # d is a numpy array, d.shape == (n-inlines, n-crosslines, n-time)
-    >>> cigsegy.create('out.segy', d, format=5, start_time=0, iline_interval=15, ...)
+   cigsegy.create_by_sharing_header(
+       "processed.sgy",
+       "template.sgy",
+       "processed.dat",
+       shape=(589, 762, 1001),
+       keylocs=[189, 193, 1, 1],
+   )
+
+For a sub-volume, pass the zero-based logical start:
+
+.. code-block:: python
+
+   cigsegy.create_by_sharing_header(
+       "sub.sgy",
+       "template.sgy",
+       sub,
+       keylocs=[189, 193, 1, 1],
+       start=[100, 40, 0],
+   )
+
+For time super-resolution or downsampling where the output sample count or
+sample interval no longer matches the template, set ``strict=False`` and pass
+``dt_new`` in microseconds:
+
+.. code-block:: python
+
+   cigsegy.create_by_sharing_header(
+       "output_1ms.sgy",
+       "template_2ms.sgy",
+       super_res_data,
+       keylocs=[189, 193, 1, 1],
+       strict=False,
+       dt_new=1000,
+   )
+
+This API handles continuous sub-volumes.  For spatial thinning with strides,
+use ``SegyWriter.from_template(...).select(...)``.
 
 
+Textual Header Override
+=======================
+
+The ``textual`` argument can be:
+
+- ``""`` or ``None``: keep/generate the default behavior;
+- 3200 bytes;
+- a 3200-character string;
+- a list of strings used to generate a standard 40-line textual header.
+
+.. code-block:: python
+
+   text_lines = [
+       "Processed with custom workflow",
+       "Input: template.sgy",
+   ]
+
+   cigsegy.create_by_sharing_header(
+       "processed.sgy",
+       "template.sgy",
+       processed,
+       keylocs=[189, 193, 1, 1],
+       textual=text_lines,
+   )
+
+
+create
+======
+
+``cigsegy.create`` is an older convenience function for 3D regular volumes.  It
+is still available, but ``SegyWriter.create`` is preferred for new code.
+
+.. code-block:: python
+
+   cigsegy.create(
+       "created.sgy",
+       data,
+       format=5,
+       dt=2000,
+       start_time=0,
+       iline_interval=25,
+       xline_interval=25,
+   )
+
+
+SegyCreate
+==========
+
+``cigsegy.SegyCreate`` is a lower-level builder used by the legacy create path.
+Use it only when you need direct access to those older construction steps.

@@ -1,192 +1,243 @@
 .. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/logo.svg
-    :alt: logo
+   :alt: logo
 
+**cigsegy** is a Python and C++ toolkit for reading, inspecting, converting,
+and writing SEG-Y seismic data.
 
-**A SEG-Y tool developed by** `Computational Interpretation Group (CIG) <https://cig.ustc.edu.cn/main.htm>`_
+The common workflow is intentionally simple:
 
-**cigsegy** is a tool for exchanging data between **SEG-Y** format and 
-**NumPy** array inside Python environment.
+1. inspect the textual header;
+2. scan metadata and let ``cigsegy`` infer geometry byte locations;
+3. read samples into a NumPy array with ``fromfile``;
+4. process the array;
+5. write a SEG-Y back with ``SegyWriter``.
 
-It can be used to read and convert a SEG-Y format data into a Numpy array, 
-even if the SEG-Y format data is missing some traces or its inline/crossline 
-step is not equal to 1.
+``SegyNP`` is the array-like reader to use when you need partial reads, random
+slicing, visualization, or files that should stay on disk.
 
-It can also be used to create a SEG-Y format data from a Numpy array. In this
-mode, users can use headers from a existed SEG-Y file or create new headers by 
-setting some parameters.
-
-Tutorial and reference documentation is provided 
-at `cigsegy.readthedocs.io <https://cigsegy.readthedocs.io/en/latest/>`_.
-And the source code is always available at `github.com/JintaoLee-Roger/cigsegy <https://github.com/JintaoLee-Roger/cigsegy>`_.
-
-
-
-Core Features
-=============
-
-- Fast (Implemented in c++)
-- python wraping and **numpy** array supports
-- dealing with normal and **irregular** SEG-Y volume [1]_.
-- creating a SEG-Y file using the **existed header** of a SEG-Y
+Source code is available at
+`github.com/JintaoLee-Roger/cigsegy <https://github.com/JintaoLee-Roger/cigsegy>`_.
 
 
 Quick Start
 ===========
 
-1. Install cigsegy via PyPi
+Install
+-------
 
 .. code-block:: bash
 
-    pip install cigsegy
+   pip install cigsegy
 
 
-2. Print the 3200 bytes textual header of a SEG-Y file
+Inspect the Header
+------------------
 
-.. code-block:: python
-
-    >>> import cigsegy
-    >>> cigsegy.textual_header('rogan.sgy')
-    # C01 CLIENT: STUART PETROLEUM LTD    AREA:COOPER BASIN   SOUTH AUSTRALIA
-    # ...
-    # C06 INLINE RANGE: 360 - 1684(2)  CROSSLINE RANGE 1764 - 2532(1)
-    # C07 -------------PROCESSING FLOW---------------
-    # ...
-    # C35  DESC                   BYTE LOCATION       FORMAT 
-    # C36  3D INLINE NUMBER        9- 12             32 BIT INTEGER 
-    # C37  3D CROSSLINE  NUMBER   21- 24             32 BIT INTEGER 
-    # C38  CDP_X                  73- 76             32 BIT INTEGER 
-    # C39  CDP_Y                  77- 80             32 BIT INTEGER 
-    # C40  
-
-You can get some key information to read the SEG-Y file, such as inline location 
-is 9 (C36), crossline location is 21 (C37), X location is 73 (C38), Y location 
-is 77 (C39), inline step is 2 (C06), crossline step is 1 (C06).
-
-3. Scan the SEG-Y file and get some meta information
+Start with the textual header.  It often tells you where inline, crossline, and
+coordinate fields are stored.
 
 .. code-block:: python
 
-    >>> cigsegy.metaInfo('rogan.sgy', iline=9, xline=21, istep=2, xstep=1, xloc=73, yloc=77)
-    # In python, the shape is (n-inline, n-crossline, n-time) = (663, 769, 1001).
+   import cigsegy
 
-    # shape: (n-time, n-crossline, n-inline) = (1001, 769, 663)
-    # sample interval: 4000, data format code: 4-bytes IBM floating-point
-    # inline range: 360 - 1684, crossline range: 1764 - 2532
-    # interval of inline: 35.0, interval of crossline: 17.5, time start: 0
-    # inline field: 9, crossline field: 21
-    # inline step: 2, crossline step: 1
-    # Is regular file (no missing traces): false
+   cigsegy.textual_header("input.sgy")
 
-You will get some information about this SEG-Y file, such as, the data shape, 
-intervals, data format ...
-
-.. Note::
-
-    If you are unsure about the values of some parameters, 
-    you can ignore them and cigsegy will try to guess them automatically.
- 
-    .. code-block:: python
-
-        >>> cigsegy.metaInfo('fx.segy', iline=9, xline=21) # ignore istep, xstep, ...
-
-
-4. Read the SEG-Y
-
-Please note that the shape is like (n-inlines, n-crosslines, n-time_samples)
+Then scan metadata.  ``cigsegy`` will try to infer inline, crossline, offset,
+step, and coordinate byte locations from the trace headers.
 
 .. code-block:: python
 
-    >>> d = cigsegy.fromfile('rogan.sgy', iline=9, xline=21, istep=2, xstep=1)
-    >>> d.shape
-    # (663, 769, 1001)
+   cigsegy.metaInfo("input.sgy")
 
-
-If you need a binary file without any headers, i.e., save the numpy array
+Pass explicit byte locations only when the guess is ambiguous or the SEG-Y uses
+non-standard headers:
 
 .. code-block:: python
 
-    >>> cigsegy.tofile('rogan.sgy', 'out.dat', iline=9, xline=21, istep=2, xstep=1)
+   cigsegy.metaInfo("input.sgy", iline=189, xline=193)
 
-.. Note::
-    When using ``cigsegy.tofile()``, you **don't** have to worry about 
-    running out of memory. Therefore, this function is very useful when 
-    dealing with **huge** files.
-
-
-5. Create a SEG-Y using a numpy array and headers from another SEG-Y file
-
-There is often such a workflow:
-    a. Display SEG-Y format data ``orig.segy`` in specialized software, such as Petrel.
-    b. Use Python code to process this data and obtain new data ``afterprocess``, which is in NumPy array format
-    c. To display this processed data in specialized software, it needs to be converted back to SEG-Y format and use the headers from the original data, i.e., using the NumPy array ``afterprocess`` and the header of ``orig.segy`` to create a new SEG-Y file ``out.segy``.
+Use ``tools.read_header`` when you need decoded binary or trace header fields:
 
 .. code-block:: python
 
-    # assume the iline/xline/istep/xstep of **orig.segy** are 9/21/1/1
-    >>> cigsegy.create_by_sharing_header('out.segy', 'orig.segy', afterprocess, \
-        keylocs=[9, 21])
-
-6. Create a SEG-Y using a numpy array and some parameters
-
-.. code-block:: python
-
-    # d is a numpy array, d.shape == (n-inlines, n-crosslines, n-time)
-    >>> cigsegy.create('out.segy', d, format=5, start_time=0, iline_interval=15, ...)
+   binary = cigsegy.tools.read_header("input.sgy", type="bh", printstr=False)
+   trace0 = cigsegy.tools.read_header("input.sgy", type="th", n=0, printstr=False)
 
 
-7. Access the SEG-Y file as a 3D numpy array, without reading the whole file into memory
+Read to NumPy
+-------------
+
+For many processing scripts, the most direct path is reading the whole volume
+into a NumPy array.
 
 .. code-block:: python
 
-    >>> from cigsegy import SegyNP
-    >>> d = SegyNP('rogan.sgy', keylocs=[9, 21])
-    >>> d.shape # (ni, nx, nt), use as a numpy array, 3D geometry
-    >>> sx = d[100] # the 100-th inline profile
-    >>> sx = d[100:200] # return a 3D array with shape (100, nx, nt)
-    >>> sx = d[:, 200, :] # the 200-th crossline profile
-    >>> sx = d[:, :, 100] # the 100-th time slice, note, it may be slow if the file is large
-    >>> sx.min(), sx.max() 
-    # get the min and max value, but they are evaluated from a part of data, 
-    # so they may not be the real min and max value
-    >>> sx.ntrace # get the number of traces for the file
+   data = cigsegy.fromfile("input.sgy")
+   print(data.shape)  # (n_inline, n_xline, n_sample)
 
+For 4D/pre-stack data, try the same automatic path first:
+
+.. code-block:: python
+
+   gathers = cigsegy.fromfile("gather.sgy")
+
+If the inferred geometry is not what you expect, pass the known fields:
+
+.. code-block:: python
+
+   data = cigsegy.fromfile("input.sgy", iline=189, xline=193)
+   gathers = cigsegy.fromfile("gather.sgy", iline=189, xline=193, offset=37)
+
+For 2D trace collections:
+
+.. code-block:: python
+
+   traces = cigsegy.collect("line.sgy")
+
+For volumes that are too large for memory, stream samples directly to disk:
+
+.. code-block:: python
+
+   cigsegy.tofile("input.sgy", "samples.dat")  # raw float32, no shape metadata
+   cigsegy.to_npy("input.sgy", "samples.npy")  # .npy, can be memory-mapped
+
+
+Process and Write Back
+----------------------
+
+When the output keeps the same trace geometry as the input, write with
+``SegyWriter.from_template``.  This is the modern replacement for the old
+``create_by_sharing_header`` workflow in new code.
+
+.. code-block:: python
+
+   processed = process(data)
+
+   b = cigsegy.SegyWriter.from_template("input.sgy", "processed.sgy")
+   b.overwrite(True)
+
+   with b.open() as w:
+       w.write(processed)
+
+For a continuous sub-volume:
+
+.. code-block:: python
+
+   sub = data[100:300, 40:200, 0:800]
+
+   b = cigsegy.SegyWriter.from_template("input.sgy", "sub.sgy")
+   b.overwrite(True)
+
+   with b.open() as w:
+       w.write(sub, start=(100, 40, 0))
+
+For time super-resolution or downsampling where the sample interval changes,
+set the output interval explicitly:
+
+.. code-block:: python
+
+   b = cigsegy.SegyWriter.from_template("input_2ms.sgy", "output_1ms.sgy")
+   b.strict(False).sample_interval_us(1000).overwrite(True)
+
+   with b.open() as w:
+       w.write(super_res_data)
+
+For spatial thinning, copy headers only from real traces in the template:
+
+.. code-block:: python
+
+   thin = data[::2, ::3, :]
+
+   b = cigsegy.SegyWriter.from_template("input.sgy", "thin.sgy")
+   b.select(iline=slice(None, None, 2), xline=slice(None, None, 3))
+   b.overwrite(True)
+
+   with b.open() as w:
+       w.write(thin)
+
+
+Read Lazily with SegyNP
+-----------------------
+
+Use ``SegyNP`` when the file is too large to load, or when you need interactive
+random access.
+
+.. code-block:: python
+
+   vol = cigsegy.SegyNP("input.sgy")
+
+   iline = vol[100, :, :]
+   xline = vol[:, 200, :]
+   time_slice = vol[:, :, 300]
+   small_cube = vol[100:140, 200:260, 300:700]
+
+
+Write from Stored Headers
+-------------------------
+
+Use this mode for chunked containers or pipelines that already have textual,
+binary, and trace headers.
+
+.. code-block:: python
+
+   b = cigsegy.SegyWriter.from_headers("out.sgy")
+   b.textual(textual).binary(binary)
+   b.sample_format(1).sample_count(1001)
+   b.overwrite(True)
+
+   with b.open() as w:
+       for trace_headers, samples in blocks:
+           w.write_trace_block(trace_headers, samples)
+
+``write_raw_trace_block`` copies already encoded sample bytes without IBM/IEEE
+or integer conversion.
+
+
+Create Regular Headers from Scratch
+-----------------------------------
+
+.. code-block:: python
+
+   b = cigsegy.SegyWriter.create(
+       "created.sgy",
+       shape=(589, 762, 1001),
+       sample_format=5,
+       sample_interval_us=2000,
+       overwrite=True,
+   )
+   b.grid(iline_start=1000, xline_start=2000)
+   b.origin(x_start=600000, y_start=4100000, x_step=25, y_step=25)
+
+   with b.open() as w:
+       w.write(data)
+
+
+Legacy Shortcuts
+================
+
+The following functions are still available:
+
+- ``cigsegy.fromfile``: read a 3D or 4D volume into memory;
+- ``cigsegy.collect``: read traces as a 2D array;
+- ``cigsegy.tofile``: dump sample data to a raw binary file;
+- ``cigsegy.create_by_sharing_header``: create a SEG-Y using headers from an
+  existing SEG-Y file;
+- ``cigsegy.create``: older 3D regular-volume writer.
+
+For new writing code, prefer ``SegyWriter`` because it covers template writes,
+stored-header block writes, raw-byte writes, and generated headers with one API.
 
 
 License
 =======
 
-cigsegy is provided under a MIT license that can be found in the `LICENSE <https://github.com/JintaoLee-Roger/cigsegy/blob/main/LICENSE>`_ file. By using, distributing, or contributing to this project, you agree to the terms and conditions of this license.
+cigsegy is distributed under the MIT license.
 
 
-TODO
-====
+Citation
+========
 
-- Add convenient functions to support **unsorted** prestack gathers.
+.. code-block:: text
 
-
-Citations
-===========
-If you find this work useful in your research and want to cite it, please consider use this:
-
-Plain Text
-
-.. code-block:: python
-
-    Li, Jintao. "CIGSEGY: A tool for exchanging data between SEG-Y format and NumPy array inside Python environment". URL: https://github.com/JintaoLee-Roger/cigsegy
-
-
-BibTex
-
-.. code-block:: latex
-    
-    @misc{cigsegy,
-    author = {Li, Jintao},
-    title = {{CIGSEGY}: A tool for exchanging data between SEG-Y format and NumPy array inside Python environment},
-    howpublished = {\url{https://github.com/JintaoLee-Roger/cigsegy}},
-    }
-
-
-
-=========
-
-.. [1] Here **irregular** SEG-Y volume means the area covered by a SEG-Y file is not a rectangle but a polygon (meaning that some lines are missing some traces), or its inline/crossline intervals are not 1. 
+   Li, Jintao. "CIGSEGY: A tool for exchanging data between SEG-Y format and NumPy array inside Python environment".
+   URL: https://github.com/JintaoLee-Roger/cigsegy

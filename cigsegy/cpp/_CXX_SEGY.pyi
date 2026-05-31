@@ -25,6 +25,135 @@ from typing import List, Tuple, overload
 import numpy as np
 
 
+class SegyBlockWriter:
+    """
+    Low-level sequential C++ SEG-Y block writer.
+
+    This class is the performance backend used by ``cigsegy.SegyWriter`` when
+    writing file-order trace blocks.  It writes the 3200-byte textual header,
+    400-byte binary header, optional extended textual headers, and then accepts
+    trace blocks in file order.
+
+    Parameters
+    ----------
+    outname
+        Output SEG-Y file path.
+    textual
+        1D ``uint8`` array with exactly 3200 bytes.
+    binary
+        1D ``uint8`` array with exactly 400 bytes.  When ``sample_format`` or
+        ``sample_count`` is 0, bytes 25 and 21 of this header are used.
+    extended_textual
+        1D ``uint8`` array.  The length must be 0 or a multiple of 3200 bytes.
+    sample_format
+        SEG-Y sample format code.  Use 0 to read it from the binary header.
+        Supported values follow cigsegy write support: 1, 2, 3, 5, 8, 10, 11,
+        and 16.
+    sample_count
+        Number of samples per trace.  Use 0 to read it from the binary header
+        or infer it from the first raw block.
+    overwrite
+        Whether to replace an existing output file.
+
+    Notes
+    -----
+    This is intentionally a narrow backend API.  Most users should prefer
+    ``cigsegy.SegyWriter``.
+    """
+
+    def __init__(
+        self,
+        outname: str,
+        textual: np.ndarray,
+        binary: np.ndarray,
+        extended_textual: np.ndarray,
+        sample_format: int = 0,
+        sample_count: int = 0,
+        overwrite: bool = False,
+    ) -> None:
+        """
+        Open the output file and write textual, binary, and extended textual
+        headers immediately.
+        """
+
+    def close(self) -> None:
+        """
+        Close the output file without writing additional data.
+
+        Calling ``close`` is safe more than once.  Prefer ``finalize`` after a
+        successful write so a data trailer can be appended if needed.
+        """
+
+    def finalize(self, data_trailer: np.ndarray) -> None:
+        """
+        Append the optional data trailer, flush the file, and close the writer.
+
+        Parameters
+        ----------
+        data_trailer
+            1D ``uint8`` array.  Pass an empty array when there is no trailer.
+        """
+
+    def write_trace_block(self, trace_headers: np.ndarray, samples: np.ndarray) -> None:
+        """
+        Write a file-order block of trace headers and floating-point samples.
+
+        Parameters
+        ----------
+        trace_headers
+            ``uint8`` array with shape ``(ntrace, 240)``.
+        samples
+            ``float32``-compatible array with shape ``(ntrace, nsample)``.
+            The C++ backend encodes samples according to ``sample_format``.
+
+        Notes
+        -----
+        This path performs ``float32`` to SEG-Y sample-format conversion.  For
+        bit-preserving sample bytes, use ``write_raw_trace_block``.
+        """
+
+    def write_raw_trace_block(self, trace_headers: np.ndarray, sample_bytes: np.ndarray) -> None:
+        """
+        Write a file-order block with sample bytes already encoded.
+
+        Parameters
+        ----------
+        trace_headers
+            ``uint8`` array with shape ``(ntrace, 240)``.
+        sample_bytes
+            ``uint8`` array with shape ``(ntrace, bytes_per_trace)`` or a flat
+            1D byte array divisible by ``ntrace``.
+
+        Notes
+        -----
+        No IBM/IEEE/integer conversion is performed; bytes are copied as-is.
+        """
+
+    @property
+    def trace_count(self) -> int:
+        """
+        Number of traces written so far.
+        """
+
+    @property
+    def sample_count(self) -> int:
+        """
+        Number of samples per trace used by the writer.
+        """
+
+    @property
+    def sample_format(self) -> int:
+        """
+        SEG-Y sample format code used by the writer.
+        """
+
+    @property
+    def closed(self) -> bool:
+        """
+        Whether the underlying file handle has been closed.
+        """
+
+
 class Pysegy:
     """
     Pysegy: A Python class for scanning, accessing, reading, and modifying SEG-Y file headers and data.
@@ -425,6 +554,7 @@ class Pysegy:
         self,
         binary_out_name: str,
         as_2d=False,
+        offset: int = 0,
     ) -> None:
         """
         """

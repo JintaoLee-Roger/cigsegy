@@ -257,7 +257,12 @@ class GeometryMixin:
         if xyic is None:
             xyic = tools.get_lineInfo(self._segy, mode='geom')
             xyic = xyic[:, [2, 3, 0, 1]]
-        self._trans_matrix = get_transform_metrix(xyic[:, 2:], xyic[:, :2])
+        xyic = np.asarray(xyic)
+        xy = xyic[:, :2]
+        ix = xyic[:, 2:]
+        self._ix_to_xy_matrix = get_transform_metrix(ix, xy)
+        self._xy_to_ix_matrix = get_transform_metrix(xy, ix)
+        self._trans_matrix = self._ix_to_xy_matrix
 
     def xy_to_ix(self, xy, zero_origin=True):
         """
@@ -275,9 +280,9 @@ class GeometryMixin:
         shape = xy.shape
         if xy.ndim == 1:
             xy = xy.reshape(1, -1)
-        if self._trans_matrix is None:
+        if self._xy_to_ix_matrix is None:
             self.update_trans_matrix()
-        ic = apply_transform(xy, self._trans_matrix, inv=True)
+        ic = apply_transform(xy, self._xy_to_ix_matrix)
         if zero_origin:
             ic[:, 0] -= self._metainfo['start_iline']
             ic[:, 1] -= self._metainfo['start_xline']
@@ -302,9 +307,9 @@ class GeometryMixin:
         if zero_origin:
             ix[:, 0] += self._metainfo['start_iline']
             ix[:, 1] += self._metainfo['start_xline']
-        if self._trans_matrix is None:
+        if self._ix_to_xy_matrix is None:
             self.update_trans_matrix()
-        return np.round(apply_transform(ix, self._trans_matrix), 2).reshape(shape) # yapf: disable
+        return np.round(apply_transform(ix, self._ix_to_xy_matrix), 2).reshape(shape) # yapf: disable
 
 
 class PlotMixin:
@@ -1258,6 +1263,8 @@ class SegyNP(InnerMixin, RWMixin, InterpMixin, PlotMixin, GeometryMixin,
 
         # for coordinates transform
         self._trans_matrix = None
+        self._ix_to_xy_matrix = None
+        self._xy_to_ix_matrix = None
         self._geometry = None
         self._north = None
 

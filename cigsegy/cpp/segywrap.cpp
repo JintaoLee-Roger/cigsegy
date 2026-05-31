@@ -6,6 +6,7 @@
 *********************************************************************/
 
 #include "segyrw.h"
+#include "segywriter.h"
 #include "utils.hpp"
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -83,6 +84,75 @@ static std::vector<size_t> convert_to_vector(const py::object &obj) {
 }
 
 /************ binding  ***********/
+
+class PySegyBlockWriter {
+private:
+  SegyBlockWriter m_writer;
+
+public:
+  PySegyBlockWriter(const std::string &outname, const npuchar &textual,
+                    const npuchar &binary, const npuchar &extended_textual,
+                    int sample_format, size_t sample_count, bool overwrite)
+      : m_writer(outname, textual.data(), textual.size(), binary.data(),
+                 binary.size(), extended_textual.data(), extended_textual.size(),
+                 sample_format, sample_count, overwrite) {}
+
+  void close() { m_writer.close(); }
+
+  void finalize(const npuchar &data_trailer) {
+    py::gil_scoped_release release;
+    m_writer.finalize(data_trailer.data(), data_trailer.size());
+  }
+
+  void write_trace_block(const npuchar &trace_headers, const npfloat &samples) {
+    if (trace_headers.ndim() != 2 || trace_headers.shape(1) != kTraceHeaderSize) {
+      throw std::runtime_error("trace_headers must have shape (ntrace, 240)");
+    }
+    if (samples.ndim() != 2) {
+      throw std::runtime_error("samples must have shape (ntrace, nsample)");
+    }
+    size_t ntrace = static_cast<size_t>(samples.shape(0));
+    if (static_cast<size_t>(trace_headers.shape(0)) != ntrace) {
+      throw std::runtime_error("trace_headers rows must match samples rows");
+    }
+    size_t nt = static_cast<size_t>(samples.shape(1));
+
+    py::gil_scoped_release release;
+    m_writer.write_trace_block(trace_headers.data(), ntrace, samples.data(), nt);
+  }
+
+  void write_raw_trace_block(const npuchar &trace_headers,
+                             const npuchar &sample_bytes) {
+    if (trace_headers.ndim() != 2 || trace_headers.shape(1) != kTraceHeaderSize) {
+      throw std::runtime_error("trace_headers must have shape (ntrace, 240)");
+    }
+    size_t ntrace = static_cast<size_t>(trace_headers.shape(0));
+    size_t bytes_per_trace = 0;
+    if (sample_bytes.ndim() == 1) {
+      if (sample_bytes.size() % ntrace != 0) {
+        throw std::runtime_error(
+            "sample byte count must be divisible by trace count");
+      }
+      bytes_per_trace = static_cast<size_t>(sample_bytes.size()) / ntrace;
+    } else if (sample_bytes.ndim() == 2) {
+      if (static_cast<size_t>(sample_bytes.shape(0)) != ntrace) {
+        throw std::runtime_error("sample_bytes rows must match trace count");
+      }
+      bytes_per_trace = static_cast<size_t>(sample_bytes.shape(1));
+    } else {
+      throw std::runtime_error("sample_bytes must be a 1D or 2D uint8 array");
+    }
+
+    py::gil_scoped_release release;
+    m_writer.write_raw_trace_block(trace_headers.data(), ntrace,
+                                   sample_bytes.data(), bytes_per_trace);
+  }
+
+  size_t trace_count() const { return m_writer.trace_count(); }
+  size_t sample_count() const { return m_writer.sample_count(); }
+  int sample_format() const { return m_writer.sample_format(); }
+  bool closed() const { return m_writer.closed(); }
+};
 
 class Pysegy : public SegyRW {
 private:
@@ -580,6 +650,23 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
   });
   m.def("set_global_show_progress", [](bool show) { g_show_progress = show; });
 
+  py::class_<PySegyBlockWriter>(m, "SegyBlockWriter")
+      .def(py::init<const std::string &, const npuchar &, const npuchar &,
+                    const npuchar &, int, size_t, bool>(),
+           py::arg("outname"), py::arg("textual"), py::arg("binary"),
+           py::arg("extended_textual"), py::arg("sample_format") = 0,
+           py::arg("sample_count") = 0, py::arg("overwrite") = false)
+      .def("close", &PySegyBlockWriter::close)
+      .def("finalize", &PySegyBlockWriter::finalize, py::arg("data_trailer"))
+      .def("write_trace_block", &PySegyBlockWriter::write_trace_block,
+           py::arg("trace_headers"), py::arg("samples"))
+      .def("write_raw_trace_block", &PySegyBlockWriter::write_raw_trace_block,
+           py::arg("trace_headers"), py::arg("sample_bytes"))
+      .def_property_readonly("trace_count", &PySegyBlockWriter::trace_count)
+      .def_property_readonly("sample_count", &PySegyBlockWriter::sample_count)
+      .def_property_readonly("sample_format", &PySegyBlockWriter::sample_format)
+      .def_property_readonly("closed", &PySegyBlockWriter::closed);
+
   py::class_<Pysegy>(m, "Pysegy")
       .def(py::init<const std::string &, bool>(), py::arg("segyname"),
            py::arg("write") = false)
@@ -650,7 +737,7 @@ PYBIND11_MODULE(_CXX_SEGY, m) {
       .def("read_tslice", &Pysegy::read_tslice, py::arg("t"),
            py::arg("stepi") = 1, py::arg("stepx") = 1)
       .def("tofile", &Pysegy::tofile, py::arg("binary_out_name"),
-           py::arg("as_2d") = false)
+           py::arg("as_2d") = false, py::arg("offset") = 0)
       .def("cut", &Pysegy::cut, py::arg("outname"), py::arg("ranges"),
            py::arg("is2d") = false, py::arg("textual") = "")
       .def(

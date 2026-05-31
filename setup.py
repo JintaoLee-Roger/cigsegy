@@ -38,6 +38,7 @@ ext_modules = [
         [
             "cigsegy/cpp/segywrap.cpp",
             "cigsegy/cpp/segyrw.cpp",
+            "cigsegy/cpp/segywriter.cpp",
         ],
         extra_compile_args=extra_compile_args,
     ),
@@ -52,9 +53,27 @@ setup(
     url='https://github.com/JintaoLee-Roger/cigsegy',
     license='MIT',
     install_requires=['numpy', 'tqdm'],
-    python_requires=">=3.6",
+    python_requires=">=3.8",
+    classifiers=[
+        "Programming Language :: Python :: 3 :: Only",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: C++",
+        "Operating System :: Microsoft :: Windows",
+        "Operating System :: POSIX :: Linux",
+        "Operating System :: MacOS",
+        "License :: OSI Approved :: MIT License",
+    ],
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},
+    entry_points={
+        "console_scripts": [
+            "cigsegy=cigsegy.cli:main",
+        ],
+    },
     packages=find_packages(exclude=['docs', 'python', 'tools', 'tests']),
     include_package_data=True,
     package_data={

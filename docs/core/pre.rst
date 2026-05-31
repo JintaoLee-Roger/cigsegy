@@ -1,60 +1,103 @@
-Read Prestack data
-###################
+Pre-Stack and 4D Data
+#####################
+
+Pre-stack SEG-Y data usually needs three geometry fields:
+
+- inline;
+- crossline or CDP;
+- offset.
+
+In ``cigsegy`` this maps naturally to a 4D array:
+``(n_inline, n_xline, n_offset, n_sample)``.
 
 
-.. note::
-    cigsegy-**v1.1.7** doesn't support read a **unsorted** prestack gather in a convenient
-    way. Prestack seismic gather will be supported in the next version of cigsegy.
-    
-    However, this **doesn't** mean that you cannot use cigsegy to read the **unsorted** prestack data.
-    You can use ``get_trace_keys()`` function to analyze SEG-Y file's
-    trace headers and ``collect()`` to access data traces.
-
-
-In SEG-Y file, the term CDP (common depth point) as used in this 
-document is used as a synonym for the term CMP (common midpoint).
-
-The differences between several gathers are shown in the following figure.
-
-.. figure:: https://github.com/JintaoLee-Roger/images/raw/main/cigsegy/assets/gather.png 
-    :alt: gather
-    :align: center
-
-In general, there are three keys to evaluate 3D prestack SEG-Y file: ``inline``, ``xline`` or ``crossline``, and ``offset``.
-
-
-Load 3D prestack SEG-Y (4D array)
-----------------------------------
-
-Use ``cigsegy.metaInfo`` to scan the prestack file.
+Scan Metadata
+=============
 
 .. code-block:: python
 
-    >>> cigsegy.metaInfo('3Dgather.sgy', iline=9, xline=21, offset=37)
+   import cigsegy
 
+   cigsegy.metaInfo("gather.sgy")
 
-Use ``cigsegy.fromfile`` to load 3D prestack file.
-
-.. code-block:: python
-
-    # geom can be obtained by `scan_prestack`
-    >>> d = cigsegy.fromfile('3Dgather.sgy', iline=9, xline=21, offset=37)
-    >>> d.shape
-    # (41, 482, 61, 1501) = (ni, nx, no, nt), no means number of offset
-
-
-Load 2D prestack SEG-Y (3D array)
-----------------------------------
-
-Load 2D prestack SEG-Y using the same approach as for 3D poststack data, i.e., 
-use ``fromfile``.
-
-Set the cdp/line location as ``iline``, and set offset location as ``xline``.
+``cigsegy`` will try to infer inline, crossline, offset, and geometry steps.
+If the guess is wrong or ambiguous, pass explicit fields:
 
 .. code-block:: python
 
-    >>> cigsegy.metaInfo('2Dgather.sgy', iline=9, xline=37)
+   cigsegy.metaInfo("gather.sgy", iline=189, xline=193, offset=37, is4d=True)
 
-    >>> d = cigsegy.fromfile('2Dgather.segy', iline=9, xline=37)
-    >>> d.shape
-    # (1001, 120, 1500) = (n-line, no, nt), no is number of offset
+If the file is a 2D line gather, use the line/CDP field as ``iline`` and the
+offset field as ``xline``:
+
+.. code-block:: python
+
+   cigsegy.metaInfo("line_gather.sgy", iline=9, xline=37, is4d=False)
+
+
+Read with SegyNP
+================
+
+.. code-block:: python
+
+   gathers = cigsegy.SegyNP("gather.sgy", keylocs=[189, 193, 37])
+
+   one_cmp = gathers[20, 30, :, :]
+   near = gathers[:, :, :8, :]
+   window = gathers[10:20, 30:50, :, 200:800]
+
+
+Read into Memory
+================
+
+.. code-block:: python
+
+   data = cigsegy.fromfile("gather.sgy")
+
+
+Unsorted Pre-Stack Files
+========================
+
+If trace order is not regular, request an unsorted geometry map:
+
+.. code-block:: python
+
+   gathers = cigsegy.SegyNP(
+       "unsorted_gather.sgy",
+       keylocs={"iline": 189, "xline": 193, "offset": 37},
+       as_unsorted=True,
+   )
+
+This is slower to open because all trace headers must be scanned, but later
+array indexing uses the geometry map.
+
+
+Write 4D Data
+=============
+
+Use ``SegyWriter.from_template`` when output traces correspond to existing
+template traces:
+
+.. code-block:: python
+
+   b = cigsegy.SegyWriter.from_template("gather.sgy", "processed.sgy")
+   b.as_4d().overwrite(True)
+
+   with b.open() as w:
+       w.write(processed)
+
+Use ``SegyWriter.create(...).as_4d()`` when generating a regular 4D SEG-Y from
+scratch:
+
+.. code-block:: python
+
+   b = cigsegy.SegyWriter.create(
+       "created_gather.sgy",
+       shape=(120, 200, 48, 1500),
+       sample_interval_us=2000,
+       overwrite=True,
+   )
+   b.as_4d().grid(iline_start=1000, xline_start=2000, offset_start=100)
+
+   with b.open() as w:
+       w.write(gathers)
