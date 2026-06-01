@@ -38,7 +38,8 @@ class ExceptionWrapper:
 
     def __init__(self, e, custom=''):
         if custom:
-            self.exception = type(e)(f"{e.args[0]}\n\t{custom}", *e.args[1:])
+            message = str(e) or e.__class__.__name__
+            self.exception = type(e)(f"{message}\n\t{custom}", *e.args[1:])
         else:
             self.exception = e
 

@@ -1,10 +1,12 @@
 /*********************************************************************
-** Copyright (c) 2026 Jintao Li, Zhejiang University.
+** Copyright (c) 2026 Jintao Li.
+** Zhejiang University (ZJU).
 ** All rights reserved.
 *********************************************************************/
 
 #include "segywriter.h"
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -17,6 +19,17 @@ int16_t read_i2_be(const uchar *header, size_t loc) {
   uint16_t raw = (static_cast<uint16_t>(header[start]) << 8) |
                  static_cast<uint16_t>(header[start + 1]);
   return static_cast<int16_t>(raw);
+}
+
+void write_i2_be(uchar *header, size_t loc, size_t value) {
+  if (value > static_cast<size_t>(std::numeric_limits<int16_t>::max())) {
+    throw std::runtime_error("SEG-Y 2-byte header value is out of range: " +
+                             std::to_string(value));
+  }
+  size_t start = loc - 1;
+  uint16_t raw = static_cast<uint16_t>(value);
+  header[start] = static_cast<uchar>((raw >> 8) & 0xffU);
+  header[start + 1] = static_cast<uchar>(raw & 0xffU);
 }
 
 void write_all(FILE *fp, const void *data, size_t nbytes) {
@@ -79,12 +92,21 @@ SegyBlockWriter::SegyBlockWriter(
   m_esize = it->second;
   setWFunc(m_wfunc, m_dformat);
 
+  std::vector<uchar> binary_bytes(binary, binary + binary_size);
+  if (sample_format > 0) {
+    write_i2_be(binary_bytes.data(), kBSampleFormatField,
+                static_cast<size_t>(sample_format));
+  }
+  if (sample_count > 0) {
+    write_i2_be(binary_bytes.data(), kBSampleCountField, sample_count);
+  }
+
   m_fp = std::fopen(outname.c_str(), "wb");
   if (m_fp == nullptr) {
     throw std::runtime_error("failed to open SEG-Y output: " + outname);
   }
   write_all(m_fp, textual, textual_size);
-  write_all(m_fp, binary, binary_size);
+  write_all(m_fp, binary_bytes.data(), binary_bytes.size());
   if (extended_textual_size > 0) {
     write_all(m_fp, extended_textual, extended_textual_size);
   }
@@ -102,7 +124,11 @@ void SegyBlockWriter::close() {
     return;
   }
   if (m_fp != nullptr) {
-    std::fclose(m_fp);
+    if (std::fclose(m_fp) != 0) {
+      m_fp = nullptr;
+      m_closed = true;
+      throw std::runtime_error("failed to close SEG-Y output: " + m_outname);
+    }
     m_fp = nullptr;
   }
   m_closed = true;
@@ -110,14 +136,16 @@ void SegyBlockWriter::close() {
 
 void SegyBlockWriter::finalize(const uchar *data_trailer,
                                size_t data_trailer_size) {
-  ensure_open();
   if (m_finalized) {
     return;
   }
+  ensure_open();
   if (data_trailer_size > 0) {
     write_all(m_fp, data_trailer, data_trailer_size);
   }
-  std::fflush(m_fp);
+  if (std::fflush(m_fp) != 0) {
+    throw std::runtime_error("failed to flush SEG-Y output: " + m_outname);
+  }
   m_finalized = true;
   close();
 }
@@ -126,8 +154,11 @@ void SegyBlockWriter::write_trace_block(const uchar *trace_headers,
                                         size_t ntrace, const float *samples,
                                         size_t nt) {
   ensure_open();
+  if (ntrace == 0) {
+    return;
+  }
   if (m_nt == 0) {
-    m_nt = nt;
+    set_sample_count_from_block(nt);
   }
   if (nt != m_nt) {
     throw std::runtime_error("samples shape[1] does not match sample_count");
@@ -151,12 +182,15 @@ void SegyBlockWriter::write_raw_trace_block(const uchar *trace_headers,
                                             const uchar *sample_bytes,
                                             size_t bytes_per_trace) {
   ensure_open();
+  if (ntrace == 0) {
+    return;
+  }
   if (m_nt == 0) {
     if (bytes_per_trace % m_esize != 0) {
       throw std::runtime_error(
           "sample bytes per trace is not divisible by sample element size");
     }
-    m_nt = bytes_per_trace / m_esize;
+    set_sample_count_from_block(bytes_per_trace / m_esize);
   }
   size_t expected = m_nt * m_esize;
   if (bytes_per_trace != expected) {
@@ -175,6 +209,27 @@ void SegyBlockWriter::write_raw_trace_block(const uchar *trace_headers,
   }
   write_all(m_fp, buffer.data(), buffer.size());
   m_trace_count += ntrace;
+}
+
+void SegyBlockWriter::set_sample_count_from_block(size_t sample_count) {
+  if (sample_count == 0) {
+    throw std::runtime_error("sample_count must be positive");
+  }
+  m_nt = sample_count;
+  uchar bytes[2] = {0, 0};
+  write_i2_be(bytes, 1, sample_count);
+  long current = std::ftell(m_fp);
+  if (current < 0) {
+    throw std::runtime_error("failed to query SEG-Y output position");
+  }
+  long offset = static_cast<long>(kTextualHeaderSize + kBSampleCountField - 1);
+  if (std::fseek(m_fp, offset, SEEK_SET) != 0) {
+    throw std::runtime_error("failed to seek SEG-Y binary header");
+  }
+  write_all(m_fp, bytes, sizeof(bytes));
+  if (std::fseek(m_fp, current, SEEK_SET) != 0) {
+    throw std::runtime_error("failed to restore SEG-Y output position");
+  }
 }
 
 void SegyBlockWriter::ensure_open() const {

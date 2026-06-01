@@ -3,6 +3,7 @@
 # University of Science and Technology of China (USTC).
 # All rights reserved.
 
+import sys
 from pathlib import Path
 from setuptools import setup, find_packages
 from distutils.ccompiler import get_default_compiler
@@ -27,8 +28,10 @@ if not version:
 
 if get_default_compiler() == 'msvc':
     extra_compile_args = ['/wd4244', '/wd4996', '/wd4819']
+    extra_link_args = []
 else:
-    extra_compile_args = ["-std=c++14", "-O3", "-undefined dynamic_lookup"]
+    extra_compile_args = ["-std=c++14", "-O3"]
+    extra_link_args = ["-undefined", "dynamic_lookup"] if sys.platform == "darwin" else []
 
 extra_compile_args += ["-DUSE_PYBIND11"]
 
@@ -41,6 +44,7 @@ ext_modules = [
             "cigsegy/cpp/segywriter.cpp",
         ],
         extra_compile_args=extra_compile_args,
+        extra_link_args=extra_link_args,
     ),
 ]
 

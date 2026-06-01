@@ -128,6 +128,13 @@ public:
     }
     size_t ntrace = static_cast<size_t>(trace_headers.shape(0));
     size_t bytes_per_trace = 0;
+    if (ntrace == 0) {
+      if (sample_bytes.size() != 0) {
+        throw std::runtime_error(
+            "sample_bytes must be empty when trace_headers has zero rows");
+      }
+      return;
+    }
     if (sample_bytes.ndim() == 1) {
       if (sample_bytes.size() % ntrace != 0) {
         throw std::runtime_error(

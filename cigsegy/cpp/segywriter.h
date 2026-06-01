@@ -1,5 +1,6 @@
 /*********************************************************************
-** Copyright (c) 2026 Jintao Li, Zhejiang University.
+** Copyright (c) 2026 Jintao Li.
+** Zhejiang University (ZJU).
 ** All rights reserved.
 *********************************************************************/
 
@@ -44,6 +45,7 @@ private:
   bool m_finalized = false;
   WriteFunc m_wfunc;
 
+  void set_sample_count_from_block(size_t sample_count);
   void ensure_open() const;
 };
 

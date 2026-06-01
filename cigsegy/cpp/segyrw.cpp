@@ -35,6 +35,18 @@ inline static void set_keyi4(char *theader, size_t loc, int32_t val) {
   *reinterpret_cast<int32_t *>(theader + loc - 1) = swap_endian<int32_t>(val);
 }
 
+inline static void sync_and_unmap(mio::mmap_sink &mmap,
+                                  const std::string &file_name) {
+  std::error_code error;
+  mmap.sync(error);
+  if (error) {
+    mmap.unmap();
+    throw std::runtime_error("failed to sync mmap output: " + file_name +
+                             ", message: " + error.message());
+  }
+  mmap.unmap();
+}
+
 void SegyRW::scan() {
 
   // steps
@@ -644,7 +656,7 @@ void SegyRW::tofile(const std::string &binary_out_name, bool is2d,
     collect(dst, (size_t)0, m_meta.ntrace, 0, m_meta.nt);
   }
 
-  rw_mmap.unmap();
+  sync_and_unmap(rw_mmap, binary_out_name);
 }
 
 /*   priviate function for reading */
@@ -1321,7 +1333,7 @@ void SegyRW::_create_from_segy(const std::string &outname, const float *src,
   }
 
   int64_t to_remove = maxsize - (outptr - rw_mmap.data());
-  rw_mmap.unmap();
+  sync_and_unmap(rw_mmap, outname);
   if (to_remove > 0) {
     truncate_file(outname, to_remove);
   }
@@ -1513,7 +1525,7 @@ void create_segy(const std::string &segyname, const float *src,
   }
 
   assert(dst - rw_mmap.data() == needsize);
-  rw_mmap.unmap();
+  sync_and_unmap(rw_mmap, segyname);
 }
 
 } // namespace segy

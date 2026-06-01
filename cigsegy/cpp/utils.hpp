@@ -303,18 +303,16 @@ inline void convert2npibm(float *dst, const char *src, size_t size) {
 
 template <typename T>
 void float2sgyT(char *dst, const float *src, size_t size) {
-  T *_dst = reinterpret_cast<T *>(dst);
-
   for (size_t i = 0; i < size; ++i) {
-    _dst[i] = swap_endian<T>(static_cast<T>(src[i]));
+    T value = swap_endian<T>(static_cast<T>(src[i]));
+    std::memcpy(dst + i * sizeof(T), &value, sizeof(T));
   }
 }
 
 inline void float2sgyibm(char *dst, const float *src, size_t size) {
-  float *_dst = reinterpret_cast<float *>(dst);
-
   for (size_t i = 0; i < size; ++i) {
-    _dst[i] = ieee_to_ibm(src[i], true, true);
+    float value = ieee_to_ibm(src[i], true, true);
+    std::memcpy(dst + i * sizeof(float), &value, sizeof(float));
   }
 }
 
